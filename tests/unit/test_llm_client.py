@@ -14,7 +14,6 @@ from src.core.llm.client import (
     merge_usage,
 )
 
-
 # ---- extract_findings：三种输出形态兼容 ----
 
 
@@ -135,7 +134,12 @@ def _bare_client(fake_async, model: str | None = None):
 
 def test_achat_json_parses_wrapper_and_collects_usage():
     fake = _FakeAsyncOpenAI(
-        [_resp('{"findings": [{"issue": "a"}]}', {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})]
+        [
+            _resp(
+                '{"findings": [{"issue": "a"}]}',
+                {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            )
+        ]
     )
     client = _bare_client(fake)
     data, usage = asyncio.run(client.achat_json([{"role": "user", "content": "q"}]))
@@ -148,8 +152,14 @@ def test_achat_json_parses_wrapper_and_collects_usage():
 def test_achat_json_repairs_invalid_json():
     """首次输出非法 JSON 时带错误反馈重试一次（自纠错），usage 累计两次调用。"""
     fake = _FakeAsyncOpenAI([
-        _resp("我觉得这段话有违规", {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}),
-        _resp('{"findings": []}', {"prompt_tokens": 8, "completion_tokens": 2, "total_tokens": 10}),
+        _resp(
+            "我觉得这段话有违规",
+            {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        ),
+        _resp(
+            '{"findings": []}',
+            {"prompt_tokens": 8, "completion_tokens": 2, "total_tokens": 10},
+        ),
     ])
     client = _bare_client(fake)
     data, usage = asyncio.run(client.achat_json([{"role": "user", "content": "q"}]))
@@ -199,7 +209,9 @@ def test_acomplete_json_mode_unsupported_falls_back_without_param():
 
 def test_completion_result_total_tokens():
     result = CompletionResult(
-        content="x", model="m", usage={"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7}
+        content="x",
+        model="m",
+        usage={"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7},
     )
     assert result.total_tokens == 7
     assert CompletionResult(content="x", model="m", usage={}).total_tokens == 0

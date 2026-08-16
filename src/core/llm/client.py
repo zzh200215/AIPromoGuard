@@ -126,7 +126,9 @@ class QwenClient:
             "total_tokens": getattr(u, "total_tokens", 0) or 0,
         }
 
-    def _create(self, client, model: str, messages: list[dict], temperature: float, json_mode: bool):
+    def _create(
+        self, client, model: str, messages: list[dict], temperature: float, json_mode: bool
+    ):
         kwargs: dict = {"model": model, "messages": messages, "temperature": temperature}
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}

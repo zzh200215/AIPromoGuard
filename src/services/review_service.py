@@ -14,15 +14,21 @@ from datetime import datetime
 from sqlalchemy import update
 
 from src.core.agents.graph import run_review
+from src.core.agents.runtime import resume_review, start_review_with_hil, thread_id_for_task
 from src.infrastructure.database.mysql import SessionLocal
 from src.models import ReviewBatch, ReviewResult, ReviewTask
 from src.services.diff_service import build_review_blocks, diff_documents
 from src.services.document_service import document_service
 from src.utils.config import settings
+from src.utils.errors import AppError, ErrorCode
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 _executor = ThreadPoolExecutor(max_workers=2)
+
+
+def _human_review_enabled() -> bool:
+    return (settings.app_config("workflow").get("human_review") or {}).get("enabled", False)
 
 # 系统自动确认标识（confirmed_by=0）：规则/双引擎高置信命中自动判违规，与人工复核区分。
 _AUTO_CONFIRM_BY = 0
@@ -133,31 +139,36 @@ def execute_review(task_id: int) -> None:
         task.progress = 20
         db.commit()
 
-        result = run_review(
-            {
-                "task_id": task.id,
-                "document_path": task.document_path,
-                "document_name": task.document_name,
-                "doc_type": task.document_type,
-                "text": review_text,
-                "blocks": review_blocks,
-                "diff_changes": diff_changes,
-            }
-        )
+        initial_state = {
+            "task_id": task.id,
+            "document_path": task.document_path,
+            "document_name": task.document_name,
+            "doc_type": task.document_type,
+            "text": review_text,
+            "blocks": review_blocks,
+            "diff_changes": diff_changes,
+        }
 
-        report_data = result.get("report") or {}
-        findings = report_data.get("violations", [])
-        _persist_results(db, task.id, findings)
+        if _human_review_enabled():
+            outcome = start_review_with_hil(initial_state, thread_id_for_task(task.id))
+            if outcome["interrupted"]:
+                # 图在 human_review 暂停：任务挂起等人，决策经
+                # resume_human_review 从 checkpoint 续跑（risk_assess → report）
+                task.status = "awaiting_review"
+                task.progress = 80
+                task.stages = {
+                    "human_review": {"status": "awaiting", "pending": outcome["pending"]}
+                }
+                db.commit()
+                logger.info(
+                    "task %s 等待人工复核（%s 条待确认）", task_id, len(outcome["pending"])
+                )
+                return
+            result = outcome["result"]
+        else:
+            result = run_review(initial_state)
 
-        task.stages = result.get("stage_log")  # 各 Agent 节点耗时（W14）
-        task.report_path = result.get("report_path")
-        task.report_path = result.get("report_path")
-        task.status = "completed"
-        task.progress = 100
-        task.completed_at = datetime.now()
-        db.commit()
-        _update_batch_counts(db, task)
-        logger.info("task %s 审查完成，命中 %s 条违规", task_id, len(findings))
+        _finalize_task(db, task, result)
     except Exception:
         db.rollback()
         task = db.get(ReviewTask, task_id)
@@ -167,6 +178,68 @@ def execute_review(task_id: int) -> None:
             db.commit()
             _update_batch_counts(db, task)
         logger.exception("task %s 审查失败", task_id)
+    finally:
+        db.close()
+
+
+def _finalize_task(db, task: ReviewTask, result: dict) -> None:
+    """图跑完后的落库：结果明细、节点耗时、报告路径与任务终态。"""
+    report_data = result.get("report") or {}
+    findings = report_data.get("violations", [])
+    _persist_results(db, task.id, findings)
+
+    task.stages = result.get("stage_log")  # 各 Agent 节点耗时（W14）
+    task.report_path = result.get("report_path")
+    task.status = "completed"
+    task.progress = 100
+    task.completed_at = datetime.now()
+    db.commit()
+    _update_batch_counts(db, task)
+    logger.info("task %s 审查完成，命中 %s 条违规", task.id, len(findings))
+
+
+def resume_human_review(task_id: int, rejected_indexes: list[int]) -> dict:
+    """人工提交复核决策后，从 checkpoint 续跑剩余图并落库（同步执行，剩余节点无 LLM 调用）。
+
+    返回续跑后的任务摘要；任务不存在或状态非 awaiting_review 时抛 AppError。
+    """
+    db = SessionLocal()
+    try:
+        task = db.get(ReviewTask, task_id)
+        if task is None:
+            raise AppError(ErrorCode.TASK_NOT_FOUND)
+        if task.status != "awaiting_review":
+            raise AppError(
+                ErrorCode.TASK_INVALID_STATE, f"任务当前状态 {task.status}，不接受人工复核决策"
+            )
+
+        result = resume_review(
+            thread_id_for_task(task_id), {"rejected_indexes": list(rejected_indexes)}
+        )
+        task.status = "running"
+        db.commit()
+        _finalize_task(db, task, result)
+        return {
+            "task_id": task_id,
+            "status": task.status,
+            "human_review": result.get("human_review"),
+            "total_violations": (result.get("report") or {}).get("summary", {}).get(
+                "total_violations"
+            ),
+        }
+    except AppError:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        task = db.get(ReviewTask, task_id)
+        if task is not None:
+            task.status = "failed"
+            task.progress = 100
+            db.commit()
+            _update_batch_counts(db, task)
+        logger.exception("task %s 人工复核续跑失败", task_id)
+        raise
     finally:
         db.close()
 

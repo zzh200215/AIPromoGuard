@@ -23,6 +23,7 @@ class ReviewState(TypedDict, total=False):
     llm_findings: list[dict[str, Any]]
     llm_usage: dict[str, Any]  # LLM token 用量/调用统计（成本观测，随报告落盘）
     merged_findings: list[dict[str, Any]]
+    human_review: dict[str, Any]  # 人工复核关卡结果（interrupt 决策记录，未启用时无此键）
     diff_changes: list[dict[str, Any]]  # 对比审查变更片段（普通任务不存在）
     report: dict[str, Any]
     report_path: str | None

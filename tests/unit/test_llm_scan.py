@@ -1,6 +1,5 @@
 """LLM 审查输出校验（幻觉抑制）与并发审查单元测试。"""
 
-import pytest
 import src.core.agents.nodes.llm_scan as mod
 
 _BLOCK = {"text": "本产品保本保收益", "page": 1, "paragraph": 2}
@@ -166,6 +165,9 @@ def test_llm_scan_respects_explicit_max_chunks(monkeypatch):
 def test_llm_scan_skips_empty_blocks(monkeypatch):
     fake = _FakeLLM()
     monkeypatch.setattr(mod, "get_llm", lambda: fake)
-    state = {"blocks": [{"text": "  ", "page": 1, "paragraph": 1}] + _blocks(2), "matched_articles": []}
-    result = mod.llm_scan(state)
+    state = {
+        "blocks": [{"text": "  ", "page": 1, "paragraph": 1}] + _blocks(2),
+        "matched_articles": [],
+    }
+    mod.llm_scan(state)
     assert fake.calls == 2  # 空白块不发起 LLM 调用

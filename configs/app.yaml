@@ -71,6 +71,14 @@ workflow:
   auto_confirm:
     enabled: true
     threshold: 0.85
+  # 人工复核关卡（LangGraph interrupt + checkpointer，PRD §3.2 人工干预节点）：
+  # 开启后 severity 命中 review_severities 或 source 命中 review_sources 的结论
+  # 在报告生成前暂停等人，POST /tasks/{id}/human-review 提交决策后续跑。
+  # 默认关闭——既有审查路径行为不变；InMemorySaver 限同进程（见 runtime.py 部署说明）。
+  human_review:
+    enabled: false
+    review_severities: [high]
+    review_sources: [hybrid]
 
 # 监管动态追踪（Regulatory Radar）：轮询监管机构发布源，发现新法规进待确认列表
 # enabled=false 的源需人工录入兜底（SPA/CDN 接口待探测确认后启用）

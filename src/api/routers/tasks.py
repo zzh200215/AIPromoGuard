@@ -11,10 +11,10 @@ from src.api.middleware.auth import (
     require_permission,
     task_access_filter,
 )
-from src.api.schemas.task import TaskCreate, TaskOut
+from src.api.schemas.task import HumanReviewDecision, TaskCreate, TaskOut
 from src.infrastructure.database.mysql import get_db
 from src.models import ReviewTask, User
-from src.services.review_service import start_review
+from src.services.review_service import resume_human_review, start_review
 from src.utils.config import settings
 from src.utils.errors import AppError, ErrorCode
 from src.utils.response import ok
@@ -109,3 +109,23 @@ def get_task(
         raise AppError(ErrorCode.TASK_NOT_FOUND)
     ensure_task_access(db, task, current_user)
     return ok(TaskOut.model_validate(task).model_dump())
+
+
+@router.post("/{task_id}/human-review")
+def submit_human_review(
+    task_id: int,
+    body: HumanReviewDecision,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("confirm")),
+) -> dict:
+    """提交人工复核决策，从 checkpoint 续跑剩余审查图（LangGraph interrupt 恢复）。
+
+    仅 workflow.human_review.enabled=true 时任务会进入 awaiting_review 状态；
+    待复核清单见任务详情 stages.human_review.pending。
+    """
+    task = db.get(ReviewTask, task_id)
+    if task is None:
+        raise AppError(ErrorCode.TASK_NOT_FOUND)
+    ensure_task_access(db, task, current_user)
+    summary = resume_human_review(task_id, body.rejected_indexes)
+    return ok(summary)

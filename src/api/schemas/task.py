@@ -15,6 +15,12 @@ class TaskCreate(BaseModel):
     )
 
 
+class HumanReviewDecision(BaseModel):
+    """人工复核决策：rejected_indexes 为被否决结论在待复核清单中的 index 集合。"""
+
+    rejected_indexes: list[int] = Field(default_factory=list, description="否决的结论 index 列表")
+
+
 class TaskOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
