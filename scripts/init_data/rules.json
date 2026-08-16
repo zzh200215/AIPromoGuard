@@ -1,0 +1,704 @@
+[
+  {
+    "domain": "banking",
+    "rule_name": "禁止刚性兑付承诺",
+    "rule_type": "composite",
+    "severity": "high",
+    "description": "资管产品不得直接或变相承诺保本保收益、刚性兑付",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "保本保息|保本保收益|刚性兑付|承诺收益" },
+        { "type": "keyword", "keywords": ["刚性兑付", "保本", "保息", "保收益"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《关于规范金融机构资产管理业务的指导意见》第十九条", "《商业银行理财业务监督管理办法》第二十六条"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止承诺保本保收益",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "理财产品宣传不得承诺保本保收益、本金无忧、稳赚不赔",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "保本保息|保本保收益|本金无忧|稳赚不赔" }
+      ],
+      "related_regulations": ["《商业银行理财业务监督管理办法》第二十六条"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止使用预期收益率表述",
+    "rule_type": "regex",
+    "severity": "medium",
+    "description": "资管新规后不得宣传预期收益率，应披露业绩比较基准",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "预期(年化)?收益(率)?|预期年化.{0,8}\\d+(\\.\\d+)?%" }
+      ],
+      "related_regulations": ["《商业银行理财业务监督管理办法》第二十六条", "《关于规范金融机构资产管理业务的指导意见》第十八条"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止承诺最低收益",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "不得承诺最低收益、保底收益",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "最低收益|保底收益|保底.{0,6}\\d+%" }
+      ],
+      "related_regulations": ["《关于规范金融机构资产管理业务的指导意见》第十九条"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止零风险无风险表述",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "不得使用零风险、无风险等绝对化安全表述",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["零风险", "无风险", "100%安全", "稳赢"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《商业银行理财业务监督管理办法》第二十六条"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止收益类绝对化用语",
+    "rule_type": "regex",
+    "severity": "medium",
+    "description": "广告与宣传中不得使用同类最佳等绝对化收益用语",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "稳赚不赔|绝对安全|史上最高|同类最佳" }
+      ],
+      "related_regulations": ["《中华人民共和国广告法》第九条"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止无风险高收益组合诱导",
+    "rule_type": "keyword",
+    "severity": "high",
+    "description": "同时出现无风险与高收益表述，构成风险与收益失衡的诱导宣传",
+    "rule_content": {
+      "operator": "AND",
+      "conditions": [
+        { "type": "keyword", "keywords": ["无风险"], "match_mode": "any", "context_window": 15 },
+        { "type": "keyword", "keywords": ["高收益"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《商业银行理财业务监督管理办法》第二十六条"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "基金宣传承诺收益",
+    "rule_type": "keyword",
+    "severity": "high",
+    "description": "基金宣传推介材料不得违规承诺收益",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["保证收益", "确保收益", "承诺收益", "保收益"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《公开募集证券投资基金信息披露管理办法》第六条", "《中华人民共和国证券投资基金法》第七十七条"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "基金宣传使用预期收益",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "不得以预期收益、预测收益等表述误导投资者",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["预期收益率", "预期年化", "预测收益"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《公开募集证券投资基金信息披露管理办法》"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "夸大基金业绩误导",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "以业绩冠军、排名第一等表述夸大过往业绩",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["业绩冠军", "排名第一", "历史收益翻倍", "稳赚"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《公开募集证券投资基金信息披露管理办法》第六条"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "业绩比较基准滥用",
+    "rule_type": "regex",
+    "severity": "low",
+    "description": "以跑赢大盘、超越基准等表述不当暗示超额收益能力",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "跑赢.{0,6}(大盘|基准)|超越.{0,4}(大盘|基准)" }
+      ],
+      "related_regulations": ["《公开募集证券投资基金信息披露管理办法》"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "定投稳赚误导",
+    "rule_type": "keyword",
+    "severity": "high",
+    "description": "不得宣传基金定投稳赚不赔",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["定投稳赚", "定投必赚", "定投无风险"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《公开募集证券投资基金信息披露管理办法》第六条"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "过往业绩预示未来收益",
+    "rule_type": "regex",
+    "severity": "low",
+    "description": "不得以过往业绩暗示保证未来收益",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "过往.{0,4}业绩.{0,10}(预示|保证|确保)未来" }
+      ],
+      "related_regulations": ["《公开募集证券投资基金信息披露管理办法》第六条"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止返还本金宣传",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "保险产品宣传不得承诺返还本金、全额返还、返还保费",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "返还本金|本金返还|全额返还|返还保费" }
+      ],
+      "related_regulations": ["《保险销售行为管理办法》"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "夸大保障范围",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "不得以全能保障、都能赔等表述夸大保险责任范围",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["全能保障", "全面保障", "都能赔", "什么都赔", "包赔"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《保险销售行为管理办法》"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "保证续保赔付误导",
+    "rule_type": "regex",
+    "severity": "medium",
+    "description": "不得使用保证续保、保证赔付等绝对化承诺",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "保证(续保|赔付|理赔|赔偿)" }
+      ],
+      "related_regulations": ["《中华人民共和国保险法》"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "国家背书政府支持误导",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "不得暗示产品有国家或政府背书保障",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "(政府|国家)(支持|背书|保障)" }
+      ],
+      "related_regulations": ["《保险销售行为管理办法》"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "免体检无需告知诱导投保",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "以免体检、无需健康告知等表述诱导投保，弱化如实告知义务",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["免体检", "无需体检", "无需健康告知", "免健康告知"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《中华人民共和国保险法》第十七条"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "快速回本误导",
+    "rule_type": "keyword",
+    "severity": "low",
+    "description": "不得以快速回本、几年回本等表述误导消费者对现金价值的预期",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["快速回本", "回本快", "几年回本"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《保险销售行为管理办法》"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "保证分红固定收益误导",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "分红保险不得承诺保证分红或固定收益",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["保证分红", "固定分红", "分红保证", "固定收益"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《保险销售行为管理办法》"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止类存款宣传误导",
+    "rule_type": "keyword",
+    "severity": "high",
+    "description": "不得将理财产品宣传为类存款、相当于存款",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["类存款", "同存款", "相当于存款", "视为存款"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《商业银行理财业务监督管理办法》第二十六条"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止保底兜底承诺",
+    "rule_type": "keyword",
+    "severity": "high",
+    "description": "不得以保底、兜底、本金保障等表述承诺收益或本金",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["保底", "兜底", "本金保障"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《关于规范金融机构资产管理业务的指导意见》第十九条"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止收益翻倍夸大",
+    "rule_type": "regex",
+    "severity": "medium",
+    "description": "不得使用收益翻倍、翻番等夸大收益表述",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "收益.{0,4}(翻倍|翻番|倍增)" }
+      ],
+      "related_regulations": ["《商业银行理财业务监督管理办法》第二十六条"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止稳赚包赚承诺",
+    "rule_type": "keyword",
+    "severity": "high",
+    "description": "不得以稳赚、包赚、必赚等承诺收益",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["稳赚", "包赚", "必赚"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《商业银行理财业务监督管理办法》第二十六条"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止随存随取流动性误导",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "不得暗示理财可随存随取、随时赎回",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["随存随取", "随时取出", "随时赎回"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《商业银行理财业务监督管理办法》"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止收益上不封顶表述",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "不得使用上不封顶、收益无上限等绝对化收益表述",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["上不封顶", "收益无上限", "收益不设限"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《商业银行理财业务监督管理办法》第二十六条"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止秒到账诱导",
+    "rule_type": "regex",
+    "severity": "medium",
+    "description": "不得以秒到账、立即到账等诱导购买",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "(秒到|立即到账|当天到账)" }
+      ],
+      "related_regulations": ["《商业银行理财业务监督管理办法》"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止限量抢购饥饿营销",
+    "rule_type": "keyword",
+    "severity": "low",
+    "description": "不得以限量发售、限时抢购等制造稀缺诱导购买",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["限量发售", "限时抢购", "内部名额"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《中华人民共和国广告法》"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止专家操盘夸大",
+    "rule_type": "keyword",
+    "severity": "low",
+    "description": "不得以专家操盘、顶级团队等夸大管理能力",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["专家操盘", "明星操盘", "顶级团队"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《中华人民共和国广告法》"]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止历史业绩预示未来",
+    "rule_type": "regex",
+    "severity": "low",
+    "description": "不得以历史业绩暗示保证未来收益",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "历史.{0,4}(业绩|收益).{0,8}(保证|确保|预示)" }
+      ],
+      "related_regulations": ["《公开募集证券投资基金信息披露管理办法》"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止基金保本宣传",
+    "rule_type": "keyword",
+    "severity": "high",
+    "description": "基金宣传不得出现保本、稳赚不赔等表述",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["基金保本", "保本收益", "稳赚不赔"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《公开募集证券投资基金信息披露管理办法》第六条"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止短线翻倍暗示",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "不得以短线翻倍、快进快出等暗示短期高收益",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["短线翻倍", "快进快出", "日内翻倍"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《公开募集证券投资基金信息披露管理办法》"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止基金评级误导",
+    "rule_type": "regex",
+    "severity": "medium",
+    "description": "不得使用五星评级、评级第一等误导性评级宣传",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "(五星|顶级)评级|评级.{0,2}(第一|最高)" }
+      ],
+      "related_regulations": ["《公开募集证券投资基金信息披露管理办法》第六条"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止基金承诺最低收益",
+    "rule_type": "keyword",
+    "severity": "high",
+    "description": "基金宣传不得承诺最低收益、保底收益",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["最低收益", "保底收益"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《中华人民共和国证券投资基金法》第七十七条"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止分红保障承诺",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "不得承诺基金保证分红、分红保障",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["保证分红", "分红保障"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《公开募集证券投资基金信息披露管理办法》"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止明星经理神话",
+    "rule_type": "keyword",
+    "severity": "low",
+    "description": "不得以股神、明星基金经理等过度宣传个人能力",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["股神", "明星基金经理", "百亿基金经理"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《中华人民共和国广告法》"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止收益排名宣传",
+    "rule_type": "regex",
+    "severity": "low",
+    "description": "不得以收益排名前列等表述误导",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "(收益|业绩)排名.{0,4}(第一|前十|前列)" }
+      ],
+      "related_regulations": ["《公开募集证券投资基金信息披露管理办法》第六条"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止低风险高回报基金宣传",
+    "rule_type": "keyword",
+    "severity": "high",
+    "description": "不得同时以低风险、高回报诱导基金购买",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["低风险高回报", "低风险高收益", "稳赚高回报"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《公开募集证券投资基金信息披露管理办法》第六条"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止规模最大误导",
+    "rule_type": "keyword",
+    "severity": "low",
+    "description": "不得以规模第一、规模最大等绝对化表述宣传",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["规模第一", "规模最大", "管理规模领先"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《中华人民共和国广告法》第九条"]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止随时赎回收益承诺",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "不得暗示基金可随时赎回、赎回即到账",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["随时赎回", "随时变现", "赎回即到账"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《公开募集证券投资基金信息披露管理办法》"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止绝对赔付承诺",
+    "rule_type": "keyword",
+    "severity": "high",
+    "description": "不得承诺百分百赔付、必定赔付等绝对赔付",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["百分百赔付", "100%赔付", "绝对保障", "必定赔付"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《保险销售行为管理办法》"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止满期返还误导",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "不得宣传满期返还、连本带利返还等误导性承诺",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "满期返还|连本带利返还|到期返还" }
+      ],
+      "related_regulations": ["《保险销售行为管理办法》"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止复利暴涨夸大",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "不得以复利翻倍、复利暴涨等夸大增值",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["复利翻倍", "复利暴涨", "利滚利"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《保险销售行为管理办法》"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止免等待期诱导",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "不得以无等待期、免等待期等诱导投保",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["无等待期", "免等待期", "零等待期"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《保险销售行为管理办法》"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止保额翻倍承诺",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "不得承诺保额翻倍、保额上涨等",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["保额翻倍", "保额增长", "保额上涨"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《保险销售行为管理办法》"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止保证利率承诺",
+    "rule_type": "keyword",
+    "severity": "high",
+    "description": "不得承诺保证利率、固定利率等",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["保证利率", "固定利率", "利率保证"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《保险销售行为管理办法》"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止疾病都能赔夸大",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "不得以疾病都能赔、什么病都赔夸大保障范围",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["疾病都能赔", "什么病都赔", "全病种赔付"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《保险销售行为管理办法》"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止带病投保诱导",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "不得以带病投保、患病可投等弱化如实告知义务",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["带病投保", "带病可投", "患病可投"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《中华人民共和国保险法》第十七条"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止随意变更受益人误导",
+    "rule_type": "keyword",
+    "severity": "low",
+    "description": "不得以随意变更受益人诱导投保",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["随意变更受益人", "自由变更受益人"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《保险销售行为管理办法》"]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止理财型保险收益承诺",
+    "rule_type": "keyword",
+    "severity": "medium",
+    "description": "理财型保险宣传不得承诺收益",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "keyword", "keywords": ["理财型保险", "投资型保险", "收益型保险"], "match_mode": "any", "context_window": 15 }
+      ],
+      "related_regulations": ["《保险销售行为管理办法》"]
+    }
+  }
+]
