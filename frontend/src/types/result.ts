@@ -1,0 +1,67 @@
+/** 人工复核结果类型（对齐 src/api/routers/results.py）。 */
+
+export type ResultStatus = 'pending_confirm' | 'confirmed' | 'false_positive'
+
+export interface ReviewResult {
+  result_id: number
+  violation_type: 'rule' | 'llm' | 'hybrid'
+  risk_level: Severity
+  original_text: string
+  location_page?: number
+  location_paragraph?: number
+  rule_id?: number
+  confidence_score: number
+  description?: string
+  suggestion?: string
+  status: ResultStatus
+  confirmed_at?: string
+  confirmed_by?: number
+  /** 系统自动确认（方向②分流，confirmed_by=0）；人工复核/翻案后为 false */
+  auto_confirmed?: boolean
+}
+
+export interface ConfirmRequest {
+  verdict: 'confirmed' | 'false_positive'
+  note?: string
+}
+
+export interface SourceStats {
+  confirmed: number
+  false_positive: number
+  pending_confirm: number
+  confirm_rate: number | null
+  false_positive_rate: number | null
+}
+
+export interface FeedbackStats {
+  by_source: Record<string, SourceStats>
+  totals: Record<ResultStatus, number>
+  overall_false_positive_rate: number | null
+}
+
+export interface RuleQualityItem {
+  rule_id: number
+  rule_name?: string
+  hits: number
+  confirmed: number
+  false_positive: number
+  pending_confirm: number
+  confirm_rate: number
+  false_positive_rate: number
+}
+
+/** 规则精调建议（方向③，src/services/rule_tuning.py） */
+export interface RuleSuggestion {
+  rule_id: number
+  rule_name: string
+  domain: string
+  severity: Severity
+  action: 'deactivate' | 'remove_keyword'
+  keyword?: string
+  condition_index?: number
+  reason: string
+  confirmed: number
+  false_positive: number
+  fp_rate: number
+  fp_samples: string[]
+}

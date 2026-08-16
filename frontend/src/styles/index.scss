@@ -1,0 +1,46 @@
+@use './variables.scss';
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background-color: var(--app-bg);
+}
+
+// 法规检索 <em> 高亮（HighlightText 还原标签后命中项样式）
+em {
+  color: var(--em-color);
+  font-style: normal;
+  background: var(--em-bg);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+// 表格行距
+.el-table .cell {
+  line-height: 1.6;
+}
+
+// 细滚动条
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d0d7de;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b6bec6;
+}
