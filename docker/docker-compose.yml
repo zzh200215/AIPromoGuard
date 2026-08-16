@@ -1,0 +1,172 @@
+# 金融产品合规智能审查系统 - 基础设施编排
+#
+# MVP（Phase 1）默认启动: mysql + redis
+#   docker compose up -d
+#
+# 图谱数据库（Phase 3 使用，Neo4j）单独通过 profile 启动:
+#   docker compose --profile graph up -d neo4j
+#
+# 说明: 原 PRD 规划的 Milvus 向量库，MVP 阶段改用进程内 ChromaDB（无需容器），
+#       待向量数据量上来后再切回 Milvus。
+#
+# ⚠️ 构建镜像（buildx + 中文路径兼容 bug，docker/buildx#3972）:
+#   buildx 以构建上下文路径生成 session key，仓库路径含非 ASCII 字符
+#   （如 D:\AI\llmXM\AI金融审查助手）时 `docker compose build` 会报
+#   "x-docker-expose-session-sharedkey ... non-printable ASCII characters"。
+#   workaround —— 把上下文复制到 ASCII 路径构建后 tag 同名镜像再重建容器:
+#     cd "D:\AI\llmXM\AI金融审查助手"
+#     rm -rf /tmp/fcr-build && mkdir -p /tmp/fcr-build
+#     cp -r docker /tmp/fcr-build/ && cp requirements.txt pyproject.toml /tmp/fcr-build/
+#     cp -r src configs scripts /tmp/fcr-build/
+#     cd /tmp/fcr-build
+#     docker build -f docker/Dockerfile.api \
+#       --build-arg BASE_IMAGE=${BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim} \
+#       --build-arg PIP_MIRROR=${PIP_MIRROR:-https://pypi.tuna.tsinghua.edu.cn/simple} \
+#       --build-arg HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com} \
+#       -t financial-compliance-review-api .
+#     docker tag financial-compliance-review-api financial-compliance-review-worker
+#     docker compose up -d --force-recreate api worker
+#   （层缓存可复用，pip/embedding 层 CACHED；configs/app.yaml 是挂载卷，改动无需重建）
+
+name: financial-compliance-review
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: fcr-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-compliance_review}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      # 本机 3306 已被原生 MySQL 占用，Docker 实例映射到 3307
+      - "${MYSQL_PORT:-3307}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init-scripts/init_mysql.sql:/docker-entrypoint-initdb.d/init_mysql.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root123}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: fcr-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+      args:
+        # 国内网络默认走 DaoCloud 镜像源 / 清华 pip 源 / hf-mirror，可用环境变量覆盖
+        BASE_IMAGE: ${BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
+        PIP_MIRROR: ${PIP_MIRROR:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
+    container_name: fcr-api
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # 从仓库 .env 注入密钥；服务内 endpoint 在下面显式覆盖
+    env_file: ../.env
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306          # 容器内直连 MySQL 服务端口，非宿主映射的 3307
+      REDIS_URL: redis://redis:6379/0
+      EMBEDDING_CACHE_DIR: /app/.modelcache   # 镜像构建时预下载的模型缓存
+      # 知识图谱（W9）：容器内经服务名访问 Neo4j（图谱 profile 未启动时自动降级）
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-neo4j123}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ../configs:/app/configs:ro
+      - ../data:/app/data        # uploads / reports / chroma 持久化
+    healthcheck:
+      # slim 镜像无 curl，用 urllib 探测
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # 异步任务 worker（B2：压测后由线程池升级为 Celery/Redis 队列）
+  # 启动: docker compose --profile queue up -d worker
+  # 与 api 同镜像；审查由 worker 独占执行，api 仅入队，避免多进程并发访问 ChromaDB。
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+      args:
+        BASE_IMAGE: ${BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
+        PIP_MIRROR: ${PIP_MIRROR:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
+    container_name: fcr-worker
+    restart: unless-stopped
+    profiles: ["queue"]
+    command: ["celery", "-A", "src.infrastructure.queue.celery_app", "worker", "-l", "info", "-Q", "review_tasks"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: ../.env
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      EMBEDDING_CACHE_DIR: /app/.modelcache
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-neo4j123}
+    volumes:
+      - ../configs:/app/configs:ro
+      - ../data:/app/data
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: fcr-neo4j
+    restart: unless-stopped
+    profiles: ["graph"]          # Phase 3 启用
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-neo4j123}
+      NEO4J_server_memory_heap_max__size: 1G
+    ports:
+      - "7474:7474"              # Browser
+      - "7687:7687"              # Bolt
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  mysql_data:
+  redis_data:
+  neo4j_data:
+  neo4j_logs:

@@ -1,0 +1,41 @@
+# 国内网络可覆盖: --build-arg BASE_IMAGE=docker.m.daocloud.io/library/python:3.11-slim
+ARG BASE_IMAGE=python:3.11-slim
+FROM ${BASE_IMAGE}
+
+WORKDIR /app
+
+# 避免 Python 写字节码与输出缓冲
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# onnxruntime（chromadb 依赖）运行时需要 libgomp1；fonts-wqy-zenhei 提供 PDF 报告中文字体
+# libgl1/libglib2.0-0/libxcb1/libx11-6/libxext6/libxrender1：rapidocr 拉入的 GUI 版 opencv 需要（slim 镜像缺 libxcb.so.1）
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 fonts-wqy-zenhei libgl1 libglib2.0-0 libxcb1 libx11-6 libxext6 libxrender1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 国内网络可覆盖: docker build --build-arg PIP_MIRROR=https://pypi.tuna.tsinghua.edu.cn/simple
+ARG PIP_MIRROR=
+COPY requirements.txt .
+RUN if [ -n "$PIP_MIRROR" ]; then \
+        pip install --no-cache-dir -i "$PIP_MIRROR" -r requirements.txt; \
+    else \
+        pip install --no-cache-dir -r requirements.txt; \
+    fi
+
+# 预下载 embedding 模型到镜像层（/app/.modelcache），运行时容器无需联网下载
+# 国内网络可用 --build-arg HF_ENDPOINT=https://hf-mirror.com 覆盖；
+# HF_HUB_DISABLE_XET=1 关闭 XetHub（hf-mirror 不代理其 CAS，会 401）
+ARG HF_ENDPOINT=https://huggingface.co
+ENV HF_ENDPOINT=${HF_ENDPOINT} \
+    HF_HUB_DISABLE_XET=1
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-zh-v1.5', cache_dir='/app/.modelcache')"
+
+COPY src/ ./src/
+COPY configs/ ./configs/
+COPY scripts/ ./scripts/
+
+EXPOSE 8000
+
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,94 @@
+app:
+  name: financial-compliance-review
+  version: 0.1.0
+  env: dev
+  debug: true
+
+# LLM（QWEN）配置：真实 Key 放 .env，这里只放非敏感默认
+llm:
+  provider: qwen            # qwen | openai | claude
+  model: qwen-plus
+  temperature: 0.2
+  max_tokens: 4096
+  timeout_seconds: 120
+  fallback_models: [qwen-turbo]  # 主模型失败时的降级模型
+
+# 向量检索
+vectorstore:
+  type: chroma               # chroma | milvus
+  top_k: 10
+  distance: cosine
+  collection_prefix: legal_
+  # 混合检索重排（可选）：RRF 融合后用 cross-encoder 精排。
+  # 默认关闭——bge-reranker 模型体积大（首次启用需下载），开启前确认磁盘/内存。
+  rerank:
+    enabled: false
+    model: BAAI/bge-reranker-base
+    weight: 0.7              # rerank 分权重（余下 1-w 为 RRF 分）
+
+# 文档解析
+parser:
+  chunk_size: 500            # 字符数
+  chunk_overlap: 50
+  max_file_size_mb: 50
+  allowed_exts: [pdf, doc, docx, txt, png, jpg, jpeg, bmp]
+  mask_sensitive: true       # 解析阶段脱敏（身份证/手机号/银行卡/金额）
+
+# 规则引擎
+rule_engine:
+  scan_timeout_seconds: 30
+  min_confidence: 0.5        # W18：命中置信度下限，低于则过滤（精调杠杆，降误报）
+  # 半自动规则精调（方向③）：对高误报规则生成建议动作，阈值驱动
+  tuning:
+    min_samples: 3           # 人工复核样本数下限，不足不生成建议
+    fp_threshold: 0.5        # 误报率下限，低于不出建议
+    keyword_fp_min: 2        # 某关键词至少误报命中 N 次才建议移除
+
+# 领域（W19：配置驱动，新增领域只需加配置+导入数据，不改逻辑代码）
+# 示例扩展（可行性验证，未导入数据时先保持注释）：
+#   trust:
+#     label: 信托
+#     keywords: [信托, 受托人, 委托人, 信托计划, 信托财产, 信托贷款]
+domains:
+  banking:
+    label: 银行理财
+    keywords: [理财, 银行, 存款, 年化, 资管, 预期收益, 收益率, 理财产品, 净值型]
+  fund:
+    label: 基金销售
+    keywords: [基金, 申购, 赎回, 净值, 基金经理, 份额, 基金合同, 招募说明书, 托管人]
+  insurance:
+    label: 保险产品
+    keywords: [保险, 保额, 保费, 理赔, 保单, 寿险, 重疾, 投保, 保险责任, 被保险人]
+
+# 审查工作流（LangGraph，W3 启用）
+workflow:
+  regulation_top_k: 5        # 每个 chunk 召回法规条款数
+  llm_concurrency: 4         # LLM 并发审查块数（asyncio.Semaphore 限流）
+  llm_max_chunks: 0          # LLM 审查块数上限：0 = 审查全部块（默认，长文档不漏审）；>0 为显式成本护栏
+  llm_confidence_threshold: 0.5   # LLM 输出置信度下限，低于则丢弃（幻觉抑制）
+  # 人审分流（方向②）：规则引擎/双引擎高置信命中自动确认，纯 LLM 一律进人工队列。
+  # confirmed_by=0 标识系统自动确认；反馈统计只计人工复核（confirmed_by>0），保证精调数据干净。
+  auto_confirm:
+    enabled: true
+    threshold: 0.85
+
+# 监管动态追踪（Regulatory Radar）：轮询监管机构发布源，发现新法规进待确认列表
+# enabled=false 的源需人工录入兜底（SPA/CDN 接口待探测确认后启用）
+regulation_monitor:
+  enabled: true
+  request_timeout: 20
+  max_items_per_source: 50        # 每源每次最多入库条目数
+  llm_batch_size: 20              # 批量打标一次最多标题数
+  sources:
+    - name: pbc
+      label: 中国人民银行
+      enabled: true
+      list_url: http://www.pbc.gov.cn/tiaofasi/144941/144957/index.html
+    - name: nfra
+      label: 国家金融监督管理总局
+      enabled: true
+      list_url: https://www.nfra.gov.cn/cbircweb/DocInfo/SelectDocByItemUUIdsAndChild?itemUUids=910303&pageIndex=1&pageSize=50
+    - name: csrc
+      label: 中国证监会
+      enabled: true
+      list_url: http://www.csrc.gov.cn/csrc/c106256/fg.shtml

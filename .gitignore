@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# 环境变量与密钥
+.env
+.env.*
+!.env.example
+
+# 运行时数据（上传文档 / 报告 / 向量持久化）
+data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# pytest basetemp（默认 Temp 目录权限受限时使用）
+.pytest-tmp/
+
+# 个人文档不入库（面试准备材料 / 截图）
+面试说明稿.md
+ScreenShot_*.png
+
+# 工具生成
+.superpowers/
+docs/superpowers/
+
+# 本地评估运行日志
+*.log

@@ -1,0 +1,27 @@
+# 构建上下文（仓库根）中不需要进入镜像的路径
+.git
+.gitignore
+.github
+
+# 本地数据（上传 / 报告 / 向量库持久化）
+data/
+
+# 测试与工具
+tests/
+.pytest_cache/
+.pytest-tmp/
+.ruff_cache/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 环境文件（密钥不进镜像，由 compose 注入）
+.env
+.env.*
+!.env.example
+
+# 文档
+docs/
+*.md
