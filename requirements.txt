@@ -34,6 +34,8 @@ openai>=1.40
 dashscope>=1.20
 # LLM 可观测性（可选启用：配置 LANGFUSE_* Key 后生效，未配置时代码自动 no-op）
 langfuse>=3.0
+# MCP server（把规则引擎/法规检索暴露为标准 MCP 工具，stdio 传输）
+mcp>=1.28
 
 # ---- 文档解析（W2 使用） ----
 pypdf>=4.2
