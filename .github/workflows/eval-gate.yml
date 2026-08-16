@@ -1,0 +1,77 @@
+# 方向④评估门禁：规则引擎干跑接 CI（push / PR 自动跑，指标跌破即红）。
+#
+# 门禁本体是 tests/unit/test_eval_gate.py（调用 evaluate.py --engine rule
+# --min-recall 0.98 --max-fpr 0.02），阈值只在这一处定义，本 workflow 只负责
+# 拉起环境（MySQL + schema + 规则）后跑该测试。
+#
+# 说明:
+# - runner 工作目录是 ASCII 路径，不受本地 buildx 中文路径 bug 影响
+#   （docker/buildx#3972，本地构建 workaround 见 docker/docker-compose.yml 顶部注释）。
+# - 仓库当前未推送（无 remote），此 workflow 在首次 push 后才会生效。
+# - 真实标注集机制: 人工复核数据积累后可 scripts/evaluate/export_labels.py
+#   导出 real_cases.json，替换/扩充下方默认的 eval_cases.json。
+
+name: eval-gate
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "configs/**"
+      - "tests/**"
+  pull_request:
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "configs/**"
+      - "tests/**"
+
+jobs:
+  rule-eval-gate:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root123
+          MYSQL_DATABASE: compliance_review
+          TZ: Asia/Shanghai
+        ports:
+          - "3306:3306"
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -proot123 --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: 3306
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root123
+      MYSQL_DATABASE: compliance_review
+      PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          pip install -e ".[dev]"
+
+      - name: Init schema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-mysql-client
+          mysql -h127.0.0.1 -uroot -proot123 --default-character-set=utf8mb4 \
+            compliance_review < docker/init-scripts/init_mysql.sql
+
+      - name: Seed rules
+        run: python scripts/init_data/import_rules.py
+
+      - name: Run eval gate
+        run: python -m pytest tests/unit/test_eval_gate.py -v

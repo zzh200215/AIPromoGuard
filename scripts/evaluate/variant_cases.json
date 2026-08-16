@@ -1,0 +1,238 @@
+{
+  "version": "2.0-variant",
+  "description": "held-out 变体集（泛化评估）：由 LLM 对 seed 违规模式做保义改写，刻意绕开规则库的字面关键词/正则（不含 保本/保息/保收益/刚性兑付/预期收益/零风险/稳赚/兜底/翻倍 等规则触发词）。与 rules.json 无构造对应关系，用于检验规则引擎的泛化边界与 LLM 引擎的补召回价值。含合规负样本（ground_truth=[]）用于测全链路误报。",
+  "template_note": "标注格式与 eval_cases.json 一致：text 为营销话术，ground_truth.text 是 text 内的违规子串（供 span 重叠匹配），rule_name 为语义对应的规则（该命名仅作归因，匹配不看规则名）。",
+  "cases": [
+    {
+      "id": "var_banking_001",
+      "domain": "banking",
+      "document_name": "某银行理财改写话术样本1.txt",
+      "text": "这款银行理财产品加了安全垫机制，市场再怎么波动，您的本金也毫发无损，到期必然分文不少地回到账户。",
+      "ground_truth": [
+        {
+          "text": "您的本金也毫发无损，到期必然分文不少地回到账户",
+          "rule_name": "禁止承诺保本保收益",
+          "risk_level": "high",
+          "type": "禁止性"
+        }
+      ]
+    },
+    {
+      "id": "var_banking_002",
+      "domain": "banking",
+      "document_name": "某银行理财改写话术样本2.txt",
+      "text": "我们这款理财产品运行三年，每一期都足额兑现，从来没有让客户亏过一分钱，闭着眼睛买就行。",
+      "ground_truth": [
+        {
+          "text": "每一期都足额兑现，从来没有让客户亏过一分钱",
+          "rule_name": "禁止刚性兑付承诺",
+          "risk_level": "high",
+          "type": "禁止性"
+        }
+      ]
+    },
+    {
+      "id": "var_banking_003",
+      "domain": "banking",
+      "document_name": "某银行理财改写话术样本3.txt",
+      "text": "年化回报至少4.5%起，白纸黑字写在协议里，雷打不动，比同事瞎买强多了。",
+      "ground_truth": [
+        {
+          "text": "年化回报至少4.5%起，白纸黑字写在协议里，雷打不动",
+          "rule_name": "禁止承诺最低收益",
+          "risk_level": "high",
+          "type": "禁止性"
+        }
+      ]
+    },
+    {
+      "id": "var_banking_004",
+      "domain": "banking",
+      "document_name": "某银行理财改写话术样本4.txt",
+      "text": "把钱放我们这儿比放活期强十倍，着急用钱当天就能取走，一分利息都不损失。",
+      "ground_truth": [
+        {
+          "text": "着急用钱当天就能取走",
+          "rule_name": "禁止随存随取流动性误导",
+          "risk_level": "medium",
+          "type": "限制性"
+        }
+      ]
+    },
+    {
+      "id": "var_banking_005",
+      "domain": "banking",
+      "document_name": "某银行理财改写话术样本5.txt",
+      "text": "首席投资官亲自坐镇操盘，他管理的产品年年都是正回报，跟着他买就等于把钱放进保险柜。",
+      "ground_truth": [
+        {
+          "text": "他管理的产品年年都是正回报，跟着他买就等于把钱放进保险柜",
+          "rule_name": "禁止专家操盘夸大",
+          "risk_level": "medium",
+          "type": "限制性"
+        }
+      ]
+    },
+    {
+      "id": "var_banking_006",
+      "domain": "banking",
+      "document_name": "某银行理财合规披露样本.txt",
+      "text": "本产品为净值型理财产品，不保证本金和回报，净值随市场波动，过往业绩不代表未来表现，请理性投资。",
+      "ground_truth": []
+    },
+    {
+      "id": "var_banking_007",
+      "domain": "banking",
+      "document_name": "某银行理财合规披露样本2.txt",
+      "text": "理财非存款，产品有风险，本金可能因市场波动而受损，请根据自身风险承受能力谨慎选择适合的产品等级。",
+      "ground_truth": []
+    },
+    {
+      "id": "var_fund_001",
+      "domain": "fund",
+      "document_name": "某基金销售改写话术样本1.txt",
+      "text": "这支基金有银行级风控加持，申购就送本金保障卡，真亏了算我们公司的，您只管放心拿着。",
+      "ground_truth": [
+        {
+          "text": "申购就送本金保障卡，真亏了算我们公司的",
+          "rule_name": "禁止基金保本宣传",
+          "risk_level": "high",
+          "type": "禁止性"
+        }
+      ]
+    },
+    {
+      "id": "var_fund_002",
+      "domain": "fund",
+      "document_name": "某基金销售改写话术样本2.txt",
+      "text": "这位基金经理是业内顶流，粉丝叫他涨停猎手，他出手的项目个个都是十倍种子选手。",
+      "ground_truth": [
+        {
+          "text": "他出手的项目个个都是十倍种子选手",
+          "rule_name": "夸大基金业绩误导",
+          "risk_level": "medium",
+          "type": "限制性"
+        }
+      ]
+    },
+    {
+      "id": "var_fund_003",
+      "domain": "fund",
+      "document_name": "某基金销售改写话术样本3.txt",
+      "text": "每月定投一杯奶茶钱，十年后轻松攒出一套房的首付，躺着把钱挣了。",
+      "ground_truth": [
+        {
+          "text": "十年后轻松攒出一套房的首付，躺着把钱挣了",
+          "rule_name": "定投稳赚误导",
+          "risk_level": "medium",
+          "type": "限制性"
+        }
+      ]
+    },
+    {
+      "id": "var_fund_004",
+      "domain": "fund",
+      "document_name": "某基金销售改写话术样本4.txt",
+      "text": "这只基金的业绩榜单从来没掉出过前三，现在不上车就等着拍大腿，想什么时候卖就什么时候卖，到账很快。",
+      "ground_truth": [
+        {
+          "text": "业绩榜单从来没掉出过前三",
+          "rule_name": "禁止收益排名宣传",
+          "risk_level": "medium",
+          "type": "限制性"
+        }
+      ]
+    },
+    {
+      "id": "var_fund_005",
+      "domain": "fund",
+      "document_name": "某基金合规披露样本.txt",
+      "text": "基金有风险，基金过往业绩不预示其未来表现，收益与净值波动由投资者自行承担，请仔细阅读基金合同及招募说明书。",
+      "ground_truth": []
+    },
+    {
+      "id": "var_fund_006",
+      "domain": "fund",
+      "document_name": "某基金合规披露样本2.txt",
+      "text": "本基金不承诺投资回报，申购赎回遵循基金合同约定的时间与费率，请根据自身风险承受能力选择产品。",
+      "ground_truth": []
+    },
+    {
+      "id": "var_insurance_001",
+      "domain": "insurance",
+      "document_name": "某保险产品改写话术样本1.txt",
+      "text": "这款重疾险什么病都管，从头保到脚，只要住院就给钱，理赔一路开绿灯。",
+      "ground_truth": [
+        {
+          "text": "什么病都管，从头保到脚，只要住院就给钱",
+          "rule_name": "禁止疾病都能赔夸大",
+          "risk_level": "medium",
+          "type": "限制性"
+        }
+      ]
+    },
+    {
+      "id": "var_insurance_002",
+      "domain": "insurance",
+      "document_name": "某保险产品改写话术样本2.txt",
+      "text": "熬过前两年，后面哪怕断缴也不影响，公司既不能拒保也不能涨价，价格终身锁定。",
+      "ground_truth": [
+        {
+          "text": "公司既不能拒保也不能涨价，价格终身锁定",
+          "rule_name": "保证续保赔付误导",
+          "risk_level": "medium",
+          "type": "限制性"
+        }
+      ]
+    },
+    {
+      "id": "var_insurance_003",
+      "domain": "insurance",
+      "document_name": "某保险产品改写话术样本3.txt",
+      "text": "这份保单背后是国家队，真出了事有国家帮你兜着，比任何投资都安全。",
+      "ground_truth": [
+        {
+          "text": "背后是国家队，真出了事有国家帮你兜着",
+          "rule_name": "国家背书政府支持误导",
+          "risk_level": "medium",
+          "type": "限制性"
+        }
+      ]
+    },
+    {
+      "id": "var_insurance_004",
+      "domain": "insurance",
+      "document_name": "某保险产品改写话术样本4.txt",
+      "text": "投保全程不看体检报告，健康状况随便填，将来出了险照样理赔，先上车后补票。",
+      "ground_truth": [
+        {
+          "text": "投保全程不看体检报告，健康状况随便填",
+          "rule_name": "免体检无需告知诱导投保",
+          "risk_level": "high",
+          "type": "禁止性"
+        }
+      ]
+    },
+    {
+      "id": "var_insurance_005",
+      "domain": "insurance",
+      "document_name": "某保险产品改写话术样本5.txt",
+      "text": "两年回本五年翻番，交进去的保费最终连本带利全还给你，分红还一年比一年多。",
+      "ground_truth": [
+        {
+          "text": "交进去的保费最终连本带利全还给你",
+          "rule_name": "禁止返还本金宣传",
+          "risk_level": "medium",
+          "type": "限制性"
+        }
+      ]
+    },
+    {
+      "id": "var_insurance_006",
+      "domain": "insurance",
+      "document_name": "某保险合规披露样本.txt",
+      "text": "保障范围与责任免除以保险合同条款为准，等待期内出险的处理方式见条款约定，投保前请如实告知被保险人健康状况。",
+      "ground_truth": []
+    }
+  ]
+}
