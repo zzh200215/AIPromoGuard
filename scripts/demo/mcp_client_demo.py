@@ -35,6 +35,7 @@ async def main() -> None:
         command=sys.executable,
         args=["-m", "src.mcp_server.server"],
         cwd=str(REPO_ROOT),
+        env={"PYTHONUTF8": "1"},  # 防中文 Windows 子进程 stdio 退化为 GBK
     )
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:

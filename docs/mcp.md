@@ -24,7 +24,11 @@ python -m src.mcp_server.server
 ```
 
 stdio 传输。注意：stdio 模式下 stdout 是 JSON-RPC 通道，server 启动时会把全部
-业务日志重定向到 stderr（否则 SQLAlchemy echo 等日志会污染协议流）。
+业务日志重定向到 stderr（否则 SQLAlchemy echo 等日志会污染协议流），并强制把
+进程 stdio reconfigure 为 UTF-8——MCP 客户端出于安全只给子进程传白名单环境
+变量（不含 `PYTHONUTF8`），中文 Windows 上子进程 stdio 会退化为 GBK，中文
+响应/日志会被客户端按 UTF-8 解码失败。自研客户端拉起时建议同样传
+`env={"PYTHONUTF8": "1"}`（见下方示例）。
 
 ## 客户端接入
 
@@ -63,6 +67,7 @@ async def main():
         command=sys.executable,
         args=["-m", "src.mcp_server.server"],
         cwd="<仓库根目录>",
+        env={"PYTHONUTF8": "1"},  # 防中文 Windows 子进程 stdio 退化为 GBK
     )
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:

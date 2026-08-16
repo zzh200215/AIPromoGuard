@@ -7,10 +7,9 @@ conflict_resolve），此处验证参数透传、输出裁剪与降级路径。
 import asyncio
 
 import pytest
-
 from src.infrastructure.database.mysql import SessionLocal
-from src.models import Rule
 from src.mcp_server import tools
+from src.models import Rule
 
 
 def _db_ready() -> bool:

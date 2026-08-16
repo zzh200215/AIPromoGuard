@@ -25,11 +25,21 @@ mcp = FastMCP("fcr-compliance-review")
 
 
 def _redirect_logs_to_stderr() -> None:
-    """stdio 模式下 stdout 是 JSON-RPC 通道，业务日志必须全部改走 stderr。
+    """stdio 进程的两个卫生措施：
 
-    项目 setup_logging 的 root handler 绑定 sys.stdout，SQLAlchemy echo
-    等所有 stdlib 日志都会经由它输出——不重定向会污染协议消息。
+    1. stdout 是 JSON-RPC 通道，业务日志必须全部改走 stderr——项目
+       setup_logging 的 root handler 绑定 sys.stdout，SQLAlchemy echo 等
+       stdlib 日志都会经由它输出，不重定向会污染协议消息；
+    2. MCP 客户端出于安全只给子进程传白名单环境变量（不含 PYTHONUTF8），
+       中文 Windows 上子进程 stdio 退化为 GBK，中文日志/响应写出后客户端
+       按 UTF-8 解码即报错——这里统一 reconfigure 成 UTF-8。
     """
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except Exception:
+                pass
     for handler in logging.getLogger().handlers:
         if getattr(handler, "stream", None) is sys.stdout:
             handler.stream = sys.stderr

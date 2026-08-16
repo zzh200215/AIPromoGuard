@@ -12,10 +12,8 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-
 from src.infrastructure.database.mysql import SessionLocal
 from src.models import Rule
 
@@ -41,6 +39,9 @@ def test_stdio_full_roundtrip():
             command=sys.executable,
             args=["-m", "src.mcp_server.server"],
             cwd=str(REPO_ROOT),
+            # MCP 客户端默认只继承白名单环境变量（不含 PYTHONUTF8），
+            # 中文 Windows 上子进程 stdio 会退化为 GBK——显式补上
+            env={"PYTHONUTF8": "1"},
         )
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
