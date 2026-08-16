@@ -1,0 +1,122 @@
+# 主 CI：ruff + 全量测试（MySQL 服务 + 完整种子/向量索引）+ 前端构建。
+#
+# 与 eval-gate.yml 的关系：eval-gate 是指标门禁（规则引擎召回/误报阈值），
+# 本 workflow 是工程质量门禁（lint / 全量单测 / 前端可构建）。
+#
+# 全量测试的种子配方（本地已用全新库 compliance_ci 验证通过）：
+#   schema → 规则 50 → 法规 10/条款 45 → admin → 真实处罚案例 32 →
+#   条款向量索引 → 案例向量索引（fastembed 下载 bge-small-zh-v1.5）
+# 环境约定：
+#   - DASHSCOPE_API_KEY 置空：LLM 用例全部打桩/降级，不打外网
+#   - Neo4j / Redis / Celery 未起：相关用例按 skipif 守卫跳过
+#   - MCP stdio 集成用例会拉起真实 server 子进程（仅依赖 MySQL + 向量库）
+
+name: ci
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "configs/**"
+      - "tests/**"
+      - "frontend/**"
+      - "requirements.txt"
+      - "pyproject.toml"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "configs/**"
+      - "tests/**"
+      - "frontend/**"
+      - "requirements.txt"
+      - "pyproject.toml"
+      - ".github/workflows/ci.yml"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Ruff check
+        run: |
+          pip install ruff
+          ruff check src/ tests/ scripts/
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root123
+          MYSQL_DATABASE: compliance_review
+          TZ: Asia/Shanghai
+        ports:
+          - "3306:3306"
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -proot123 --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: "3306"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root123
+      MYSQL_DATABASE: compliance_review
+      DASHSCOPE_API_KEY: ""
+      PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          pip install -e ".[dev]"
+
+      - name: Init schema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-mysql-client
+          mysql -h127.0.0.1 -uroot -proot123 --default-character-set=utf8mb4 \
+            compliance_review < docker/init-scripts/init_mysql.sql
+
+      - name: Seed data (rules / regulations / penalty cases / admin)
+        run: |
+          python scripts/init_data/import_rules.py
+          python scripts/init_data/import_regulations.py
+          python scripts/init_data/import_penalty_cases.py
+          python scripts/init_data/init_admin.py
+
+      - name: Build vector indexes (articles + penalty cases)
+        run: |
+          python scripts/init_data/index_articles.py
+          python scripts/init_data/index_cases.py
+
+      - name: Run full test suite
+        run: python -m pytest tests/ -v --basetemp=.pytest-tmp
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build
+        run: |
+          cd frontend
+          npm ci
+          npm run build

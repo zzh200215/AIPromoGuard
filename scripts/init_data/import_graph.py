@@ -196,12 +196,30 @@ def import_rules() -> tuple[int, int]:
         db.close()
 
 
+_DOMAIN_KEYWORDS: dict[str, list[str]] = {
+    "banking": ["银行", "理财", "存款", "贷款", "承兑", "资管", "信用卡", "分行", "支行"],
+    "fund": ["基金", "证券", "私募", "申购", "赎回", "上市公司", "信息披露", "发行股份"],
+    "insurance": ["保险", "投保", "保单", "理赔", "寿险", "财险", "健康险", "保险代理"],
+}
+
+
+def _infer_domain(text: str) -> str | None:
+    """真实罚单多无关联法规（信息公开表只给违规摘要），按文本关键词推断领域。"""
+    best, best_hits = None, 0
+    for domain, kws in _DOMAIN_KEYWORDS.items():
+        hits = sum(1 for k in kws if k in text)
+        if hits > best_hits:
+            best, best_hits = domain, hits
+    return best
+
+
 def import_penalty_cases() -> int:
     """处罚案例 → PenaltyCase 节点（周三）。
 
     建立:
     - PenaltyCase -[:BASED_ON_REGULATION]-> Regulation（按案例关联法规 id 匹配）
-    - PenaltyCase -[:INVOLVES_VIOLATION]-> ViolationPattern（按关联法规所属领域兜底关联）
+    - PenaltyCase -[:INVOLVES_VIOLATION]-> ViolationPattern（按关联法规所属领域
+      兜底关联；真实罚单多无关联法规，此时按违规文本关键词推断领域）
     """
     db = SessionLocal()
     try:
@@ -242,8 +260,15 @@ def import_penalty_cases() -> int:
                     """,
                     {"rid": rid, "cid": case.id},
                 )
-            # INVOLVES_VIOLATION：按关联法规所属领域的 ViolationPattern 兜底关联
+            # INVOLVES_VIOLATION：按关联法规所属领域兜底；无关联法规时按
+            # 违规文本关键词推断领域（真实罚单 related_regulations 多为空）
             domains = {reg_domains[r] for r in reg_ids if r in reg_domains}
+            if not domains:
+                inferred = _infer_domain(
+                    f"{case.case_name} {case.violation_summary or ''}"
+                )
+                if inferred:
+                    domains = {inferred}
             for d in domains:
                 run_cypher_strict(
                     """

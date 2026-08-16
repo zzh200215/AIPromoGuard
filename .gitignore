@@ -43,3 +43,4 @@ tasks/
 
 # 根目录 PRD 原件（正式版在 docs/PRD.md）
 /金融产品合规智能审查系统*.md
+.ci_sim/

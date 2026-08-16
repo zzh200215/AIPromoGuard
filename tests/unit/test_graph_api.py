@@ -50,10 +50,25 @@ def test_graph_query_ok():
 
 @pytest.mark.skipif(not nc.health(), reason="Neo4j 未运行")
 def test_graph_cases_recommend_ok():
+    """查询词取自库内真实案例的违规摘要前段——断言与数据集内容解耦，
+    数据源切换（AI 样例 → 真实罚单）不需要改测试。"""
+    from src.infrastructure.database.mysql import SessionLocal
+    from src.models import PenaltyCase
+
+    db = SessionLocal()
+    case = (
+        db.query(PenaltyCase)
+        .filter(PenaltyCase.violation_summary.isnot(None))
+        .first()
+    )
+    db.close()
+    if case is None:
+        pytest.skip("处罚案例库为空")
+
     r = client.post(
         "/api/v1/graph/cases/recommend",
         headers=_auth_headers(),
-        json={"text": "宣传预期收益率误导投资者", "domain": "fund", "top_k": 3},
+        json={"text": case.violation_summary[:20], "domain": None, "top_k": 3},
     )
     assert r.status_code == 200
     data = r.json()["data"]
