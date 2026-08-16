@@ -75,5 +75,14 @@ class ChromaVectorStore(VectorStore):
     def delete(self, collection: str, ids: list[str]) -> None:
         self._collection(collection).delete(ids=[str(i) for i in ids])
 
+    def delete_all(self, collection: str) -> int:
+        """整集合删除并重建（返回删除前条数）。数据源整体切换时用——按 id 删
+        无法覆盖已不在上游表中的历史向量（如 --replace 换数据后 id 重排）。"""
+        existed = self._collection(collection).count()
+        if existed:
+            self._client.delete_collection(collection)
+            self._collection(collection)  # 重建空集合，保持幂等语义
+        return existed
+
     def count(self, collection: str) -> int:
         return self._collection(collection).count()

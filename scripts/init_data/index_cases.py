@@ -38,10 +38,10 @@ def main() -> None:
         cases = db.query(PenaltyCase).all()
 
         if rebuild:
-            ids = [str(c.id) for c in cases]
-            if ids:
-                store.delete(COLLECTION, ids)
-            print(f"清空旧向量 {len(ids)} 条")
+            # 整集合清空：按当前表 id 删无法覆盖已不在表中的历史向量
+            # （数据源整体替换后 id 重排，旧向量会变幽灵）
+            removed = store.delete_all(COLLECTION)
+            print(f"清空旧向量 {removed} 条")
 
         texts = []
         docs = []

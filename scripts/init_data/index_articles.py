@@ -39,10 +39,9 @@ def main() -> None:
         rows = query.all()
 
         if rebuild:
-            ids = [str(a.id) for a, _ in rows]
-            if ids:
-                store.delete(COLLECTION, ids)
-            print(f"清空旧向量 {len(ids)} 条")
+            # 整集合清空：按当前表 id 删无法覆盖已不在表中的历史向量
+            removed = store.delete_all(COLLECTION)
+            print(f"清空旧向量 {removed} 条")
 
         texts = [a.content for a, _ in rows]
         docs = [

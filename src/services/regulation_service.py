@@ -168,7 +168,7 @@ def _apply_rerank(query: str, items: list[dict]) -> list[dict]:
         return items
 
     weight = float(cfg.get("weight", 0.7))
-    for rn, item in zip(_normalize(raw), items):
+    for rn, item in zip(_normalize(raw), items, strict=False):
         item["rerank_score"] = round(rn, 6)
         item["score"] = round(weight * rn + (1 - weight) * item.get("rrf_score", 0.0), 6)
     items.sort(key=lambda x: -x["score"])

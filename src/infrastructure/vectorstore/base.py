@@ -31,6 +31,10 @@ class VectorStore(ABC):
     def delete(self, collection: str, ids: list[str]) -> None:
         """按 id 删除向量。"""
 
+    def delete_all(self, collection: str) -> int:
+        """整集合清空（返回删除前条数），默认 NotImplemented 由子类覆写。"""
+        raise NotImplementedError
+
     @abstractmethod
     def count(self, collection: str) -> int:
         """返回集合内向量数量。"""
