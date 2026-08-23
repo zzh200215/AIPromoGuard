@@ -36,5 +36,6 @@ class RuleOut(BaseModel):
     description: str | None = None
     is_active: int
     version: int
+    status: str = "active"
     created_at: datetime
     updated_at: datetime

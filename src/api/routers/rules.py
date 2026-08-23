@@ -113,3 +113,68 @@ def delete_rule(
     db.delete(rule)
     db.commit()
     return ok({"deleted": rule_id})
+
+
+@router.post("/{rule_id}/versions", status_code=201)
+def draft_new_version(
+    rule_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("manage_rules")),
+) -> dict:
+    """从现行规则起草新版本：克隆为 draft（不生效），编辑后走 publish 发布。"""
+    rule = db.get(Rule, rule_id)
+    if rule is None:
+        raise AppError(ErrorCode.PARAM_ERROR, "规则不存在", http_status=404)
+    draft = Rule(
+        domain=rule.domain,
+        rule_name=rule.rule_name,
+        rule_type=rule.rule_type,
+        rule_content=dict(rule.rule_content or {}),
+        severity=rule.severity,
+        description=rule.description,
+        is_active=0,
+        version=rule.version + 1,
+        status="draft",
+    )
+    db.add(draft)
+    db.commit()
+    db.refresh(draft)
+    return ok(RuleOut.model_validate(draft).model_dump())
+
+
+@router.post("/{rule_id}/publish")
+def publish_rule(
+    rule_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("manage_rules")),
+) -> dict:
+    """发布规则版本：草稿/待复核版本激活生效，同名旧版本自动停用。"""
+    rule = db.get(Rule, rule_id)
+    if rule is None:
+        raise AppError(ErrorCode.PARAM_ERROR, "规则不存在", http_status=404)
+    if rule.status not in ("draft", "pending_review"):
+        raise AppError(
+            ErrorCode.PARAM_ERROR, f"规则当前状态 {rule.status}，仅草稿/待复核可发布"
+        )
+    rule.status = "active"
+    rule.is_active = 1
+    superseded = (
+        db.query(Rule)
+        .filter(
+            Rule.rule_name == rule.rule_name,
+            Rule.id != rule.id,
+            Rule.status == "active",
+            Rule.is_active == 1,
+        )
+        .all()
+    )
+    for old in superseded:
+        old.is_active = 0
+    db.commit()
+    db.refresh(rule)
+    return ok(
+        {
+            "rule": RuleOut.model_validate(rule).model_dump(),
+            "superseded_rule_ids": [old.id for old in superseded],
+        }
+    )

@@ -32,6 +32,8 @@ export interface Rule {
   /** 0/1 布尔存储 */
   is_active: number
   version: number
+  /** 生效生命周期 draft/pending_review/active */
+  status?: string
   created_at: string
   updated_at: string
 }

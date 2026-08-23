@@ -17,3 +17,12 @@ export const updateRule = (id: number, body: RuleUpdate) =>
 
 export const deleteRule = (id: number) =>
   request<{ deleted: number }>({ url: `/rules/${id}`, method: 'delete' })
+
+export const draftRuleVersion = (id: number) =>
+  request<Rule>({ url: `/rules/${id}/versions`, method: 'post' })
+
+export const publishRule = (id: number) =>
+  request<{ rule: Rule; superseded_rule_ids: number[] }>({
+    url: `/rules/${id}/publish`,
+    method: 'post',
+  })
