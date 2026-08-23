@@ -11,7 +11,8 @@
   4. 等待审查完成：双引擎跑批，人工复核关卡自动续跑（全部确认）
   5. 批次终态自动回写台账并生成整改清单
   6. 记录整改决策
-  7. 规则新版本：起草 → 修改 → 发布（旧版自动停用）
+  7. 整改复测闭环：上传整改版 → 复测通过 → 原整改项自动关闭
+  8. 规则新版本：起草 → 修改 → 发布（旧版自动停用）
 
 跑完保留演示数据，可打开前端对照查看；重复执行会先重建演示数据。
 """
@@ -109,6 +110,24 @@ def _wait_batch_terminal(h: dict, batch_id: int) -> dict:
     return last
 
 
+def _wait_task_terminal(h: dict, task_id: int) -> str:
+    """轮询单任务到终态（整改复测用）；awaiting_review 自动全部确认后续跑。"""
+    deadline = time.time() + WAIT_TIMEOUT_SECONDS
+    while time.time() < deadline:
+        task = client.get(f"/api/v1/tasks/{task_id}", headers=h).json()["data"]
+        if task["status"] == "awaiting_review":
+            client.post(
+                f"/api/v1/tasks/{task_id}/human-review",
+                headers=h,
+                json={"rejected_indexes": []},
+            )
+            print("  人工复核关卡：自动确认并续跑")
+        elif task["status"] in ("completed", "failed"):
+            return task["status"]
+        time.sleep(3)
+    raise TimeoutError(f"复测任务 {task_id} 未在 {WAIT_TIMEOUT_SECONDS}s 内到终态")
+
+
 def main() -> None:
     _preflight()
     db = SessionLocal()
@@ -120,7 +139,7 @@ def main() -> None:
     )
     h = {"Authorization": f"Bearer {login.json()['data']['access_token']}"}
 
-    _step(f"1/7 影响分析（监管情报 #{ids['regulation_update_id']}）")
+    _step(f"1/8 影响分析（监管情报 #{ids['regulation_update_id']}）")
     r = client.post(
         "/api/v1/impact/assessments",
         headers=h,
@@ -140,24 +159,24 @@ def main() -> None:
         )
     print(f"  风险分布: 高{a['high_count']} / 中{a['medium_count']} / 低{a['low_count']}")
 
-    _step("2/7 人工确认影响范围")
+    _step("2/8 人工确认影响范围")
     r = client.post(f"/api/v1/impact/assessments/{aid}/confirm", headers=h,
                     json={"action": "confirm"})
     assert r.status_code == 200, r.text
     print(f"  已确认；沉淀关键词命中的规则关联 {r.json()['data']['created_links']} 条")
 
-    _step("3/7 一键创建批量复审（默认高/中风险材料）")
+    _step("3/8 一键创建批量复审（默认高/中风险材料）")
     r = client.post(f"/api/v1/impact/assessments/{aid}/batch", headers=h, json={})
     assert r.status_code == 201, r.text
     batch = r.json()["data"]
     print(f"  批次 #{batch['batch_id']}：{batch['total_count']} 份材料进入双引擎复审")
 
-    _step("4/7 等待审查完成（人工复核关卡自动续跑）")
+    _step("4/8 等待审查完成（人工复核关卡自动续跑）")
     detail = _wait_batch_terminal(h, batch["batch_id"])
     for task in detail["tasks"]:
         print(f"  任务 #{task['id']} {task['task_name']}: {task['status']}")
 
-    _step("5/7 整改清单（批次终态自动回写）")
+    _step("5/8 整改清单（批次终态自动回写）")
     r = client.get(f"/api/v1/impact/assessments/{aid}/remediation", headers=h)
     remediation = r.json()["data"]["items"]
     target = None
@@ -173,7 +192,7 @@ def main() -> None:
         if target is None and entry["requires_remediation"]:
             target = entry
 
-    _step("6/7 记录整改决策")
+    _step("6/8 记录整改决策")
     if target is not None:
         r = client.post(
             f"/api/v1/impact/assessments/{aid}/remediation",
@@ -183,7 +202,43 @@ def main() -> None:
         assert r.status_code == 200, r.text
         print(f"  {target['material_name']} → 整改中（remediate）")
 
-    _step("7/7 规则版本发布（监管驱动规则库更新）")
+    _step("7/8 整改复测闭环（上传整改版 → 通过自动关闭整改项）")
+    if target is None or target.get("material_id") is None:
+        print("  本次复审无待整改材料，跳过复测演示")
+    else:
+        corrected = (
+            "本基金为混合型基金，历史业绩不代表未来表现，投资须谨慎，"
+            "请仔细阅读基金合同与招募说明书。"
+        )
+        r = client.post(
+            f"/api/v1/impact/materials/{target['material_id']}/retest",
+            headers=h,
+            data={"assessment_id": str(aid)},
+            files={"file": ("整改版.txt", corrected.encode("utf-8"), "text/plain")},
+        )
+        assert r.status_code == 201, r.text
+        started = r.json()["data"]
+        print(
+            f"  {target['material_name']} 上传整改版（台账升版 {started['version']}），"
+            f"复测任务 #{started['task_id']} 启动"
+        )
+        final_status = _wait_task_terminal(h, started["task_id"])
+        items = client.get(f"/api/v1/impact/assessments/{aid}/remediation", headers=h)
+        entries = items.json()["data"]["items"]
+        orig = next(e for e in entries if e["task_id"] == target["task_id"])
+        retest = next(
+            (e for e in entries if e.get("retest_for_task_id") == target["task_id"]), None
+        )
+        if final_status == "completed" and retest and retest["violation_count"] == 0:
+            print(
+                f"  复测通过（0 违规）→ 原整改项自动 [{orig['decision']}]，"
+                f"复测条目违规 {retest['violation_count']} 处 —— 闭环完成"
+            )
+        else:
+            count = retest["violation_count"] if retest else "?"
+            print(f"  复测任务 {final_status}，仍有违规 {count} 处 —— 继续整改")
+
+    _step("8/8 规则版本发布（监管驱动规则库更新）")
     rule_id = ids["rule_ids"][0]
     r = client.post(f"/api/v1/rules/{rule_id}/versions", headers=h)
     assert r.status_code == 201, r.text
