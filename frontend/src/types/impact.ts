@@ -88,3 +88,17 @@ export interface CreateBatchResult {
   task_ids: number[]
   skipped: Array<{ material_id?: number; name?: string; reason: string }>
 }
+
+export interface ImpactOverview {
+  pending_updates: number
+  updates_to_analyze: number
+  pending_assessments: number
+  assessments_by_status: Record<string, number>
+  high_risk_materials: number
+  running_batches: number
+  remediation_total: number
+  remediation_pending: number
+  remediation_done: number
+  rules_pending_publish: number
+  active_rules: number
+}

@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -24,6 +25,7 @@ from src.models import (
     RegulationUpdate,
     ReviewBatch,
     ReviewTask,
+    Rule,
     RuleRegulationLink,
     User,
 )
@@ -40,6 +42,88 @@ def _get_assessment(db: Session, assessment_id: int) -> ImpactAssessment:
     if assessment is None:
         raise AppError(ErrorCode.PARAM_ERROR, "影响评估不存在", http_status=404)
     return assessment
+
+
+@router.get("/overview")
+def impact_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """风险驾驶舱：合规运营一屏指标（情报→评估→复审→整改→规则全链路计数）。"""
+    pending_updates = (
+        db.query(RegulationUpdate).filter(RegulationUpdate.status == "pending").count()
+    )
+    imported_ids = [
+        row[0]
+        for row in db.query(RegulationUpdate.id)
+        .filter(RegulationUpdate.status == "imported")
+        .all()
+    ]
+    analyzed_ids = {
+        row[0]
+        for row in db.query(ImpactAssessment.regulation_update_id)
+        .filter(ImpactAssessment.regulation_update_id.isnot(None))
+        .all()
+    }
+    to_analyze = len([rid for rid in imported_ids if rid not in analyzed_ids])
+
+    status_rows = (
+        db.query(ImpactAssessment.status, func.count(ImpactAssessment.id))
+        .group_by(ImpactAssessment.status)
+        .all()
+    )
+    assessments_by_status = {s: c for s, c in status_rows}
+    pending_assessments = assessments_by_status.get("draft", 0) + assessments_by_status.get(
+        "pending_review", 0
+    )
+    high_risk_materials = (
+        db.query(func.sum(ImpactAssessment.high_count))
+        .filter(ImpactAssessment.status.in_(("draft", "pending_review")))
+        .scalar()
+    ) or 0
+
+    running_batches = (
+        db.query(ReviewBatch)
+        .filter(
+            ReviewBatch.status == "running",
+            ReviewBatch.source_type == "impact_assessment",
+        )
+        .count()
+    )
+
+    remediation_total = 0
+    remediation_pending = 0
+    remediation_done = 0
+    for (items_json,) in db.query(ImpactAssessment.items).all():
+        for entry in (items_json or {}).get("remediation") or []:
+            remediation_total += 1
+            if entry.get("decision") == "pending":
+                remediation_pending += 1
+            elif entry.get("decision") == "done":
+                remediation_done += 1
+
+    rules_pending_publish = (
+        db.query(Rule)
+        .filter(Rule.status.in_(("draft", "pending_review")))
+        .count()
+    )
+    active_rules = db.query(Rule).filter(Rule.is_active == 1).count()
+
+    return ok(
+        {
+            "pending_updates": pending_updates,
+            "updates_to_analyze": to_analyze,
+            "pending_assessments": pending_assessments,
+            "assessments_by_status": assessments_by_status,
+            "high_risk_materials": int(high_risk_materials),
+            "running_batches": running_batches,
+            "remediation_total": remediation_total,
+            "remediation_pending": remediation_pending,
+            "remediation_done": remediation_done,
+            "rules_pending_publish": rules_pending_publish,
+            "active_rules": active_rules,
+        }
+    )
 
 
 @router.get("/assessments")

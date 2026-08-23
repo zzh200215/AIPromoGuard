@@ -6,8 +6,12 @@ import type {
   AssessmentStatus,
   CreateBatchResult,
   ImpactAssessment,
+  ImpactOverview,
   RemediationItem,
 } from '@/types/impact'
+
+export const impactOverview = () =>
+  request<ImpactOverview>({ url: '/impact/overview', method: 'get' })
 
 export const listAssessments = (params: PaginationParams & { status?: AssessmentStatus }) =>
   request<Page<ImpactAssessment>>({ url: '/impact/assessments', method: 'get', params })

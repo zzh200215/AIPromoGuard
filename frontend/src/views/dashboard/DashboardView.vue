@@ -13,6 +13,59 @@
       </el-button>
     </el-card>
 
+    <el-card v-if="auth.hasPermission('create_task')" class="section-card">
+      <template #header>
+        <div class="card-header">
+          <span>合规运营 · 风险驾驶舱</span>
+          <el-link type="primary" @click="router.push('/impact')">进入影响中心</el-link>
+        </div>
+      </template>
+      <el-row :gutter="12">
+        <el-col :span="4">
+          <div class="clickable-stat" @click="router.push('/knowledge/trends')">
+            <StatCard label="待确认情报" :value="overview?.pending_updates" />
+          </div>
+        </el-col>
+        <el-col :span="4">
+          <div class="clickable-stat" @click="router.push('/impact')">
+            <StatCard label="待分析情报" :value="overview?.updates_to_analyze" />
+          </div>
+        </el-col>
+        <el-col :span="4">
+          <div class="clickable-stat" @click="router.push('/impact')">
+            <StatCard label="待处理评估" :value="overview?.pending_assessments" />
+          </div>
+        </el-col>
+        <el-col :span="4">
+          <div class="clickable-stat" @click="router.push('/impact')">
+            <StatCard label="评估中高风险材料" :value="overview?.high_risk_materials" />
+          </div>
+        </el-col>
+        <el-col :span="4">
+          <div class="clickable-stat" @click="router.push('/batches')">
+            <StatCard label="进行中复审批次" :value="overview?.running_batches" />
+          </div>
+        </el-col>
+        <el-col :span="4">
+          <div class="clickable-stat" @click="router.push('/impact')">
+            <StatCard label="待决策整改项" :value="overview?.remediation_pending" />
+          </div>
+        </el-col>
+      </el-row>
+      <el-row class="ops-row" :gutter="12">
+        <el-col :span="4">
+          <div class="clickable-stat" @click="router.push('/knowledge/rules')">
+            <StatCard label="规则待发布" :value="overview?.rules_pending_publish" />
+          </div>
+        </el-col>
+        <el-col :span="4">
+          <div class="clickable-stat" @click="router.push('/knowledge/rules')">
+            <StatCard label="生效规则" :value="overview?.active_rules" />
+          </div>
+        </el-col>
+      </el-row>
+    </el-card>
+
     <el-card class="section-card">
       <template #header>
         <div class="card-header">
@@ -62,11 +115,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { impactOverview } from '@/api/impact'
 import { systemMonitor } from '@/api/monitor'
 import { listTasks } from '@/api/tasks'
 import { formatTime } from '@/composables/useFormat'
 import { useAuthStore } from '@/stores/auth'
 import type { SystemMonitor } from '@/api/monitor'
+import type { ImpactOverview } from '@/types/impact'
 import type { TaskOut } from '@/types/task'
 
 const router = useRouter()
@@ -75,6 +130,7 @@ const auth = useAuthStore()
 const recentTasks = ref<TaskOut[]>([])
 const loading = ref(false)
 const monitor = ref<SystemMonitor | null>(null)
+const overview = ref<ImpactOverview | null>(null)
 
 const kb = computed(() => monitor.value?.database.knowledge_base)
 
@@ -92,6 +148,14 @@ onMounted(async () => {
   if (auth.hasPermission('monitor')) {
     try {
       monitor.value = await systemMonitor()
+    } catch {
+      // 拦截器已提示
+    }
+  }
+
+  if (auth.hasPermission('create_task')) {
+    try {
+      overview.value = await impactOverview()
     } catch {
       // 拦截器已提示
     }
@@ -124,5 +188,13 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.clickable-stat {
+  cursor: pointer;
+}
+
+.ops-row {
+  margin-top: 12px;
 }
 </style>
