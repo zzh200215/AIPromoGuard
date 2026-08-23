@@ -1,6 +1,5 @@
 """法规影响中心：监管事件影响评估查看/人工确认 + 一键创建批量复审批次。"""
 
-import re
 from datetime import datetime
 from pathlib import Path
 
@@ -16,6 +15,7 @@ from src.api.schemas.impact import (
     AssessmentOut,
 )
 from src.core.impact import analyze
+from src.core.impact.analysis import material_document_path
 from src.infrastructure.database.mysql import get_db
 from src.models import (
     ImpactAssessment,
@@ -27,13 +27,10 @@ from src.models import (
     User,
 )
 from src.services.review_service import start_review
-from src.utils.config import settings
 from src.utils.errors import AppError, ErrorCode
 from src.utils.response import ok
 
 router = APIRouter(prefix="/impact", tags=["impact"])
-
-_DOC_ID_RE = re.compile(r"^doc_[0-9a-f]{8}$")
 
 
 def _get_assessment(db: Session, assessment_id: int) -> ImpactAssessment:
@@ -197,14 +194,6 @@ def confirm_assessment(
     return ok(data)
 
 
-def _resolve_document(document_id: str | None) -> Path | None:
-    """document_id → 台账材料的已上传文档路径（doc_xxxxxxxx 白名单 + 全用户目录定位）。"""
-    if not document_id or not _DOC_ID_RE.match(document_id):
-        return None
-    matches = list(Path(settings.upload_dir).glob(f"*/{document_id}.*"))
-    return matches[0] if matches else None
-
-
 @router.post("/assessments/{assessment_id}/batch", status_code=201)
 def create_review_batch(
     assessment_id: int,
@@ -239,7 +228,7 @@ def create_review_batch(
         if material is None:
             skipped.append({"material_id": entry["material_id"], "reason": "台账记录不存在"})
             continue
-        path = _resolve_document(material.document_id)
+        path = material_document_path(material.document_id)
         if path is None:
             skipped.append(
                 {"material_id": material.id, "name": material.name, "reason": "未关联可定位的文档"}

@@ -12,6 +12,41 @@ id 落在共享开发库；不清会污染 feedback 统计与规则精调建议�
 import pytest
 from sqlalchemy import text
 from src.infrastructure.database.mysql import SessionLocal
+from src.models import ProductMaterial
+
+
+@pytest.fixture()
+def isolated_materials():
+    """影响分析类测试隔离：临时归档既有在用材料台账，结束后恢复。
+
+    _locate_materials 按产品类型圈全部 active 材料，演示种子或并行开发
+    数据会污染计数断言；本夹具让测试只看见自己新建的材料。
+    """
+    db = SessionLocal()
+    active_ids = [
+        row[0]
+        for row in db.query(ProductMaterial.id)
+        .filter(ProductMaterial.status == "active")
+        .all()
+    ]
+    if active_ids:
+        db.query(ProductMaterial).filter(ProductMaterial.id.in_(active_ids)).update(
+            {"status": "archived"}, synchronize_session=False
+        )
+        db.commit()
+    db.close()
+
+    yield
+
+    db = SessionLocal()
+    try:
+        if active_ids:
+            db.query(ProductMaterial).filter(ProductMaterial.id.in_(active_ids)).update(
+                {"status": "active"}, synchronize_session=False
+            )
+            db.commit()
+    finally:
+        db.close()
 
 
 @pytest.fixture(autouse=True)

@@ -137,7 +137,7 @@ def _cleanup_chain(db: Session) -> None:
 
 
 @pytest.mark.skipif(not _db_ready(), reason="数据库不可用")
-def test_analyze_full_chain_and_reanalyze_overwrites_draft():
+def test_analyze_full_chain_and_reanalyze_overwrites_draft(isolated_materials):
     db = SessionLocal()
     try:
         _cleanup_chain(db)
@@ -164,7 +164,7 @@ def test_analyze_full_chain_and_reanalyze_overwrites_draft():
 
 
 @pytest.mark.skipif(not _db_ready(), reason="数据库不可用")
-def test_analyze_keyword_fallback_without_links():
+def test_analyze_keyword_fallback_without_links(isolated_materials):
     db = SessionLocal()
     try:
         _cleanup_chain(db)

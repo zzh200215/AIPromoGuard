@@ -3,18 +3,23 @@
 对外唯一入口 analyze()，结果落 ImpactAssessment（明细存 items JSON）。
 
 设计约定：
-- 风险排序是确定性公式：规则严重度权重(1-3) + 材料违规历史(+2) + 罚单佐证(+1)，
-  LLM 不参与风险决策；需要解释文案时在 API 层另行生成。
+- 风险排序是确定性公式：材料预扫命中规则的严重度权重(1-3) + 违规历史(+2)
+  + 罚单佐证(+1，仅对预扫命中的材料)，LLM 不参与风险决策；
+  需要解释文案时在 API 层另行生成。
+- 预扫复用规则引擎（rule_scanner）对可定位的 txt 材料文档真实匹配，
+  无法定位文档的材料回退域级规则严重度（保守估算）。
 - 定位阶段各一个函数，打分与分词是纯函数，可独立单测。
 - 一个监管事件只保留一份评估：重复 analyze 覆盖 draft 的 items；
   已进入人工流程（pending_review/confirmed）则原样返回，不覆盖人工数据。
 """
 
 import re
+from pathlib import Path
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from src.core.rule_engine import rule_scanner
 from src.models import (
     Article,
     ImpactAssessment,
@@ -24,6 +29,8 @@ from src.models import (
     Rule,
     RuleRegulationLink,
 )
+from src.parsers.base import TextBlock
+from src.utils.config import settings
 from src.utils.errors import AppError, ErrorCode
 from src.utils.logger import get_logger
 
@@ -37,6 +44,7 @@ _KEYWORD_FALLBACK_MIN_OVERLAP = 2  # 关键词兜底命中的最小二元组重�
 _PENALTY_EVIDENCE_CAP = 5
 
 _STOP_CHARS = set("的了和与及或者在是有对为中上等其本并予以进行有关加强进一步")
+_DOC_ID_RE = re.compile(r"^doc_[0-9a-f]{8}$")
 
 
 def _text_bigrams(text: str) -> set[str]:
@@ -143,12 +151,47 @@ def _locate_penalties(db: Session, regulation_ids: list[int]) -> list[PenaltyCas
     ][:_PENALTY_EVIDENCE_CAP]
 
 
+def material_document_path(document_id: str | None) -> Path | None:
+    """台账 document_id → 已上传文档路径（doc_xxxxxxxx 白名单 + upload_dir 单层定位）。"""
+    if not document_id or not _DOC_ID_RE.match(document_id):
+        return None
+    matches = list(Path(settings.upload_dir).glob(f"*/{document_id}.*"))
+    return matches[0] if matches else None
+
+
+def _preview_rule_hits(
+    rules: list[Rule], materials: list[ProductMaterial]
+) -> tuple[set[int], dict[int, set[int]]]:
+    """对可定位的 txt 材料文档跑规则引擎预扫。
+
+    返回（已预扫的材料 id 集合, 材料id → 命中规则id 集合）；
+    无文档/非 txt/读取失败的材料不在 scanned 中，打分回退域级保守估算。
+    """
+    scanned: set[int] = set()
+    hits: dict[int, set[int]] = {}
+    for material in materials:
+        path = material_document_path(material.document_id)
+        if path is None or path.suffix.lower() != ".txt":
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            logger.warning("材料 %s 文档 %s 读取失败，跳过预扫", material.id, path)
+            continue
+        scanned.add(material.id)
+        rule_hits = rule_scanner.scan([TextBlock(text=text)], rules)
+        hits[material.id] = {int(h.rule_id) for h in rule_hits}
+    return scanned, hits
+
+
 def _build_items(
     rules: list[Rule],
     matched_by: dict[int, str],
     materials: list[ProductMaterial],
     penalties: list[PenaltyCase],
+    preview: tuple[set[int], dict[int, set[int]]],
 ) -> tuple[dict, tuple[int, int, int]]:
+    scanned, hit_map = preview
     rule_items = [
         {
             "rule_id": rule.id,
@@ -166,15 +209,24 @@ def _build_items(
         m_rules = [
             r for r in rules if _DOMAIN_TO_PRODUCT.get(r.domain) == material.product_type
         ]
-        max_severity = max((r.severity for r in m_rules), default="low")
-        score, level = _score_material(
-            max_severity, material.last_review_status, len(penalties)
-        )
-        reason = f"命中规则{len(m_rules)}条（最高{max_severity}风险）"
+        hit_rules = [r for r in m_rules if r.id in hit_map.get(material.id, set())]
+        if material.id in scanned:
+            # 预扫命中决定严重度；罚单佐证只加给有命中的材料
+            max_severity = max((r.severity for r in hit_rules), default="low")
+            penalty_evidence = len(penalties) if hit_rules else 0
+            reason = f"规则预扫命中{len(hit_rules)}条（最高{max_severity}风险）"
+        else:
+            # 无可读文档：回退域级规则严重度，保守计入罚单佐证
+            max_severity = max((r.severity for r in m_rules), default="low")
+            penalty_evidence = len(penalties)
+            reason = f"命中规则{len(m_rules)}条（最高{max_severity}风险）"
         if material.last_review_status == "violation":
             reason += "；历史审查存在违规"
-        if penalties:
-            reason += f"；关联罚单{len(penalties)}件"
+        if penalty_evidence:
+            reason += f"；关联罚单{penalty_evidence}件"
+        score, level = _score_material(
+            max_severity, material.last_review_status, penalty_evidence
+        )
         material_items.append(
             {
                 "material_id": material.id,
@@ -185,6 +237,7 @@ def _build_items(
                 "document_id": material.document_id,
                 "last_review_status": material.last_review_status,
                 "matched_rules": [r.id for r in m_rules],
+                "hit_rules": [r.id for r in hit_rules],
                 "risk_score": score,
                 "risk_level": level,
                 "reason": reason,
@@ -249,7 +302,8 @@ def analyze(
     rules, matched_by = _locate_rules(db, regulation_ids, upd)
     materials = _locate_materials(db, rules)
     penalties = _locate_penalties(db, regulation_ids)
-    items, counts = _build_items(rules, matched_by, materials, penalties)
+    preview = _preview_rule_hits(rules, materials)
+    items, counts = _build_items(rules, matched_by, materials, penalties, preview)
     summary = _build_summary(regulation_ids, rules, materials, penalties, counts)
 
     if existing is None:

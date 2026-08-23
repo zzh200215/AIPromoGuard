@@ -100,7 +100,7 @@ def _cleanup(db, regulation_id: int, update_id: int, material_ids: list[int]) ->
 
 
 @pytest.mark.skipif(not _db_ready(), reason="数据库不可用")
-def test_impact_full_flow():
+def test_impact_full_flow(isolated_materials):
     db = SessionLocal()
     material_ids: list[int] = []
     regulation_id = update_id = 0
