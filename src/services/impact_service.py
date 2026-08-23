@@ -74,7 +74,7 @@ def sync_batch_to_assessment(db: Session, batch_id: int) -> None:
                 "material_id": material.id if material else None,
                 "material_name": material.name if material else task.task_name,
                 "violation_count": violations,
-                "requires_remediation": violations > 0,
+                "requires_remediation": violations > 0 and task.status == "completed",
                 "decision": "pending",  # pending/remediate/reject/done
             }
         )
