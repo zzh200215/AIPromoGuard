@@ -16,11 +16,14 @@ from src.api.schemas.impact import (
     AssessmentOut,
     RemediationDecision,
 )
+from src.api.schemas.rule import RuleOut
 from src.core.impact import analyze
 from src.core.impact.analysis import material_document_path
+from src.core.impact.mining import mine_rule_candidates
 from src.infrastructure.database.mysql import get_db
 from src.models import (
     ImpactAssessment,
+    PenaltyCase,
     ProductMaterial,
     RegulationUpdate,
     ReviewBatch,
@@ -158,11 +161,67 @@ def create_assessment(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("create_task")),
 ) -> dict:
-    upd = db.get(RegulationUpdate, body.regulation_update_id)
-    if upd is None:
-        raise AppError(ErrorCode.REGULATION_UPDATE_NOT_FOUND, http_status=404)
-    assessment = analyze(db, body.regulation_update_id, created_by=current_user.id)
+    if (body.regulation_update_id is None) == (body.penalty_case_id is None):
+        raise AppError(ErrorCode.PARAM_ERROR, "regulation_update_id 与 penalty_case_id 必须二选一")
+    if body.regulation_update_id is not None:
+        upd = db.get(RegulationUpdate, body.regulation_update_id)
+        if upd is None:
+            raise AppError(ErrorCode.REGULATION_UPDATE_NOT_FOUND, http_status=404)
+    else:
+        if db.get(PenaltyCase, body.penalty_case_id) is None:
+            raise AppError(ErrorCode.PARAM_ERROR, "处罚案例不存在", http_status=404)
+    assessment = analyze(
+        db,
+        regulation_update_id=body.regulation_update_id,
+        penalty_case_id=body.penalty_case_id,
+        created_by=current_user.id,
+    )
     return ok(AssessmentOut.model_validate(assessment).model_dump())
+
+
+@router.get("/penalty-cases")
+def list_penalty_cases(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """处罚案例候选列表（影响中心触发源之二，倒序取最新）。"""
+    total = db.query(PenaltyCase).count()
+    rows = (
+        db.query(PenaltyCase)
+        .order_by(PenaltyCase.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return ok(
+        {
+            "total": total,
+            "items": [
+                {
+                    "id": c.id,
+                    "case_name": c.case_name,
+                    "penalty_org": c.penalty_org,
+                    "penalty_date": c.penalty_date,
+                    "violation_summary": c.violation_summary,
+                    "related_regulation_count": len(c.related_regulations or []),
+                }
+                for c in rows
+            ],
+        }
+    )
+
+
+@router.post("/penalty-cases/{case_id}/mine-rules", status_code=201)
+def mine_rules(
+    case_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("manage_rules")),
+) -> dict:
+    """从罚单违规事实挖掘规则候选草稿（LLM 仅产草稿，人工发布后生效）。"""
+    rules = mine_rule_candidates(db, case_id, created_by=current_user.id)
+    return ok({"items": [RuleOut.model_validate(r).model_dump() for r in rules]})
 
 
 @router.get("/assessments/{assessment_id}")

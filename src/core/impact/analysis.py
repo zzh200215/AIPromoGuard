@@ -71,9 +71,12 @@ def _score_material(
 
 
 def _locate_rules(
-    db: Session, regulation_ids: list[int], upd: RegulationUpdate
+    db: Session, regulation_ids: list[int], event_text: str, domain: str | None
 ) -> tuple[list[Rule], dict[int, str]]:
-    """受影响规则：优先 RuleRegulationLink 结构化关联，未关联的在同域规则里做关键词兜底。"""
+    """受影响规则：优先 RuleRegulationLink 结构化关联，未关联的在同域规则里做关键词兜底。
+
+    event_text 为事件文本（法规标题+摘要或罚单名称+违规摘要），domain 为空时兜底全域。
+    """
     matched_by: dict[int, str] = {}
     rules: list[Rule] = []
 
@@ -105,11 +108,11 @@ def _locate_rules(
         )
         matched_by = {rule.id: "link" for rule in rules}
 
-    event_grams = _text_bigrams(f"{upd.title} {upd.llm_summary or ''}")
+    event_grams = _text_bigrams(event_text)
     if event_grams:
         candidate_q = db.query(Rule).filter(Rule.is_active == 1)
-        if upd.domain:
-            candidate_q = candidate_q.filter(Rule.domain == upd.domain)
+        if domain:
+            candidate_q = candidate_q.filter(Rule.domain == domain)
         for rule in candidate_q.all():
             if rule.id in linked_rule_ids:
                 continue
@@ -275,31 +278,54 @@ def _build_summary(
 
 
 def analyze(
-    db: Session, regulation_update_id: int, created_by: int | None = None
+    db: Session,
+    regulation_update_id: int | None = None,
+    penalty_case_id: int | None = None,
+    created_by: int | None = None,
 ) -> ImpactAssessment:
-    """对一条监管动态执行影响分析并落库，返回评估记录。
+    """对一个监管事件（新规或处罚案例）执行影响分析并落库，返回评估记录。
 
-    同一 regulation_update_id 只保留一份评估：draft 状态重复分析覆盖 items；
-    pending_review/confirmed 状态原样返回（人工数据不覆盖）。
+    regulation_update_id 与 penalty_case_id 二选一。同一事件只保留一份评估：
+    draft 状态重复分析覆盖 items；pending_review/confirmed 状态原样返回
+    （人工数据不覆盖）。
     """
-    upd = db.get(RegulationUpdate, regulation_update_id)
-    if upd is None:
-        raise AppError(ErrorCode.REGULATION_UPDATE_NOT_FOUND)
+    if (regulation_update_id is None) == (penalty_case_id is None):
+        raise AppError(ErrorCode.PARAM_ERROR, "regulation_update_id 与 penalty_case_id 必须二选一")
 
-    existing = (
-        db.query(ImpactAssessment)
-        .filter(ImpactAssessment.regulation_update_id == regulation_update_id)
-        .one_or_none()
-    )
+    if regulation_update_id is not None:
+        upd = db.get(RegulationUpdate, regulation_update_id)
+        if upd is None:
+            raise AppError(ErrorCode.REGULATION_UPDATE_NOT_FOUND)
+        regulation_ids = [
+            int(m["regulation_id"])
+            for m in (upd.matched_regulations or [])
+            if m.get("regulation_id") is not None
+        ]
+        event_text = f"{upd.title} {upd.llm_summary or ''}"
+        domain, title = upd.domain, f"影响评估：{upd.title}"
+        existing = (
+            db.query(ImpactAssessment)
+            .filter(ImpactAssessment.regulation_update_id == regulation_update_id)
+            .one_or_none()
+        )
+    else:
+        case = db.get(PenaltyCase, penalty_case_id)
+        if case is None:
+            raise AppError(ErrorCode.PARAM_ERROR, "处罚案例不存在", http_status=404)
+        regulation_ids = [int(rid) for rid in (case.related_regulations or [])]
+        event_text = f"{case.case_name} {case.violation_summary or ''}"
+        domain, title = None, f"影响评估：{case.case_name}"  # 罚单不定域，兜底全域
+        existing = (
+            db.query(ImpactAssessment)
+            .filter(ImpactAssessment.penalty_case_id == penalty_case_id)
+            .one_or_none()
+        )
+
     if existing is not None and existing.status != "draft":
         logger.info("影响评估 %s 状态 %s，跳过重复分析", existing.id, existing.status)
         return existing
 
-    matched = upd.matched_regulations or []
-    regulation_ids = [
-        int(m["regulation_id"]) for m in matched if m.get("regulation_id") is not None
-    ]
-    rules, matched_by = _locate_rules(db, regulation_ids, upd)
+    rules, matched_by = _locate_rules(db, regulation_ids, event_text, domain)
     materials = _locate_materials(db, rules)
     penalties = _locate_penalties(db, regulation_ids)
     preview = _preview_rule_hits(rules, materials)
@@ -309,7 +335,8 @@ def analyze(
     if existing is None:
         assessment = ImpactAssessment(
             regulation_update_id=regulation_update_id,
-            title=f"影响评估：{upd.title}"[:255],
+            penalty_case_id=penalty_case_id,
+            title=title[:255],
             status="draft",
             created_by=created_by,
         )
@@ -322,7 +349,7 @@ def analyze(
     db.commit()
     db.refresh(assessment)
     logger.info(
-        "影响分析完成 update=%s 规则%d 材料%d 罚单%d", regulation_update_id, len(rules),
-        len(materials), len(penalties),
+        "影响分析完成 update=%s penalty=%s 规则%d 材料%d 罚单%d",
+        regulation_update_id, penalty_case_id, len(rules), len(materials), len(penalties),
     )
     return assessment

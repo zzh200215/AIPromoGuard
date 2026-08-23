@@ -7,7 +7,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class AssessmentCreate(BaseModel):
-    regulation_update_id: int = Field(gt=0)
+    """触发源二选一：监管动态或处罚案例。"""
+
+    regulation_update_id: int | None = Field(default=None, gt=0)
+    penalty_case_id: int | None = Field(default=None, gt=0)
 
 
 class AssessmentOut(BaseModel):

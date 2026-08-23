@@ -31,6 +31,50 @@
       </el-table>
     </el-card>
 
+    <!-- 处罚案例候选：罚单触发影响分析 / 挖掘规则候选 -->
+    <el-card shadow="never" class="section-card">
+      <template #header>
+        <div class="card-header">
+          <span>处罚案例（第二触发源）</span>
+          <el-button size="small" :loading="penaltiesLoading" @click="loadPenalties">
+            刷新
+          </el-button>
+        </div>
+      </template>
+      <el-table :data="penaltyCases" border v-loading="penaltiesLoading" size="small">
+        <el-table-column prop="case_name" label="案例名称" min-width="260" show-overflow-tooltip />
+        <el-table-column prop="penalty_org" label="处罚机构" width="180" show-overflow-tooltip />
+        <el-table-column prop="penalty_date" label="处罚日期" width="110" />
+        <el-table-column
+          prop="related_regulation_count"
+          label="关联法规数"
+          width="90"
+          align="center"
+        />
+        <el-table-column prop="violation_summary" label="违规摘要" min-width="220" show-overflow-tooltip />
+        <el-table-column label="操作" width="200" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              size="small"
+              type="primary"
+              :loading="analyzingPenaltyId === row.id"
+              @click="onAnalyzePenalty(row.id)"
+            >
+              分析影响
+            </el-button>
+            <el-button
+              v-if="auth.hasPermission('manage_rules')"
+              size="small"
+              :loading="miningPenaltyId === row.id"
+              @click="onMineRules(row.id)"
+            >
+              挖掘规则
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
     <el-card shadow="never" class="section-card">
       <template #header>
         <div class="card-header">
@@ -246,12 +290,22 @@ import {
   decideRemediation,
   getAssessment,
   listAssessments,
+  listImpactPenaltyCases,
+  minePenaltyRules,
 } from '@/api/impact'
 import { listRegulationTrends } from '@/api/regulationTrend'
+import { useAuthStore } from '@/stores/auth'
 import type { RegulationUpdate } from '@/types/regulationTrend'
-import type { AssessmentDetail, AssessmentStatus, ImpactAssessment, RemediationItem } from '@/types/impact'
+import type {
+  AssessmentDetail,
+  AssessmentStatus,
+  ImpactAssessment,
+  ImpactPenaltyCase,
+  RemediationItem,
+} from '@/types/impact'
 
 const router = useRouter()
+const auth = useAuthStore()
 
 const SOURCE_LABELS: Record<string, string> = { nfra: '金监总局', csrc: '证监会', pbc: '人民银行' }
 const STATUS_LABELS: Record<string, string> = {
@@ -285,6 +339,11 @@ const DECISION_TAG: Record<string, string> = {
 const updates = ref<RegulationUpdate[]>([])
 const updatesLoading = ref(false)
 const analyzingId = ref(0)
+
+const penaltyCases = ref<ImpactPenaltyCase[]>([])
+const penaltiesLoading = ref(false)
+const analyzingPenaltyId = ref(0)
+const miningPenaltyId = ref(0)
 
 const assessments = ref<ImpactAssessment[]>([])
 const total = ref(0)
@@ -341,12 +400,46 @@ function reload() {
 async function onAnalyze(updateId: number) {
   analyzingId.value = updateId
   try {
-    const created = await createAssessment(updateId)
+    const created = await createAssessment({ regulation_update_id: updateId })
     ElMessage.success(`影响分析完成：命中规则 ${created.items?.rules.length ?? 0} 条`)
     reload()
     await loadDetail(created.id)
   } finally {
     analyzingId.value = 0
+  }
+}
+
+async function loadPenalties() {
+  penaltiesLoading.value = true
+  try {
+    const data = await listImpactPenaltyCases(1, 10)
+    penaltyCases.value = data.items
+  } finally {
+    penaltiesLoading.value = false
+  }
+}
+
+async function onAnalyzePenalty(caseId: number) {
+  analyzingPenaltyId.value = caseId
+  try {
+    const created = await createAssessment({ penalty_case_id: caseId })
+    ElMessage.success(`影响分析完成：命中规则 ${created.items?.rules.length ?? 0} 条`)
+    reload()
+    await loadDetail(created.id)
+  } finally {
+    analyzingPenaltyId.value = 0
+  }
+}
+
+async function onMineRules(caseId: number) {
+  miningPenaltyId.value = caseId
+  try {
+    const result = await minePenaltyRules(caseId)
+    ElMessage.success(
+      `已生成 ${result.items.length} 条规则候选草稿，请到规则库审核发布`,
+    )
+  } finally {
+    miningPenaltyId.value = 0
   }
 }
 
@@ -418,6 +511,7 @@ async function onDecide(row: RemediationItem, decision: 'remediate' | 'reject' |
 
 onMounted(() => {
   loadUpdates()
+  loadPenalties()
   loadAssessments()
 })
 </script>

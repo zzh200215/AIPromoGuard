@@ -102,3 +102,12 @@ export interface ImpactOverview {
   rules_pending_publish: number
   active_rules: number
 }
+
+export interface ImpactPenaltyCase {
+  id: number
+  case_name: string
+  penalty_org?: string | null
+  penalty_date?: string | null
+  violation_summary?: string | null
+  related_regulation_count: number
+}

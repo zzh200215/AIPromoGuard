@@ -7,21 +7,35 @@ import type {
   CreateBatchResult,
   ImpactAssessment,
   ImpactOverview,
+  ImpactPenaltyCase,
   RemediationItem,
 } from '@/types/impact'
+import type { Rule } from '@/types/rule'
 
 export const impactOverview = () =>
   request<ImpactOverview>({ url: '/impact/overview', method: 'get' })
 
+export const listImpactPenaltyCases = (page = 1, pageSize = 10) =>
+  request<{ total: number; items: ImpactPenaltyCase[] }>({
+    url: '/impact/penalty-cases',
+    method: 'get',
+    params: { page, page_size: pageSize },
+  })
+
+export const minePenaltyRules = (caseId: number) =>
+  request<{ items: Rule[] }>({
+    url: `/impact/penalty-cases/${caseId}/mine-rules`,
+    method: 'post',
+  })
+
 export const listAssessments = (params: PaginationParams & { status?: AssessmentStatus }) =>
   request<Page<ImpactAssessment>>({ url: '/impact/assessments', method: 'get', params })
 
-export const createAssessment = (regulationUpdateId: number) =>
-  request<ImpactAssessment>({
-    url: '/impact/assessments',
-    method: 'post',
-    data: { regulation_update_id: regulationUpdateId },
-  })
+export const createAssessment = (source: {
+  regulation_update_id?: number
+  penalty_case_id?: number
+}) =>
+  request<ImpactAssessment>({ url: '/impact/assessments', method: 'post', data: source })
 
 export const getAssessment = (id: number) =>
   request<AssessmentDetail>({ url: `/impact/assessments/${id}`, method: 'get' })
