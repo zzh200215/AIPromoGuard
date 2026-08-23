@@ -1,9 +1,11 @@
-"""法规影响中心闭环服务：复审批次终态 → 回写材料台账 + 生成整改清单。
+"""法规影响中心闭环服务：复审批次终态 → 回写材料台账 + 生成整改清单 + 整改复测。
 
 整改清单存于 ImpactAssessment.items["remediation"]，按 task_id 幂等合并；
-人工决策（remediate/reject/done）由 API 层写入并留审计。
+人工决策（remediate/reject/done）由 API 层写入并留审计。整改复测走单任务
+复审批次回挂原评估，复测通过（零违规）时原整改项自动标记 done。
 """
 
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -50,6 +52,13 @@ def sync_batch_to_assessment(db: Session, batch_id: int) -> None:
         .all()
     )
 
+    # 原整改项记录的复测任务 → 新条目带 retest 标记并回指原任务
+    retest_map = {
+        e["retest_task_id"]: e["task_id"]
+        for e in (assessment.items or {}).get("remediation") or []
+        if e.get("retest_task_id")
+    }
+
     remediation = []
     for task in tasks:
         doc_id = _doc_id_from_path(task.document_path)
@@ -66,18 +75,20 @@ def sync_batch_to_assessment(db: Session, batch_id: int) -> None:
         if material is not None:
             material.last_review_status = review_status
             material.last_reviewed_at = datetime.now()
-        remediation.append(
-            {
-                "batch_id": batch_id,
-                "task_id": task.id,
-                "task_status": task.status,
-                "material_id": material.id if material else None,
-                "material_name": material.name if material else task.task_name,
-                "violation_count": violations,
-                "requires_remediation": violations > 0 and task.status == "completed",
-                "decision": "pending",  # pending/remediate/reject/done
-            }
-        )
+        entry = {
+            "batch_id": batch_id,
+            "task_id": task.id,
+            "task_status": task.status,
+            "material_id": material.id if material else None,
+            "material_name": material.name if material else task.task_name,
+            "violation_count": violations,
+            "requires_remediation": violations > 0 and task.status == "completed",
+            "decision": "pending",  # pending/remediate/reject/done
+        }
+        if task.id in retest_map:
+            entry["retest"] = True
+            entry["retest_for_task_id"] = retest_map[task.id]
+        remediation.append(entry)
 
     items = assessment.items or {}
     merged = {entry["task_id"]: entry for entry in items.get("remediation") or []}
@@ -92,6 +103,29 @@ def sync_batch_to_assessment(db: Session, batch_id: int) -> None:
         else:
             merged[entry["task_id"]] = entry
     items["remediation"] = list(merged.values())
+
+    # 整改复测闭环：复测通过（completed 且零违规）→ 原整改项自动标记 done；
+    # 仍违规则保持原状，新条目本身就是新的整改项
+    for entry in items["remediation"]:
+        if not entry.get("retest"):
+            continue
+        retest_clean = (
+            entry.get("task_status") == "completed" and entry.get("violation_count") == 0
+        )
+        if retest_clean:
+            orig = next(
+                (
+                    e
+                    for e in items["remediation"]
+                    if e.get("retest_task_id") == entry["task_id"]
+                ),
+                None,
+            )
+            if orig and orig.get("decision") in (None, "pending", "remediate"):
+                orig["decision"] = "done"
+            if entry.get("decision") in (None, "pending"):
+                entry["decision"] = "done"
+
     assessment.items = items
     flag_modified(assessment, "items")  # JSON 原地改需显式标脏
     db.commit()
@@ -118,3 +152,76 @@ def decide_remediation(
     flag_modified(assessment, "items")
     db.commit()
     return remediation
+
+
+def _next_version(version: str | None) -> str:
+    m = re.fullmatch(r"v(\d+)", (version or "").strip())
+    return f"v{int(m.group(1)) + 1}" if m else "v2"
+
+
+def start_retest(
+    db: Session,
+    assessment: ImpactAssessment,
+    material: ProductMaterial,
+    document_path: str,
+    document_id: str,
+    user_id: int | None,
+) -> dict:
+    """发起整改复测：材料升版挂新文档，单任务复审批次回挂原评估。
+
+    批次沿用 source_type=impact_assessment 的既有回写链路——终态后
+    sync_batch_to_assessment 生成带 retest 标记的新条目，复测通过时
+    自动关闭原整改项并回写台账 clean。
+    """
+    items = assessment.items or {}
+    orig = next(
+        (
+            e
+            for e in items.get("remediation") or []
+            if e.get("material_id") == material.id
+            and e.get("requires_remediation")
+            and e.get("decision") != "done"
+        ),
+        None,
+    )
+    if orig is None:
+        raise KeyError("该材料没有待整改项，无需复测")
+
+    material.version = _next_version(material.version)
+    material.document_id = document_id
+
+    batch = ReviewBatch(
+        batch_name=f"整改复测：{material.name}"[:255],
+        total_count=1,
+        created_by=user_id,
+        source_type="impact_assessment",
+        source_id=assessment.id,
+    )
+    db.add(batch)
+    db.flush()
+    task = ReviewTask(
+        task_name=f"整改复测 {material.name}",
+        document_name=Path(document_path).name,
+        document_path=str(document_path),
+        status="pending",
+        created_by=user_id,
+        batch_id=batch.id,
+    )
+    db.add(task)
+    db.flush()
+    orig["retest_task_id"] = task.id  # sync 侧据此生成 retest 条目与自动闭环
+    flag_modified(assessment, "items")
+    db.commit()
+
+    from src.services.review_service import start_review
+
+    start_review(task.id)
+    logger.info(
+        "评估 %s 材料 %s 整改复测启动：task %s（%s → %s）",
+        assessment.id,
+        material.name,
+        task.id,
+        document_path,
+        material.version,
+    )
+    return {"batch_id": batch.id, "task_id": task.id, "version": material.version}

@@ -36,6 +36,19 @@ export interface RemediationItem {
   violation_count: number
   requires_remediation: boolean
   decision: 'pending' | 'remediate' | 'reject' | 'done'
+  /** 本条为整改复测结果条目（针对 retest_for_task_id 指向的原整改项） */
+  retest?: boolean
+  retest_for_task_id?: number
+  /** 原整改项发起的复测任务 id（复测完成前可据此显示"复测中"） */
+  retest_task_id?: number
+}
+
+export interface RetestResult {
+  batch_id: number
+  task_id: number
+  version: string
+  material_id: number
+  document_id: string
 }
 
 export interface ImpactItems {

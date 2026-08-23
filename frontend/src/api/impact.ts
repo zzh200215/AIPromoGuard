@@ -11,6 +11,7 @@ import type {
   MaterialCreateBody,
   MaterialLedger,
   RemediationItem,
+  RetestResult,
 } from '@/types/impact'
 import type { Rule } from '@/types/rule'
 
@@ -98,3 +99,16 @@ export const decideRemediation = (
     method: 'post',
     data: { task_id: taskId, decision },
   })
+
+/** 上传整改版材料并发起复测（multipart：file + assessment_id）。 */
+export const retestMaterial = (materialId: number, assessmentId: number, file: File) => {
+  const form = new FormData()
+  form.append('assessment_id', String(assessmentId))
+  form.append('file', file)
+  return request<RetestResult>({
+    url: `/impact/materials/${materialId}/retest`,
+    method: 'post',
+    data: form,
+    timeout: 120_000,
+  })
+}

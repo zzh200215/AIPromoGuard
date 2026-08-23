@@ -1,9 +1,10 @@
 """法规影响中心：监管事件影响评估查看/人工确认 + 一键创建批量复审批次。"""
 
+import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
@@ -35,12 +36,17 @@ from src.models import (
     RuleRegulationLink,
     User,
 )
-from src.services.impact_service import decide_remediation
+from src.services.impact_service import decide_remediation, start_retest
 from src.services.review_service import start_review
+from src.utils.config import settings
 from src.utils.errors import AppError, ErrorCode
 from src.utils.response import ok
 
 router = APIRouter(prefix="/impact", tags=["impact"])
+
+# 与 documents 路由的上传约束保持一致（解析器支持的类型）
+RETEST_EXTS = {"pdf", "docx", "txt", "png", "jpg", "jpeg", "bmp"}
+RETEST_MAX_SIZE = 50 * 1024 * 1024
 
 
 def _get_assessment(db: Session, assessment_id: int) -> ImpactAssessment:
@@ -243,6 +249,54 @@ def update_material(
     db.commit()
     db.refresh(material)
     return ok(MaterialOut.model_validate(material).model_dump())
+
+
+@router.post("/materials/{material_id}/retest", status_code=201)
+async def retest_material(
+    material_id: int,
+    assessment_id: int = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("create_task")),
+) -> dict:
+    """整改复测：上传整改版材料（台账自动升版），单任务复审批次回挂原评估。
+
+    复测通过（零违规）后原整改项自动标记 done、台账回写 clean；
+    仍违规则新条目成为新的待整改项。
+    """
+    material = db.get(ProductMaterial, material_id)
+    if material is None:
+        raise AppError(ErrorCode.PARAM_ERROR, "材料不存在", http_status=404)
+    assessment = _get_assessment(db, assessment_id)
+    if assessment.status != "confirmed":
+        raise AppError(ErrorCode.PARAM_ERROR, "整改复测须挂接已确认的影响评估")
+
+    filename = file.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in RETEST_EXTS:
+        raise AppError(ErrorCode.FILE_TYPE_NOT_SUPPORTED)
+    doc_id = "doc_" + uuid.uuid4().hex[:8]
+    dest_dir = Path(settings.upload_dir) / str(current_user.id)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"{doc_id}.{ext}"
+    size = 0
+    try:
+        with dest.open("wb") as output:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > RETEST_MAX_SIZE:
+                    raise AppError(ErrorCode.FILE_TOO_LARGE)
+                output.write(chunk)
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise
+
+    try:
+        result = start_retest(db, assessment, material, str(dest), doc_id, current_user.id)
+    except KeyError as exc:
+        dest.unlink(missing_ok=True)
+        raise AppError(ErrorCode.PARAM_ERROR, str(exc)) from None
+    return ok({**result, "material_id": material.id, "document_id": doc_id})
 
 
 @router.get("/penalty-cases")

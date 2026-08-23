@@ -232,7 +232,17 @@
       <template v-if="remediation.length">
         <h4 class="block-title">整改清单（复审终态自动生成）</h4>
         <el-table :data="remediation" border size="small">
-          <el-table-column prop="material_name" label="材料" min-width="200" show-overflow-tooltip />
+          <el-table-column prop="material_name" label="材料" min-width="200" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.material_name }}
+              <el-tag v-if="row.retest" size="small" type="primary" class="retest-tag">
+                复测
+              </el-tag>
+              <span v-else-if="row.retest_task_id && row.decision !== 'done'" class="retesting">
+                复测中（任务 #{{ row.retest_task_id }}）
+              </span>
+            </template>
+          </el-table-column>
           <el-table-column label="违规数" width="80">
             <template #default="{ row }">
               <el-tag
@@ -253,7 +263,7 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="220" fixed="right">
+          <el-table-column label="操作" width="260" fixed="right">
             <template #default="{ row }">
               <template v-if="row.decision === 'pending'">
                 <el-button size="small" type="danger" link @click="onDecide(row, 'remediate')">
@@ -270,9 +280,25 @@
               >
                 完成整改
               </el-button>
+              <el-button
+                v-if="canRetest(row)"
+                size="small"
+                type="primary"
+                link
+                @click="pickRetestFile(row)"
+              >
+                上传整改版
+              </el-button>
             </template>
           </el-table-column>
         </el-table>
+        <input
+          ref="retestFileInput"
+          type="file"
+          accept=".txt,.pdf,.docx,.png,.jpg,.jpeg,.bmp"
+          style="display: none"
+          @change="onRetestFileChosen"
+        />
       </template>
     </el-card>
   </div>
@@ -292,6 +318,7 @@ import {
   listAssessments,
   listImpactPenaltyCases,
   minePenaltyRules,
+  retestMaterial,
 } from '@/api/impact'
 import { listRegulationTrends } from '@/api/regulationTrend'
 import { useAuthStore } from '@/stores/auth'
@@ -509,6 +536,45 @@ async function onDecide(row: RemediationItem, decision: 'remediate' | 'reject' |
   await loadDetail(detail.value.id)
 }
 
+// ---------- 整改复测：上传整改版 → 单任务复测 → 通过自动关闭原整改项 ----------
+const retestFileInput = ref<HTMLInputElement>()
+const pendingRetestRow = ref<RemediationItem | null>(null)
+const uploadingRetest = ref(false)
+
+function canRetest(row: RemediationItem) {
+  return (
+    !row.retest &&
+    row.requires_remediation &&
+    row.material_id !== null &&
+    row.decision !== 'done' &&
+    !row.retest_task_id
+  )
+}
+
+function pickRetestFile(row: RemediationItem) {
+  pendingRetestRow.value = row
+  retestFileInput.value?.click()
+}
+
+async function onRetestFileChosen(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // 允许重复选同一文件
+  const row = pendingRetestRow.value
+  pendingRetestRow.value = null
+  if (!file || !row?.material_id || !detail.value) return
+  uploadingRetest.value = true
+  try {
+    const result = await retestMaterial(row.material_id, detail.value.id, file)
+    ElMessage.success(
+      `整改版已上传（${result.version}），复测任务 #${result.task_id} 已启动，通过后将自动关闭本整改项`,
+    )
+    await loadDetail(detail.value.id)
+  } finally {
+    uploadingRetest.value = false
+  }
+}
+
 onMounted(() => {
   loadUpdates()
   loadPenalties()
@@ -533,6 +599,14 @@ onMounted(() => {
 .block-title {
   margin: 16px 0 8px;
   font-weight: 600;
+}
+.retest-tag {
+  margin-left: 6px;
+}
+.retesting {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--el-color-primary);
 }
 .pager {
   margin-top: 12px;
