@@ -12,6 +12,7 @@ from src.api.routers import (
     documents,
     graph,
     health,
+    impact,
     monitor,
     regulations,
     reports,
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
     app.include_router(users.router, prefix="/api/v1")
     app.include_router(monitor.router, prefix="/api/v1")
     app.include_router(trends.router, prefix="/api/v1")
+    app.include_router(impact.router, prefix="/api/v1")
 
     _register_exception_handlers(app)
     return app

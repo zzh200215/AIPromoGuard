@@ -69,6 +69,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '批次详情', requiredPermission: 'view_report', menuVisible: false },
       },
       {
+        path: 'impact',
+        name: 'impact-center',
+        component: () => import('@/views/impact/ImpactCenterView.vue'),
+        meta: { title: '法规影响中心', requiredPermission: 'create_task', menuGroup: '审查任务' },
+      },
+      {
         path: 'knowledge/regulations',
         name: 'regulation-list',
         component: () => import('@/views/knowledge/RegulationListView.vue'),

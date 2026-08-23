@@ -14,3 +14,5 @@ class BatchOut(BaseModel):
     failed_count: int
     created_at: datetime
     completed_at: datetime | None = None
+    source_type: str | None = None
+    source_id: int | None = None
