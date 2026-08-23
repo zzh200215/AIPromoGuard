@@ -14,6 +14,9 @@ from src.api.schemas.impact import (
     AssessmentConfirm,
     AssessmentCreate,
     AssessmentOut,
+    MaterialCreate,
+    MaterialOut,
+    MaterialUpdate,
     RemediationDecision,
 )
 from src.api.schemas.rule import RuleOut
@@ -177,6 +180,69 @@ def create_assessment(
         created_by=current_user.id,
     )
     return ok(AssessmentOut.model_validate(assessment).model_dump())
+
+
+@router.get("/materials")
+def list_materials(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    product_type: str | None = Query(None),
+    status: str | None = Query(None),
+    last_review_status: str | None = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """产品材料台账：影响分析定位存量材料的底册。"""
+    query = db.query(ProductMaterial).order_by(ProductMaterial.id.desc())
+    if product_type:
+        query = query.filter(ProductMaterial.product_type == product_type)
+    if status:
+        query = query.filter(ProductMaterial.status == status)
+    if last_review_status:
+        query = query.filter(ProductMaterial.last_review_status == last_review_status)
+    total = query.count()
+    rows = query.offset((page - 1) * page_size).limit(page_size).all()
+    return ok(
+        {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "items": [MaterialOut.model_validate(m).model_dump() for m in rows],
+        }
+    )
+
+
+@router.post("/materials", status_code=201)
+def create_material(
+    body: MaterialCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("manage_rules")),
+) -> dict:
+    material = ProductMaterial(**body.model_dump())
+    db.add(material)
+    db.commit()
+    db.refresh(material)
+    return ok(MaterialOut.model_validate(material).model_dump())
+
+
+@router.patch("/materials/{material_id}")
+def update_material(
+    material_id: int,
+    body: MaterialUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("manage_rules")),
+) -> dict:
+    material = db.get(ProductMaterial, material_id)
+    if material is None:
+        raise AppError(ErrorCode.PARAM_ERROR, "材料不存在", http_status=404)
+    updates = body.model_dump(exclude_unset=True)
+    if not updates:
+        raise AppError(ErrorCode.PARAM_ERROR, "没有需要更新的字段")
+    for field, value in updates.items():
+        setattr(material, field, value)
+    db.commit()
+    db.refresh(material)
+    return ok(MaterialOut.model_validate(material).model_dump())
 
 
 @router.get("/penalty-cases")

@@ -62,6 +62,7 @@ import { useRouter } from 'vue-router'
 import {
   Aim,
   Bell,
+  Collection,
   Document,
   DocumentAdd,
   DataAnalysis,
@@ -116,6 +117,12 @@ const MENU_ITEMS: MenuItem[] = [
     icon: 'Aim',
     permission: 'create_task',
   },
+  {
+    group: '审查任务',
+    title: '产品材料台账',
+    path: '/materials',
+    icon: 'Collection',
+  },
   { group: '知识库', title: '法规库', path: '/knowledge/regulations', icon: 'Files' },
   { group: '知识库', title: '规则库', path: '/knowledge/rules', icon: 'SetUp' },
   { group: '知识库', title: '法规检索', path: '/knowledge/search', icon: 'Search' },
@@ -129,6 +136,7 @@ const MENU_ITEMS: MenuItem[] = [
 const ICONS: Record<string, unknown> = {
   Aim,
   Bell,
+  Collection,
   HomeFilled,
   DocumentAdd,
   Document,

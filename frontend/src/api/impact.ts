@@ -8,12 +8,37 @@ import type {
   ImpactAssessment,
   ImpactOverview,
   ImpactPenaltyCase,
+  MaterialCreateBody,
+  MaterialLedger,
   RemediationItem,
 } from '@/types/impact'
 import type { Rule } from '@/types/rule'
 
 export const impactOverview = () =>
   request<ImpactOverview>({ url: '/impact/overview', method: 'get' })
+
+export const listMaterials = (
+  params: {
+    page?: number
+    page_size?: number
+    product_type?: string
+    status?: string
+    last_review_status?: string
+  },
+) =>
+  request<{ total: number; items: MaterialLedger[] }>({
+    url: '/impact/materials',
+    method: 'get',
+    params,
+  })
+
+export const createMaterial = (body: MaterialCreateBody) =>
+  request<MaterialLedger>({ url: '/impact/materials', method: 'post', data: body })
+
+export const updateMaterial = (
+  id: number,
+  body: Partial<MaterialCreateBody> & { status?: string },
+) => request<MaterialLedger>({ url: `/impact/materials/${id}`, method: 'patch', data: body })
 
 export const listImpactPenaltyCases = (page = 1, pageSize = 10) =>
   request<{ total: number; items: ImpactPenaltyCase[] }>({

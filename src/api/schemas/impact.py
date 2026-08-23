@@ -44,3 +44,36 @@ class AssessmentBatchCreate(BaseModel):
 class RemediationDecision(BaseModel):
     task_id: int
     decision: Literal["remediate", "reject", "done"]
+
+
+class MaterialCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    product_type: Literal["fund", "insurance", "wealth"]
+    material_type: str = Field(min_length=1, max_length=32)
+    version: str = Field(default="v1", max_length=32)
+    owner: str | None = Field(default=None, max_length=64)
+    document_id: str | None = Field(default=None, pattern=r"^doc_[0-9a-f]{8}$")
+
+
+class MaterialUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    version: str | None = Field(default=None, max_length=32)
+    owner: str | None = Field(default=None, max_length=64)
+    status: Literal["active", "archived"] | None = None
+    document_id: str | None = Field(default=None, pattern=r"^doc_[0-9a-f]{8}$")
+
+
+class MaterialOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    product_type: str
+    material_type: str
+    version: str
+    owner: str | None = None
+    document_id: str | None = None
+    status: str
+    last_review_status: str | None = None
+    last_reviewed_at: datetime | None = None
+    created_at: datetime

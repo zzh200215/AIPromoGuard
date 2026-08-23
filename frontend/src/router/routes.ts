@@ -75,6 +75,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '法规影响中心', requiredPermission: 'create_task', menuGroup: '审查任务' },
       },
       {
+        path: 'materials',
+        name: 'material-ledger',
+        component: () => import('@/views/impact/MaterialLedgerView.vue'),
+        meta: { title: '产品材料台账', menuGroup: '审查任务' },
+      },
+      {
         path: 'knowledge/regulations',
         name: 'regulation-list',
         component: () => import('@/views/knowledge/RegulationListView.vue'),

@@ -111,3 +111,26 @@ export interface ImpactPenaltyCase {
   violation_summary?: string | null
   related_regulation_count: number
 }
+
+export interface MaterialLedger {
+  id: number
+  name: string
+  product_type: string
+  material_type: string
+  version: string
+  owner?: string | null
+  document_id?: string | null
+  status: string
+  last_review_status?: string | null
+  last_reviewed_at?: string | null
+  created_at: string
+}
+
+export interface MaterialCreateBody {
+  name: string
+  product_type: 'fund' | 'insurance' | 'wealth'
+  material_type: string
+  version?: string
+  owner?: string
+  document_id?: string
+}
