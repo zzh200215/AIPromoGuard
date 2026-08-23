@@ -3,6 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote_plus
 
 import yaml
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -83,8 +84,9 @@ class Settings(BaseSettings):
 
     @property
     def mysql_url(self) -> str:
+        # 用户名/密码需 URL 编码：含 @ : / % 等字符时裸拼会解析错乱（连错主机/认证失败）
         return (
-            f"mysql+pymysql://{self.mysql_user}:{self.mysql_password}"
+            f"mysql+pymysql://{quote_plus(self.mysql_user)}:{quote_plus(self.mysql_password)}"
             f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_database}?charset=utf8mb4"
         )
 

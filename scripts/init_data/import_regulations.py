@@ -52,6 +52,9 @@ def _upsert_articles(db, reg: Regulation, articles: list[dict]) -> int:
         elif row.content != a["content"]:
             for k, v in a.items():
                 setattr(row, k, v)
+            # 内容变了必须重嵌：清掉 vector_id，index_articles 才会重新拾取
+            # （向量库 add 已是 upsert 语义，重嵌会覆盖旧向量而非静默跳过）
+            row.vector_id = None
             updated += 1
     return added, updated
 

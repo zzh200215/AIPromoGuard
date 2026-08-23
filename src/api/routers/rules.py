@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from src.api.middleware.auth import get_current_user, require_permission
 from src.api.schemas.rule import RuleCreate, RuleOut, RuleUpdate
 from src.infrastructure.database.mysql import get_db
-from src.models import Rule, User
+from src.models import ReviewResult, Rule, User
 from src.utils.errors import AppError, ErrorCode
 from src.utils.response import ok
 
@@ -102,6 +102,14 @@ def delete_rule(
     rule = db.get(Rule, rule_id)
     if rule is None:
         raise AppError(ErrorCode.PARAM_ERROR, "规则不存在", http_status=404)
+    # 无外键约束，应用层防孤儿数据：被审查结果引用的规则只能停用不能删
+    referenced = db.query(ReviewResult).filter(ReviewResult.rule_id == rule_id).count()
+    if referenced:
+        raise AppError(
+            ErrorCode.PARAM_ERROR,
+            f"该规则已被 {referenced} 条审查结果引用，不能删除；可将规则停用（is_active=false）",
+            http_status=409,
+        )
     db.delete(rule)
     db.commit()
     return ok({"deleted": rule_id})

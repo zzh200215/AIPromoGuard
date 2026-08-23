@@ -39,7 +39,9 @@ class ChromaVectorStore(VectorStore):
         documents: list[str],
         metadatas: list[dict] | None = None,
     ) -> None:
-        self._collection(collection).add(
+        # upsert 而非 add：add 对已存在 id 仅告警并静默跳过，
+        # 会让"重跑索引脚本覆盖更新"实际失效（MySQL 内容变了向量还停旧版）
+        self._collection(collection).upsert(
             ids=[str(i) for i in ids],
             embeddings=embeddings,
             documents=documents,

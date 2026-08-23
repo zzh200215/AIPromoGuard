@@ -15,7 +15,7 @@ class VectorStore(ABC):
         documents: list[str],
         metadatas: list[dict] | None = None,
     ) -> None:
-        """写入向量及其关联文本。"""
+        """写入向量及其关联文本（按 id upsert：已存在则覆盖更新）。"""
 
     @abstractmethod
     def query(

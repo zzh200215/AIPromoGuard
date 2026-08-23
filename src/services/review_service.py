@@ -58,12 +58,22 @@ def _use_celery() -> bool:
 
 
 def start_review(task_id: int) -> None:
-    """提交审查任务：优先 Celery 队列，无 worker 时回退线程池。"""
-    if _use_celery():
-        from src.infrastructure.queue.celery_app import celery_app
+    """提交审查任务：优先 Celery 队列，无 worker 时回退线程池。
 
-        celery_app.send_task("review.run_review", args=[task_id], queue="review_tasks")
-        return
+    人工复核（HIL）启用时强制线程池：checkpointer 是 InMemorySaver，仅进程内有效，
+    Celery worker 分进程跑图后 API 侧将无法 resume（checkpoint 不在本进程），
+    任务会卡在 awaiting_review 后失败。换持久化 checkpointer 后可解除该限制。
+    """
+    if _use_celery():
+        if _human_review_enabled():
+            logger.warning(
+                "task %s: 人工复核已启用，InMemorySaver 不跨进程，强制线程池执行", task_id
+            )
+        else:
+            from src.infrastructure.queue.celery_app import celery_app
+
+            celery_app.send_task("review.run_review", args=[task_id], queue="review_tasks")
+            return
     _executor.submit(execute_review, task_id)
 
 
@@ -213,11 +223,23 @@ def resume_human_review(task_id: int, rejected_indexes: list[int]) -> dict:
                 ErrorCode.TASK_INVALID_STATE, f"任务当前状态 {task.status}，不接受人工复核决策"
             )
 
+        # 原子抢占：并发双击提交时只有一个请求能把状态改走，另一个直接 409，
+        # 避免两次续跑重复落库 _persist_results
+        claimed = db.execute(
+            update(ReviewTask)
+            .where(ReviewTask.id == task_id, ReviewTask.status == "awaiting_review")
+            .values(status="running")
+        )
+        db.commit()
+        if claimed.rowcount == 0:
+            raise AppError(
+                ErrorCode.TASK_INVALID_STATE, "决策已被提交处理，请刷新页面查看最新结果"
+            )
+        db.refresh(task)
+
         result = resume_review(
             thread_id_for_task(task_id), {"rejected_indexes": list(rejected_indexes)}
         )
-        task.status = "running"
-        db.commit()
         _finalize_task(db, task, result)
         return {
             "task_id": task_id,
@@ -263,6 +285,8 @@ def _auto_confirm(finding: dict, cfg: dict) -> tuple[str, datetime | None, int |
 
 
 def _persist_results(db, task_id: int, findings: list[dict]) -> None:
+    # 幂等：任务重跑/消息重投前清掉旧结果，避免同一任务结果重复追加
+    db.query(ReviewResult).filter(ReviewResult.task_id == task_id).delete()
     auto_cfg = settings.app_config("workflow").get("auto_confirm", {})
     for item in findings:
         status, confirmed_at, confirmed_by = _auto_confirm(item, auto_cfg)

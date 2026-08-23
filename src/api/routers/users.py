@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from src.api.middleware.auth import require_permission
 from src.infrastructure.database.mysql import get_db
-from src.models import User
+from src.models import ReviewTask, User
 from src.utils.errors import AppError, ErrorCode
 from src.utils.response import ok
 from src.utils.security import hash_password
@@ -159,6 +159,14 @@ def delete_user(
     user = db.get(User, user_id)
     if user is None:
         raise AppError(ErrorCode.PARAM_ERROR, "用户不存在", http_status=404)
+    # 无外键约束，应用层防孤儿数据：名下有审查任务的用户只能禁用不能删
+    task_count = db.query(ReviewTask).filter(ReviewTask.created_by == user_id).count()
+    if task_count:
+        raise AppError(
+            ErrorCode.PARAM_ERROR,
+            f"该用户名下有 {task_count} 个审查任务，不能删除；可将账号禁用（status=0）",
+            http_status=409,
+        )
     db.delete(user)
     db.commit()
     return ok({"deleted": user_id})
