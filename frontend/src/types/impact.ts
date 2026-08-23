@@ -27,9 +27,21 @@ export interface ImpactMaterialItem {
   confirm_status: string
 }
 
+export interface RemediationItem {
+  batch_id: number
+  task_id: number
+  task_status: string
+  material_id: number | null
+  material_name: string
+  violation_count: number
+  requires_remediation: boolean
+  decision: 'pending' | 'remediate' | 'reject' | 'done'
+}
+
 export interface ImpactItems {
   rules: ImpactRuleItem[]
   materials: ImpactMaterialItem[]
+  remediation?: RemediationItem[]
 }
 
 export interface ImpactAssessment {

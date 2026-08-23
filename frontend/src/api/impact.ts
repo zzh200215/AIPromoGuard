@@ -6,6 +6,7 @@ import type {
   AssessmentStatus,
   CreateBatchResult,
   ImpactAssessment,
+  RemediationItem,
 } from '@/types/impact'
 
 export const listAssessments = (params: PaginationParams & { status?: AssessmentStatus }) =>
@@ -36,4 +37,21 @@ export const createAssessmentBatch = (id: number, materialIds: number[]) =>
     url: `/impact/assessments/${id}/batch`,
     method: 'post',
     data: { material_ids: materialIds },
+  })
+
+export const listRemediation = (id: number) =>
+  request<{ items: RemediationItem[] }>({
+    url: `/impact/assessments/${id}/remediation`,
+    method: 'get',
+  })
+
+export const decideRemediation = (
+  id: number,
+  taskId: number,
+  decision: 'remediate' | 'reject' | 'done',
+) =>
+  request<{ items: RemediationItem[] }>({
+    url: `/impact/assessments/${id}/remediation`,
+    method: 'post',
+    data: { task_id: taskId, decision },
   })

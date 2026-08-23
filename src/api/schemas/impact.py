@@ -36,3 +36,8 @@ class AssessmentConfirm(BaseModel):
 
 class AssessmentBatchCreate(BaseModel):
     material_ids: list[int] = Field(default_factory=list)
+
+
+class RemediationDecision(BaseModel):
+    task_id: int
+    decision: Literal["remediate", "reject", "done"]

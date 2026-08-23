@@ -13,6 +13,7 @@ from src.api.schemas.impact import (
     AssessmentConfirm,
     AssessmentCreate,
     AssessmentOut,
+    RemediationDecision,
 )
 from src.core.impact import analyze
 from src.core.impact.analysis import material_document_path
@@ -26,6 +27,7 @@ from src.models import (
     RuleRegulationLink,
     User,
 )
+from src.services.impact_service import decide_remediation
 from src.services.review_service import start_review
 from src.utils.errors import AppError, ErrorCode
 from src.utils.response import ok
@@ -275,3 +277,28 @@ def create_review_batch(
             "skipped": skipped,
         }
     )
+
+
+@router.get("/assessments/{assessment_id}/remediation")
+def get_remediation(
+    assessment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """整改清单：复审批次终态后自动生成，含违规计数与人工决策。"""
+    assessment = _get_assessment(db, assessment_id)
+    return ok({"items": (assessment.items or {}).get("remediation") or []})
+
+
+@router.post("/assessments/{assessment_id}/remediation")
+def set_remediation_decision(
+    assessment_id: int,
+    body: RemediationDecision,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("confirm")),
+) -> dict:
+    try:
+        items = decide_remediation(db, assessment_id, body.task_id, body.decision)
+    except KeyError as exc:
+        raise AppError(ErrorCode.PARAM_ERROR, str(exc), http_status=404) from exc
+    return ok({"items": items})

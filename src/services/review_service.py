@@ -108,6 +108,14 @@ def _update_batch_counts(db, task: ReviewTask) -> None:
         batch.status = "completed" if batch.failed_count == 0 else "failed"
         batch.completed_at = datetime.now()
         db.commit()
+        # 影响中心的复审批次：终态后回写材料台账并生成整改清单（失败不影响批次状态）
+        if batch.source_type == "impact_assessment":
+            try:
+                from src.services.impact_service import sync_batch_to_assessment
+
+                sync_batch_to_assessment(db, batch.id)
+            except Exception:
+                logger.exception("影响评估回写失败 batch=%s", batch.id)
 
 
 def _block_to_dict(block) -> dict:

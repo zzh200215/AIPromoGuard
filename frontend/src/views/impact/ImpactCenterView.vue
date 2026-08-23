@@ -184,6 +184,52 @@
           </el-table-column>
         </el-table>
       </template>
+
+      <template v-if="remediation.length">
+        <h4 class="block-title">整改清单（复审终态自动生成）</h4>
+        <el-table :data="remediation" border size="small">
+          <el-table-column prop="material_name" label="材料" min-width="200" show-overflow-tooltip />
+          <el-table-column label="违规数" width="80">
+            <template #default="{ row }">
+              <el-tag
+                size="small"
+                :type="row.violation_count > 0 ? 'danger' : 'success'"
+              >
+                {{ row.violation_count }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="需整改" width="80">
+            <template #default="{ row }">{{ row.requires_remediation ? '是' : '否' }}</template>
+          </el-table-column>
+          <el-table-column label="决策" width="110">
+            <template #default="{ row }">
+              <el-tag size="small" :type="DECISION_TAG[row.decision] ?? 'info'">
+                {{ DECISION_LABELS[row.decision] ?? row.decision }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="220" fixed="right">
+            <template #default="{ row }">
+              <template v-if="row.decision === 'pending'">
+                <el-button size="small" type="danger" link @click="onDecide(row, 'remediate')">
+                  需整改
+                </el-button>
+                <el-button size="small" link @click="onDecide(row, 'reject')">驳回</el-button>
+              </template>
+              <el-button
+                v-else-if="row.decision === 'remediate'"
+                size="small"
+                type="success"
+                link
+                @click="onDecide(row, 'done')"
+              >
+                完成整改
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
     </el-card>
   </div>
 </template>
@@ -197,12 +243,13 @@ import {
   confirmAssessment,
   createAssessment,
   createAssessmentBatch,
+  decideRemediation,
   getAssessment,
   listAssessments,
 } from '@/api/impact'
 import { listRegulationTrends } from '@/api/regulationTrend'
 import type { RegulationUpdate } from '@/types/regulationTrend'
-import type { AssessmentDetail, AssessmentStatus, ImpactAssessment } from '@/types/impact'
+import type { AssessmentDetail, AssessmentStatus, ImpactAssessment, RemediationItem } from '@/types/impact'
 
 const router = useRouter()
 
@@ -222,6 +269,18 @@ const STATUS_TAG: Record<string, string> = {
 const RISK_LABELS: Record<string, string> = { high: '高', medium: '中', low: '低' }
 const RISK_TAG: Record<string, string> = { high: 'danger', medium: 'warning', low: 'info' }
 const SEVERITY_LABELS: Record<string, string> = { high: '高', medium: '中', low: '低' }
+const DECISION_LABELS: Record<string, string> = {
+  pending: '待决策',
+  remediate: '整改中',
+  reject: '已驳回',
+  done: '已完成',
+}
+const DECISION_TAG: Record<string, string> = {
+  pending: 'info',
+  remediate: 'warning',
+  reject: 'danger',
+  done: 'success',
+}
 
 const updates = ref<RegulationUpdate[]>([])
 const updatesLoading = ref(false)
@@ -243,6 +302,9 @@ const selectedMaterialIds = ref<number[]>([])
 
 const rules = computed(() => detail.value?.items?.rules ?? [])
 const materials = computed(() => detail.value?.items?.materials ?? [])
+const remediation = computed<RemediationItem[]>(
+  () => (detail.value?.items as { remediation?: RemediationItem[] } | null | undefined)?.remediation ?? [],
+)
 
 async function loadUpdates() {
   updatesLoading.value = true
@@ -345,6 +407,13 @@ async function onCreateBatch() {
   } finally {
     creatingBatch.value = false
   }
+}
+
+async function onDecide(row: RemediationItem, decision: 'remediate' | 'reject' | 'done') {
+  if (!detail.value) return
+  await decideRemediation(detail.value.id, row.task_id, decision)
+  ElMessage.success('整改决策已记录')
+  await loadDetail(detail.value.id)
 }
 
 onMounted(() => {
