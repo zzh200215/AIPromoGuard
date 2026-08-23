@@ -116,9 +116,26 @@ def reset_demo(db: Session) -> None:
         if demo_reg_ids:
             link_q = link_q.filter(RuleRegulationLink.regulation_id.in_(demo_reg_ids))
         link_q.delete(synchronize_session=False)
-    db.query(PenaltyCase).filter(PenaltyCase.case_name.like(f"%{DEMO_MARK}")).delete(
-        synchronize_session=False
-    )
+    # 标题兜底：清掉罚单已被先前 reset 删掉的孤儿评估（penalty_case 悬空，
+    # 上面按 id 的匹配够不到）
+    db.query(ImpactAssessment).filter(
+        ImpactAssessment.title.like(f"%{DEMO_MARK}%")
+    ).delete(synchronize_session=False)
+    demo_penalty_ids = [
+        p[0]
+        for p in db.query(PenaltyCase.id)
+        .filter(PenaltyCase.case_name.like(f"%{DEMO_MARK}"))
+        .all()
+    ]
+    if demo_penalty_ids:
+        # 罚单驱动的影响评估也要清：中断的演示/测试会留下 draft 评估，
+        # 残留会让 overview 的待处理计数永远非零
+        db.query(ImpactAssessment).filter(
+            ImpactAssessment.penalty_case_id.in_(demo_penalty_ids)
+        ).delete(synchronize_session=False)
+        db.query(PenaltyCase).filter(PenaltyCase.id.in_(demo_penalty_ids)).delete(
+            synchronize_session=False
+        )
     demo_update_ids = [
         u[0]
         for u in db.query(RegulationUpdate.id)

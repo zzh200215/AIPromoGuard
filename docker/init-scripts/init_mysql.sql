@@ -228,6 +228,35 @@ CREATE TABLE IF NOT EXISTS impact_assessments (
     KEY idx_assessment_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='法规影响评估表';
 
+-- LangGraph checkpoint 持久化（人工复核 interrupt/resume 跨进程、跨重启恢复；
+-- 已有库由 MySQLCheckpointSaver.setup() 幂等补建，无需手工迁移）
+CREATE TABLE IF NOT EXISTS langgraph_checkpoints (
+    id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    thread_id           VARCHAR(128)  NOT NULL,
+    checkpoint_ns       VARCHAR(255)  NOT NULL DEFAULT '',
+    checkpoint_id       VARCHAR(64)   NOT NULL,
+    parent_checkpoint_id VARCHAR(64)  DEFAULT NULL,
+    type                VARCHAR(64)   NOT NULL,
+    checkpoint          LONGBLOB      NOT NULL,
+    metadata_type       VARCHAR(64)   DEFAULT NULL,
+    metadata            LONGBLOB      DEFAULT NULL,
+    UNIQUE KEY uk_cp_thread (thread_id, checkpoint_ns, checkpoint_id),
+    KEY idx_cp_thread (thread_id, checkpoint_ns, id),
+    KEY idx_cp_parent (parent_checkpoint_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='LangGraph checkpoint 持久化(人工复核中断/恢复)';
+
+CREATE TABLE IF NOT EXISTS langgraph_writes (
+    thread_id     VARCHAR(128) NOT NULL,
+    checkpoint_ns VARCHAR(255) NOT NULL DEFAULT '',
+    checkpoint_id VARCHAR(64)  NOT NULL,
+    task_id       VARCHAR(64)  NOT NULL,
+    idx           INT          NOT NULL,
+    channel       VARCHAR(255) NOT NULL,
+    type          VARCHAR(64)  NOT NULL,
+    write_blob     LONGBLOB     NOT NULL,
+    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='LangGraph pending writes(节点写通道)';
+
 -- ================= 默认数据 =================
 INSERT INTO roles (name, permissions) VALUES
     ('admin',    JSON_ARRAY('upload','create_task','view_report','confirm','manage_regulations','manage_rules','manage_users','monitor')),

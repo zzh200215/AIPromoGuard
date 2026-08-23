@@ -57,7 +57,10 @@ def test_material_crud_flow():
             json={"name": "坏id", "product_type": "fund", "material_type": "海报",
                   "document_id": "../etc/passwd"},
         )
-        assert bad.status_code == 422  # schema 白名单拒绝非法 document_id
+        # schema 白名单拒绝非法 document_id；全局处理器把 RequestValidationError
+        # 统一映射为 400/code 1001（见 src/api/main.py validation_error_handler）
+        assert bad.status_code == 400
+        assert bad.json()["code"] == 1001
 
         patched = client.patch(
             f"/api/v1/impact/materials/{material['id']}",

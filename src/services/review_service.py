@@ -14,7 +14,13 @@ from datetime import datetime
 from sqlalchemy import update
 
 from src.core.agents.graph import run_review
-from src.core.agents.runtime import resume_review, start_review_with_hil, thread_id_for_task
+from src.core.agents.runtime import (
+    cleanup_task_checkpoints,
+    resume_review,
+    saver_is_persistent,
+    start_review_with_hil,
+    thread_id_for_task,
+)
 from src.infrastructure.database.mysql import SessionLocal
 from src.models import ReviewBatch, ReviewResult, ReviewTask
 from src.services.diff_service import build_review_blocks, diff_documents
@@ -60,14 +66,15 @@ def _use_celery() -> bool:
 def start_review(task_id: int) -> None:
     """提交审查任务：优先 Celery 队列，无 worker 时回退线程池。
 
-    人工复核（HIL）启用时强制线程池：checkpointer 是 InMemorySaver，仅进程内有效，
-    Celery worker 分进程跑图后 API 侧将无法 resume（checkpoint 不在本进程），
-    任务会卡在 awaiting_review 后失败。换持久化 checkpointer 后可解除该限制。
+    人工复核（HIL）任务要求 checkpointer 跨进程可读：默认 MySQLCheckpointSaver
+    满足，可正常入队 Celery；DB 不可用回退 InMemorySaver 时强制线程池，
+    保证 resume 发生在同进程（API 侧）。
     """
     if _use_celery():
-        if _human_review_enabled():
+        if _human_review_enabled() and not saver_is_persistent():
             logger.warning(
-                "task %s: 人工复核已启用，InMemorySaver 不跨进程，强制线程池执行", task_id
+                "task %s: checkpointer 非持久（DB 回退），HIL 任务强制线程池执行",
+                task_id,
             )
         else:
             from src.infrastructure.queue.celery_app import celery_app
@@ -195,6 +202,7 @@ def execute_review(task_id: int) -> None:
             task.progress = 100
             db.commit()
             _update_batch_counts(db, task)
+        cleanup_task_checkpoints(task_id)
         logger.exception("task %s 审查失败", task_id)
     finally:
         db.close()
@@ -213,6 +221,7 @@ def _finalize_task(db, task: ReviewTask, result: dict) -> None:
     task.completed_at = datetime.now()
     db.commit()
     _update_batch_counts(db, task)
+    cleanup_task_checkpoints(task.id)  # 图已到终点，checkpoint 不再需要
     logger.info("task %s 审查完成，命中 %s 条违规", task.id, len(findings))
 
 
@@ -268,6 +277,7 @@ def resume_human_review(task_id: int, rejected_indexes: list[int]) -> dict:
             task.progress = 100
             db.commit()
             _update_batch_counts(db, task)
+        cleanup_task_checkpoints(task_id)
         logger.exception("task %s 人工复核续跑失败", task_id)
         raise
     finally:
