@@ -1,6 +1,7 @@
 """审查批次管理：批量上传建任务、批次列表/详情、批量导出报告。"""
 
 import io
+import re
 import uuid
 import zipfile
 from pathlib import Path
@@ -151,6 +152,12 @@ def get_batch(
     )
 
 
+def _safe_zip_name(name: str | None, task_id: int) -> str:
+    """把任务名压成安全的 zip 条目名：去路径分隔符、控制字符与 ..，空名回退 task_id。"""
+    cleaned = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", name or "").replace("..", "_").strip(" .")
+    return cleaned[:120] or f"task_{task_id}"
+
+
 @router.get("/{batch_id}/export")
 def export_batch(
     batch_id: int,
@@ -178,7 +185,8 @@ def export_batch(
         for t in tasks:
             md = Path(t.report_path).with_suffix(".md") if t.report_path else None
             if md and md.exists():
-                safe = t.task_name.replace("/", "_") or f"task_{t.id}"
+                # task_name 默认取上传文件名：剔除路径分隔符与 .. 等成分，防 Zip Slip
+                safe = _safe_zip_name(t.task_name, t.id)
                 zf.writestr(f"{safe}.md", md.read_text(encoding="utf-8"))
     return Response(
         content=buf.getvalue(),

@@ -13,9 +13,12 @@ from src.core.report.pdf import render_pdf
 from src.infrastructure.database.mysql import get_db
 from src.models import ReviewTask, User
 from src.utils.errors import AppError, ErrorCode
+from src.utils.logger import get_logger
 from src.utils.response import ok
 
 router = APIRouter(tags=["reports"])
+
+logger = get_logger(__name__)
 
 _FORMATS = {"markdown", "pdf"}
 
@@ -79,7 +82,11 @@ def download_report(
         try:
             content = bytes(render_pdf(report_data))  # fpdf2 返回 bytearray，需转 bytes
         except RuntimeError as exc:
-            raise AppError(ErrorCode.INTERNAL_ERROR, str(exc), http_status=500) from exc
+            # 异常文本可能含字体搜索路径等内部细节，仅记日志不外透
+            logger.exception("报告 PDF 渲染失败: task_id=%s", task_id)
+            raise AppError(
+                ErrorCode.INTERNAL_ERROR, "报告 PDF 生成失败，请联系管理员", http_status=500
+            ) from exc
         return Response(
             content=content,
             media_type="application/pdf",

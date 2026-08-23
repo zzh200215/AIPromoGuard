@@ -118,7 +118,11 @@ def feedback_stats(
 
     仅统计人工复核过的结果（confirmed_by>0）：方向②的自动确认（confirmed_by=0）
     不计入，保证确认率/误报率反映真实人工判定，避免自动分流污染精调数据。
+    前端反馈统计页标记 adminOnly，此处后端同口径兜底（非 admin 仅可看自己
+    任务的结果明细，不应看到全局精调统计）。
     """
+    if current_user.role != "admin":
+        raise AppError(ErrorCode.FORBIDDEN, http_status=403)
     rows = (
         db.query(ReviewResult.violation_type, ReviewResult.status, func.count(ReviewResult.id))
         .filter(ReviewResult.confirmed_by.isnot(None), ReviewResult.confirmed_by > 0)
@@ -219,9 +223,10 @@ def rule_suggestions(
 
 
 class ApplySuggestionRequest(BaseModel):
-    action: str = Field(..., pattern="^(deactivate|remove_keyword)$")
+    action: str = Field(..., pattern="^(deactivate|remove_keyword|set_threshold)$")
     condition_index: int | None = None
     keyword: str | None = None
+    threshold: float | None = None
 
 
 @router.post("/results/rules/{rule_id}/apply-suggestion")
@@ -231,8 +236,14 @@ def apply_rule_suggestion(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("manage_rules")),
 ) -> dict:
-    """应用规则精调建议：deactivate 停用 / remove_keyword 移除关键词（version+1）。"""
+    """应用规则精调建议：deactivate 停用 / remove_keyword 移除关键词 / set_threshold
+    抬本规则阈值（version+1）。"""
     rule = apply_suggestion(
-        db, rule_id, body.action, condition_index=body.condition_index, keyword=body.keyword
+        db,
+        rule_id,
+        body.action,
+        condition_index=body.condition_index,
+        keyword=body.keyword,
+        threshold=body.threshold,
     )
     return ok(RuleOut.model_validate(rule).model_dump())

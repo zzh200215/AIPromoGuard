@@ -1,7 +1,30 @@
+import pytest
 from fastapi.testclient import TestClient
 from src.api.main import app
 
 client = TestClient(app)
+
+
+def test_task_create_rejects_path_traversal_document_id():
+    """document_id 严格白名单：穿越片段在 schema 层即被拒（IDOR 回归）。"""
+    from pydantic import ValidationError
+    from src.api.schemas.task import TaskCreate
+
+    for bad in [
+        "../2/doc_12345678",
+        "..",
+        "doc_12345678/../../x",
+        "doc_ABCDEFGH",  # 非 hex
+        "doc_1234",  # 长度不足
+        "../2/docx_secret",
+    ]:
+        with pytest.raises(ValidationError):
+            TaskCreate(document_id=bad)
+    # 合法 id 通过，base_document_id 同样受约束
+    ok = TaskCreate(document_id="doc_abcdef01", base_document_id="doc_12345678")
+    assert ok.document_id == "doc_abcdef01"
+    with pytest.raises(ValidationError):
+        TaskCreate(document_id="doc_abcdef01", base_document_id="../1/doc_12345678")
 
 
 def test_health_reports_dependency_state():

@@ -32,6 +32,9 @@ def create_task(
     matched = list(user_upload_dir.glob(f"{body.document_id}.*"))
     if not matched:
         raise AppError(ErrorCode.PARAM_ERROR, "文档不存在，请先上传", http_status=404)
+    # schema 已白名单校验 document_id，此处再断言命中文件确实位于本人目录（纵深防御）
+    if matched[0].parent.resolve() != user_upload_dir.resolve():
+        raise AppError(ErrorCode.PARAM_ERROR, "非法的文档标识", http_status=400)
     document_name = matched[0].name
     base_name = None
     base_path = None
@@ -39,6 +42,8 @@ def create_task(
         base_matched = list(user_upload_dir.glob(f"{body.base_document_id}.*"))
         if not base_matched:
             raise AppError(ErrorCode.PARAM_ERROR, "旧版文档不存在，请先上传", http_status=404)
+        if base_matched[0].parent.resolve() != user_upload_dir.resolve():
+            raise AppError(ErrorCode.PARAM_ERROR, "非法的文档标识", http_status=400)
         base_name = base_matched[0].name
         base_path = str(base_matched[0])
     task = ReviewTask(

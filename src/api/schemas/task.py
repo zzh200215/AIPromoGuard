@@ -2,16 +2,26 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# 上传接口生成的 document_id 固定为 doc_ + 8 位 hex（documents.py）。
+# 严格白名单防止 "../2/doc_x" 之类的穿越片段拼入 glob 读取他人文件。
+_DOC_ID_PATTERN = r"^doc_[0-9a-f]{8}$"
+
 
 class TaskCreate(BaseModel):
-    document_id: str = Field(..., description="上传文档接口返回的 document_id")
+    document_id: str = Field(
+        ...,
+        pattern=_DOC_ID_PATTERN,
+        description="上传文档接口返回的 document_id",
+    )
     task_name: str | None = None
     document_type: str | None = Field(
         None, description="说明书/协议/宣传材料"
     )
     domain: str | None = Field(None, description="banking/fund/insurance")
     base_document_id: str | None = Field(
-        None, description="对比审查旧版文档 document_id（提供时进入对比模式）"
+        None,
+        pattern=_DOC_ID_PATTERN,
+        description="对比审查旧版文档 document_id（提供时进入对比模式）",
     )
 
 

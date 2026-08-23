@@ -12,9 +12,12 @@ from src.models import User
 from src.services import graph_service
 from src.utils.config import settings
 from src.utils.errors import AppError, ErrorCode
+from src.utils.logger import get_logger
 from src.utils.response import ok
 
 router = APIRouter(prefix="/graph", tags=["graph"])
+
+logger = get_logger(__name__)
 
 # W19：领域白名单由 app.yaml domains 驱动，新增领域无需改代码
 _FALLBACK_DOMAINS = {"banking", "fund", "insurance"}
@@ -52,7 +55,9 @@ def graph_query(
     try:
         data = graph_service.query_graph(body.query, body.domain, body.top_k)
     except Exception as exc:
-        raise AppError(ErrorCode.GRAPH_QUERY_FAILED, str(exc)) from exc
+        # 异常文本可能含 bolt 地址/文件路径等内部细节，仅记日志不外透
+        logger.exception("图谱查询失败: query=%r domain=%r", body.query, body.domain)
+        raise AppError(ErrorCode.GRAPH_QUERY_FAILED, "知识图谱查询失败，请稍后重试") from exc
     return ok(data)
 
 
@@ -66,7 +71,8 @@ def recommend_cases(
     try:
         cases = graph_service.similar_cases(body.text, body.domain, body.top_k)
     except Exception as exc:
-        raise AppError(ErrorCode.GRAPH_QUERY_FAILED, str(exc)) from exc
+        logger.exception("相似案例推荐失败: domain=%r", body.domain)
+        raise AppError(ErrorCode.GRAPH_QUERY_FAILED, "案例推荐失败，请稍后重试") from exc
     return ok({"total": len(cases), "cases": cases})
 
 

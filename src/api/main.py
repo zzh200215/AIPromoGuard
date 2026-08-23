@@ -79,10 +79,12 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
-        logger.warning("参数校验失败: %s", exc.errors())
+        # errors() 的 input 字段是原始入参——登录接口校验失败时会把密码原样回显并落日志，必须剥离
+        detail = [{k: v for k, v in err.items() if k != "input"} for err in exc.errors()]
+        logger.warning("参数校验失败: %s", detail)
         return JSONResponse(
             status_code=400,
-            content=fail(ErrorCode.PARAM_ERROR, "参数错误", {"detail": exc.errors()}),
+            content=fail(ErrorCode.PARAM_ERROR, "参数错误", {"detail": detail}),
         )
 
     @app.exception_handler(Exception)
