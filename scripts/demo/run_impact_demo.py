@@ -1,7 +1,8 @@
 """一键演示：基金销售宣传合规影响分析全链路（CLI，面试可跑）。
 
 用法（仓库根目录，需 MySQL/向量库可用）:
-    python scripts/demo/run_impact_demo.py
+    python scripts/demo/run_impact_demo.py             # 预检失败则提示后退出
+    python scripts/demo/run_impact_demo.py --reindex   # 向量库异常时自动重建索引
 
 链路（模拟一名合规人员的完整操作）:
   1. 监管情报 → 触发影响分析（2 规则 / 10 材料 / 3高 3中 4低）
@@ -16,6 +17,7 @@
 """
 
 import logging
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -28,12 +30,55 @@ from scripts.demo.seed_impact_demo import seed_demo  # noqa: E402
 logging.disable(logging.INFO)  # 演示输出只留警告以上，SQL/应用日志不刷屏
 
 from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 from src.api.main import app  # noqa: E402
 from src.infrastructure.database.mysql import SessionLocal  # noqa: E402
 
 client = TestClient(app)
 RISK_LABEL = {"high": "高", "medium": "中", "low": "低"}
 WAIT_TIMEOUT_SECONDS = 150
+
+
+def _preflight() -> None:
+    """启动自检：MySQL 与向量库；向量库异常时重建或明确退出，避免演示中途翻车。"""
+    try:
+        db = SessionLocal()
+        try:
+            db.execute(text("SELECT 1"))
+        finally:
+            db.close()
+    except Exception as exc:
+        print(f"[预检] MySQL 不可用：{exc}")
+        print("       请确认 fcr-mysql 容器已启动（docker start fcr-mysql）")
+        sys.exit(1)
+    print("[预检] MySQL 连接正常")
+
+    try:
+        from src.infrastructure.vectorstore import get_vector_store
+        from src.utils.config import settings
+
+        store = get_vector_store()
+        prefix = settings.app_config("vectorstore").get("collection_prefix", "legal_")
+        articles = store.count(prefix + "articles")
+        if articles <= 0:
+            raise RuntimeError(f"条款向量集合为空（count={articles}）")
+        print(f"[预检] 向量库正常（条款向量 {articles} 条）")
+    except Exception as exc:
+        print(f"[预检] 向量库异常：{exc}")
+        if "--reindex" not in sys.argv:
+            print("       混合检索将降级、部分审查任务可能失败；请执行：")
+            print("       python scripts/demo/run_impact_demo.py --reindex")
+            sys.exit(1)
+        print("[预检] --reindex：重建条款与罚单向量索引……")
+        for script in ("index_articles.py", "index_cases.py"):
+            result = subprocess.run(
+                [sys.executable, str(Path(__file__).parent.parent / "init_data" / script)],
+                check=False,
+            )
+            if result.returncode != 0:
+                print(f"[预检] {script} 重建失败（退出码 {result.returncode}），中止演示")
+                sys.exit(1)
+        print("[预检] 向量索引重建完成")
 
 
 def _step(title: str) -> None:
@@ -65,6 +110,7 @@ def _wait_batch_terminal(h: dict, batch_id: int) -> dict:
 
 
 def main() -> None:
+    _preflight()
     db = SessionLocal()
     ids = seed_demo(db)
     db.close()
