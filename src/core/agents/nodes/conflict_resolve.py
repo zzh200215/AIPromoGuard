@@ -6,9 +6,22 @@
 
 from src.core.agents.state import ReviewState
 
+# 规则 DSL 无违规性质字段，按 severity 推导（risk_assess 的类型权重需要）：
+# high 规则（如"禁止刚性兑付"）语义上属禁止性，medium 属限制性，low 属披露性。
+# 与 LLM 路的 type 字段同口径，避免规则命中被一律按披露性计分而系统性低估。
+_SEVERITY_TYPE_MAP = {"high": "禁止性", "medium": "限制性", "low": "披露性"}
+
 
 def _overlaps(a: str, b: str) -> bool:
+    """两段证据是否指向同一处原文。
+
+    含长度门槛：matched_text 是关键词 ±15/20 字的窗口，若无门槛，
+    "保本" 这类短词落进任何规则的窗口都会被误标 hybrid（跨规则误配）。
+    """
     if not a or not b:
+        return False
+    shorter = a if len(a) <= len(b) else b
+    if len(shorter) < 4:
         return False
     return a in b or b in a
 
@@ -19,17 +32,19 @@ def conflict_resolve(state: ReviewState) -> dict:
 
     merged: list[dict] = []
     for hit in rule_hits:
+        severity = hit.get("severity", "medium")
         merged.append(
             {
                 "source": "rule",
                 "violation_type": "rule",
+                "type": _SEVERITY_TYPE_MAP.get(severity, "披露性"),
                 "rule_id": hit.get("rule_id"),
                 "rule_name": hit.get("rule_name"),
                 "original_text": hit.get("matched_text", ""),
                 "page": hit.get("page"),
                 "paragraph": hit.get("paragraph"),
                 "confidence": hit.get("confidence", 0.9),
-                "severity": hit.get("severity", "medium"),
+                "severity": severity,
                 "description": hit.get("description") or hit.get("rule_name", ""),
                 "related_regulations": list(hit.get("related_regulations") or []),
             }

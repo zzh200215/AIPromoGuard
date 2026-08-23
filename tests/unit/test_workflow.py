@@ -69,6 +69,38 @@ def test_risk_assess_composite_score():
     assert "规则+LLM双引擎确认" in out[1]["risk_reason"]
 
 
+def test_conflict_resolve_rule_type_from_severity(monkeypatch):
+    """规则条目按 severity 推导违规类型，修复规则路被一律按披露性计分的系统性低估。"""
+    from src.services import graph_service
+
+    monkeypatch.setattr(graph_service, "similar_cases", lambda *a, **k: [])
+    state = {
+        "rule_hits": [
+            {
+                "rule_id": 1,
+                "rule_name": "禁止刚性兑付承诺",
+                "matched_text": "保本保收益",
+                "page": 1,
+                "paragraph": 1,
+                "confidence": 0.95,
+                "severity": "high",
+            }
+        ],
+        "llm_findings": [],
+    }
+    merged = conflict_resolve(state)["merged_findings"]
+    assert merged[0]["type"] == "禁止性"
+    # 高严重度规则命中：禁止性(3)+high(1)+置信度≥0.9(1)=5 → high（修复前恒 medium）
+    out = risk_assess({"merged_findings": merged})["merged_findings"]
+    assert out[0]["risk_level"] == "high"
+    # 中低严重度映射：medium→限制性、low→披露性
+    for sev, expected in (("medium", "限制性"), ("low", "披露性")):
+        single = conflict_resolve(
+            {"rule_hits": [{**state["rule_hits"][0], "severity": sev}], "llm_findings": []}
+        )["merged_findings"]
+        assert single[0]["type"] == expected
+
+
 def test_build_report_summary():
     findings = [{"risk_level": "high"}, {"risk_level": "high"}, {"risk_level": "medium"}]
     report = build_report(1, "产品.docx", "banking", findings)
@@ -188,9 +220,46 @@ def test_graph_end_to_end():
     }
     result = run_review(initial)
     report = result["report"]
+    # 领域路由已生效：分类识别为 banking，走 domain_banking 子图
+    assert result["domain"] == "banking"
     assert report["summary"]["total_violations"] > 0
     assert "task_9999.json" in (result["report_path"] or "")
     assert all(v["risk_level"] in ("high", "medium", "low") for v in report["violations"])
+
+
+def test_graph_end_to_end_general_fallback():
+    """领域识别失败（domain=None）时走兜底子图，流程仍产出报告。"""
+    from src.infrastructure.database.mysql import SessionLocal
+
+    try:
+        db = SessionLocal()
+        from src.models import Rule
+
+        rule_count = db.query(Rule).count()
+        db.close()
+    except Exception:
+        pytest.skip("数据库不可用")
+    if rule_count == 0:
+        pytest.skip("规则库为空")
+
+    from src.core.agents.graph import run_review
+
+    # 纯中性文本，无法命中任何领域关键词 → classify 返回 None → domain_general 兜底
+    sample = "这是一份日常的工作文档，内容包括日程安排与会议记录，不涉及任何产品表述。"
+    initial = {
+        "task_id": 9998,
+        "document_name": "中性文档.txt",
+        "document_path": "/tmp/中性文档.txt",
+        "doc_type": "txt",
+        "text": sample,
+        "blocks": [
+            {"text": sample, "page": 1, "paragraph": 1, "heading": False}
+        ],
+    }
+    result = run_review(initial)
+    assert result["domain"] is None  # 未被识别领域
+    assert "task_9998.json" in (result["report_path"] or "")
+    assert result["report"]["summary"]["total_violations"] >= 0
 
 
 def test_risk_assess_attaches_relevant_graph_cases(monkeypatch):

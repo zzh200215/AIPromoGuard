@@ -10,6 +10,9 @@
 天然免疫量纲问题：fused(d) = Σ 1/(k + rank_i(d))。
 """
 
+import re
+from collections import Counter
+
 from sqlalchemy.orm import Session
 
 from src.infrastructure.embedding import get_embedder
@@ -25,6 +28,40 @@ _COLLECTION = (
 )
 
 _RRF_K = 60  # RRF 平滑常数（业界经验值 60，抑制头部排名主导）
+
+# 长查询（整段文档文本）不可能整段出现在条款内容里，子串匹配恒为空。
+# 超过该长度时先抽取关键词，再按逐关键词命中计分——
+# 同时修复 hybrid 关键词分支（传入 text 前 800 字）与降级检索（传入全文）两条路径。
+_LONG_QUERY_CHARS = 40
+_EXTRACT_MAX_CHARS = 4000  # 关键词抽取的扫描上限，防超大文档拖慢检索
+_KEYWORD_LIMIT = 8
+
+# 高频虚词二元组：无领域区分度，粗滤避免挤占领域关键词名额
+_STOP_BIGRAMS = frozenset(
+    {
+        "我们", "你们", "他们", "可以", "应该", "已经", "没有", "这个", "那个",
+        "这些", "那些", "以及", "对于", "但是", "如果", "因此", "其中", "以下",
+        "以上", "如下", "进行", "予以", "有关", "本公", "公司",
+    }
+)
+
+
+def _extract_keywords(text: str, limit: int = _KEYWORD_LIMIT) -> list[str]:
+    """从长文本提取检索关键词：高频 CJK 二元组 + 英文单词/数字串（按频次/出现序）。"""
+    segment = text[:_EXTRACT_MAX_CHARS]
+    bigrams: Counter[str] = Counter()
+    for run in re.findall(r"[\u4e00-\u9fff]+", segment):
+        for i in range(len(run) - 1):
+            bg = run[i : i + 2]
+            if bg not in _STOP_BIGRAMS:
+                bigrams[bg] += 1
+    keywords = [kw for kw, _ in bigrams.most_common(limit)]
+    for token in re.findall(r"[A-Za-z]{2,}|\d+(?:\.\d+)?%?", segment):
+        if len(keywords) >= limit:
+            break
+        if token not in keywords:
+            keywords.append(token)
+    return keywords
 
 
 def _highlight(content: str, query: str, window: int = 80) -> str:
@@ -59,28 +96,36 @@ def search_semantic(query: str, domain: list[str] | None, top_k: int) -> list[di
 
 
 def search_keyword(db: Session, query: str, domain: list[str] | None, top_k: int) -> list[dict]:
-    """关键词检索条款内容与法规标题，命中加权排序。"""
+    """关键词检索条款内容与法规标题，命中加权排序。
+
+    短查询（用户检索框）按整词子串匹配；长文本（审查工作流传入的文档片段）
+    自动抽取关键词后按逐关键词命中数计分。
+    """
+    keywords = _extract_keywords(query) if len(query) > _LONG_QUERY_CHARS else [query]
     rows = (
         db.query(Article, Regulation)
         .join(Regulation, Article.regulation_id == Regulation.id)
         .all()
     )
-    scored: list[tuple[float, Article, Regulation]] = []
+    scored: list[tuple[float, Article, Regulation, str]] = []
     for article, regulation in rows:
         if domain and regulation.domain not in domain:
             continue
         score = 0.0
-        if query in article.content:
-            score += 1.0
-        if query in regulation.regulation_name:
-            score += 0.6
-        if query in (article.article_no or ""):
-            score += 0.3
+        first_hit = ""
+        for kw in keywords:
+            if kw in article.content:
+                score += 1.0
+                first_hit = first_hit or kw
+            if kw in regulation.regulation_name:
+                score += 0.6
+            if kw in (article.article_no or ""):
+                score += 0.3
         if score == 0:
             continue
         if regulation.status == "effective":
             score += 0.1
-        scored.append((score, article, regulation))
+        scored.append((score, article, regulation, first_hit))
     scored.sort(key=lambda item: -item[0])
 
     return [
@@ -92,9 +137,9 @@ def search_keyword(db: Session, query: str, domain: list[str] | None, top_k: int
             "content": article.content,
             "status": regulation.status,
             "score": score,
-            "highlight": _highlight(article.content, query),
+            "highlight": _highlight(article.content, first_hit or query[:_LONG_QUERY_CHARS]),
         }
-        for score, article, regulation in scored[:top_k]
+        for score, article, regulation, first_hit in scored[:top_k]
     ]
 
 

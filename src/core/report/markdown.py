@@ -53,7 +53,8 @@ def render_markdown(report: dict) -> str:
         lines.append("| 风险 | 来源 | 类型 | 置信度 | 问题 | 位置 | 违规原文 | 修改建议 |")
         lines.append("| :-- | :-- | :-- | :-- | :-- | :-- | :-- | :-- |")
         for v in violations:
-            location = f"第{v.get('page', '-')}页/第{v.get('paragraph', '-')}段"
+            # page/paragraph 值可能为 None（txt/docx 块无页码），get 默认值对 None 不生效
+            location = f"第{v.get('page') or '-'}页/第{v.get('paragraph') or '-'}段"
             lines.append(
                 f"| {_RISK_LABEL.get(v.get('risk_level'), v.get('risk_level'))} "
                 f"| {_SOURCE_LABEL.get(v.get('source'), v.get('source'))} "

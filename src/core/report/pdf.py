@@ -73,7 +73,7 @@ def render_pdf(report: dict, font_path: str | None = None) -> bytes:
     for i, v in enumerate(violations, 1):
         risk = _RISK_LABEL.get(v.get("risk_level"), v.get("risk_level"))
         src = _SOURCE_LABEL.get(v.get("source"), v.get("source"))
-        loc = f"第{v.get('page', '-')}页/第{v.get('paragraph', '-')}段"
+        loc = f"第{v.get('page') or '-'}页/第{v.get('paragraph') or '-'}段"
         mc(7, f"{i}. [{risk}风险] {_s(v.get('rule_name') or v.get('description'))}", size=11)
         detail_line = (
             f"来源：{src} | 类型：{_s(v.get('type'))} | 位置：{loc} | "
