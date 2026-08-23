@@ -11,7 +11,7 @@
           placeholder="角色"
           clearable
           style="width: 140px"
-          @change="load"
+          @change="reload"
         >
           <el-option v-for="(label, value) in ROLE_LABELS" :key="value" :label="label" :value="value" />
         </el-select>
@@ -20,7 +20,7 @@
           placeholder="状态"
           clearable
           style="width: 140px"
-          @change="load"
+          @change="reload"
         >
           <el-option label="启用" :value="1" />
           <el-option label="停用" :value="0" />
@@ -204,7 +204,17 @@ function isSelf(row: UserItem) {
   return auth.user?.id === row.id
 }
 
+/** 筛选条件变化:回到第 1 页,避免高页码+新筛选请求越界页 */
+function reload() {
+  page.value = 1
+  load()
+}
+
+// 请求序号守卫：快速切换筛选时丢弃过期响应，避免旧结果覆盖新结果
+let loadSeq = 0
+
 async function load() {
+  const mySeq = ++loadSeq
   loading.value = true
   try {
     const res = await listUsers({
@@ -213,6 +223,7 @@ async function load() {
       role: filterRole.value || undefined,
       status: filterStatus.value === '' ? undefined : filterStatus.value,
     })
+    if (mySeq !== loadSeq) return
     rows.value = res.items
     total.value = res.total
   } catch {

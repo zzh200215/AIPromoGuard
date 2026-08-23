@@ -17,7 +17,7 @@
           placeholder="领域"
           clearable
           style="width: 140px"
-          @change="load"
+          @change="reload"
         >
           <el-option
             v-for="d in DOMAIN_OPTIONS"
@@ -139,7 +139,17 @@ const filterKeyword = ref('')
 const dialogVisible = ref(false)
 const editingRegulation = ref<Regulation | null>(null)
 
+/** 筛选条件变化:回到第 1 页,避免高页码+新筛选请求越界页 */
+function reload() {
+  page.value = 1
+  load()
+}
+
+// 请求序号守卫：快速切换筛选时丢弃过期响应，避免旧结果覆盖新结果
+let loadSeq = 0
+
 async function load() {
+  const mySeq = ++loadSeq
   loading.value = true
   try {
     const res = await listRegulations({
@@ -148,6 +158,7 @@ async function load() {
       domain: filterDomain.value || undefined,
       keyword: filterKeyword.value || undefined,
     })
+    if (mySeq !== loadSeq) return
     rows.value = res.items
     total.value = res.total
   } catch {

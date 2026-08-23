@@ -59,7 +59,8 @@ const TERMINAL = ['completed', 'failed']
 const route = useRoute()
 const router = useRouter()
 
-const batchId = Number(route.params.id)
+const parsedBatchId = Number(route.params.id)
+const batchId = Number.isFinite(parsedBatchId) && parsedBatchId > 0 ? parsedBatchId : 0
 const detail = ref<BatchDetail | null>(null)
 const loading = ref(false)
 const exporting = ref(false)
@@ -73,15 +74,24 @@ const stopPolling = () => {
   }
 }
 
+/** 瞬时网络抖动不应永久停止进度刷新；连续失败多次才停 */
+const MAX_CONSECUTIVE_FAILURES = 3
+let failureCount = 0
+
 async function load() {
+  if (!batchId) return
   loading.value = true
   try {
     detail.value = await getBatch(batchId)
+    failureCount = 0
     if (detail.value.batch.status && TERMINAL.includes(detail.value.batch.status)) {
       stopPolling()
     }
   } catch {
-    stopPolling()
+    failureCount += 1
+    if (failureCount >= MAX_CONSECUTIVE_FAILURES) {
+      stopPolling()
+    }
   } finally {
     loading.value = false
   }

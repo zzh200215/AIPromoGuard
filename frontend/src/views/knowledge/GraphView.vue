@@ -98,8 +98,8 @@
         />
         <el-button type="primary" plain :loading="recommending" @click="recommend">推荐</el-button>
       </div>
-      <el-empty v-if="recommended && !recommendCases.length" description="未找到相似案例" :image-size="60" />
-      <el-table v-if="recommendCases.length" :data="recommendCases" border size="small">
+      <el-empty v-if="recommended && !recommendList.length" description="未找到相似案例" :image-size="60" />
+      <el-table v-if="recommendList.length" :data="recommendList" border size="small">
         <el-table-column prop="case_name" label="案例名称" min-width="200" />
         <el-table-column prop="penalty_org" label="处罚机关" min-width="120" />
         <el-table-column prop="penalty_date" label="处罚日期" width="110" />
@@ -127,7 +127,8 @@ const result = ref<GraphQueryResult | null>(null)
 const querying = ref(false)
 
 const caseText = ref('')
-const recommendCases = ref<GraphCase[]>([])
+// 不能命名为 recommendCases：会遮蔽从 @/api/graph 导入的同名函数
+const recommendList = ref<GraphCase[]>([])
 const recommending = ref(false)
 const recommended = ref(false)
 
@@ -161,7 +162,7 @@ async function recommend() {
   recommended.value = true
   try {
     const res = await recommendCases({ text: t, top_k: 10 })
-    recommendCases.value = res.cases
+    recommendList.value = res.cases
   } catch {
     // 拦截器已提示
   } finally {

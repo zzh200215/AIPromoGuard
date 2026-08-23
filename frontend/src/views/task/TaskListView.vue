@@ -17,7 +17,7 @@
           placeholder="任务状态"
           clearable
           style="width: 160px"
-          @change="load"
+          @change="reload"
         >
           <el-option
             v-for="(label, value) in STATUS_OPTIONS"
@@ -93,7 +93,11 @@ const STATUS_OPTIONS = Object.fromEntries(
   Object.entries(TASK_STATUS_LABELS).filter(([k]) => k !== 'processing'),
 )
 
+// 请求序号守卫：快速切换筛选时丢弃过期响应，避免旧结果覆盖新结果
+let loadSeq = 0
+
 async function load() {
+  const mySeq = ++loadSeq
   loading.value = true
   try {
     const res = await listTasks({
@@ -101,6 +105,7 @@ async function load() {
       page_size: pageSize.value,
       status: filterStatus.value || undefined,
     })
+    if (mySeq !== loadSeq) return
     rows.value = res.items
     total.value = res.total
   } catch {
@@ -112,6 +117,12 @@ async function load() {
 
 function onPageChange(p: number) {
   page.value = p
+  load()
+}
+
+/** 筛选条件变化：回到第 1 页，否则高页码+新筛选会请求越界页显示空表 */
+function reload() {
+  page.value = 1
   load()
 }
 

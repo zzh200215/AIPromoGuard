@@ -84,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { downloadReport, getReport } from '@/api/reports'
 import { listResults } from '@/api/results'
@@ -98,7 +98,9 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
-const taskId = ref<number | null>(Number(route.params.id))
+// 非法路由参数得 NaN，NaN == null 为 false 会穿过判空发出 /tasks/NaN 请求
+const parsedTaskId = Number(route.params.id)
+const taskId = ref<number | null>(Number.isFinite(parsedTaskId) ? parsedTaskId : null)
 const { task, start } = useTaskPolling(taskId)
 
 const isRunning = computed(() => {
@@ -118,14 +120,24 @@ const confirmVisible = ref(false)
 const confirmRow = ref<ReviewResult | null>(null)
 const confirmVerdict = ref<'confirmed' | 'false_positive'>('confirmed')
 
+// 极端时序：任务状态已完成但报告还没落盘，延迟重拉。
+// "有 message 且零违规"是合规文档的正常终态，必须设上限，否则会无限轮询
+const REPORT_RETRY_LIMIT = 3
+let reportRetryCount = 0
+let reportRetryTimer: ReturnType<typeof setTimeout> | null = null
+
 async function loadReport() {
   if (taskId.value == null) return
   reportLoading.value = true
   try {
     report.value = await getReport(taskId.value)
-    // 极端时序：任务状态已完成但报告还没落盘，延迟重拉一次
-    if (report.value.message && !report.value.violations?.length) {
-      setTimeout(loadReport, 1500)
+    if (
+      report.value.message &&
+      !report.value.violations?.length &&
+      reportRetryCount < REPORT_RETRY_LIMIT
+    ) {
+      reportRetryCount += 1
+      reportRetryTimer = setTimeout(loadReport, 1500)
     }
   } catch {
     // 拦截器已提示
@@ -133,6 +145,13 @@ async function loadReport() {
     reportLoading.value = false
   }
 }
+
+onBeforeUnmount(() => {
+  if (reportRetryTimer) {
+    clearTimeout(reportRetryTimer)
+    reportRetryTimer = null
+  }
+})
 
 async function loadResults() {
   if (taskId.value == null) return

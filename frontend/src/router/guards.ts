@@ -27,6 +27,11 @@ router.beforeEach(async (to) => {
     return { path: '/403' }
   }
 
+  // adminOnly 此前只过滤菜单不拦路由，直输 URL 可越权进入管理页
+  if (to.meta.adminOnly && auth.role !== 'admin') {
+    return { path: '/403' }
+  }
+
   return true
 })
 
