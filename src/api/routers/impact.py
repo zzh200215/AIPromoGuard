@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
@@ -551,6 +551,68 @@ def get_remediation(
     """整改清单：复审批次终态后自动生成，含违规计数与人工决策。"""
     assessment = _get_assessment(db, assessment_id)
     return ok({"items": (assessment.items or {}).get("remediation") or []})
+
+
+@router.get("/assessments/{assessment_id}/remediation/export")
+def export_remediation(
+    assessment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("view_report")),
+) -> Response:
+    """整改清单导出 Excel（合规向管理层汇报用）。"""
+    from io import BytesIO
+    from urllib.parse import quote
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
+    assessment = _get_assessment(db, assessment_id)
+    items = (assessment.items or {}).get("remediation") or []
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "整改清单"
+    headers = ["序号", "材料", "违规数", "需整改", "决策", "复测", "关联任务", "任务状态", "批次"]
+    ws.append([f"整改清单 —— {assessment.title}"])
+    ws["A1"].font = Font(bold=True, size=13)
+    ws.append(headers)
+    for cell in ws[2]:
+        cell.font = Font(bold=True)
+
+    decision_labels = {
+        "pending": "待决策",
+        "remediate": "整改中",
+        "reject": "已驳回",
+        "done": "已完成",
+    }
+    for i, e in enumerate(items, start=1):
+        ws.append(
+            [
+                i,
+                e.get("material_name", ""),
+                e.get("violation_count", 0),
+                "是" if e.get("requires_remediation") else "否",
+                decision_labels.get(e.get("decision"), e.get("decision", "")),
+                "复测条目" if e.get("retest") else "",
+                f"#{e.get('task_id', '')}",
+                e.get("task_status", ""),
+                f"#{e.get('batch_id', '')}",
+            ]
+        )
+    widths = [6, 36, 8, 8, 10, 10, 12, 12, 10]
+    for col, width in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(col)].width = width
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = quote(f"整改清单-{assessment.id}.xlsx")
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
 
 
 @router.post("/assessments/{assessment_id}/remediation")

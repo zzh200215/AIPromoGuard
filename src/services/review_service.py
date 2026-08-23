@@ -7,6 +7,7 @@
   无 → 回退线程池，保持单进程行为。
 """
 
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -22,7 +23,13 @@ from src.core.agents.runtime import (
     thread_id_for_task,
 )
 from src.infrastructure.database.mysql import SessionLocal
-from src.models import ReviewBatch, ReviewResult, ReviewTask
+from src.models import (
+    Article,
+    ReviewBatch,
+    ReviewResult,
+    ReviewTask,
+    RuleRegulationLink,
+)
 from src.services.diff_service import build_review_blocks, diff_documents
 from src.services.document_service import document_service
 from src.utils.config import settings
@@ -35,6 +42,70 @@ _executor = ThreadPoolExecutor(max_workers=2)
 
 def _human_review_enabled() -> bool:
     return (settings.app_config("workflow").get("human_review") or {}).get("enabled", False)
+
+
+def recover_orphan_tasks() -> dict:
+    """启动自愈：回收上一进程崩溃遗留的 running 任务（API lifespan 调用）。
+
+    线程池执行模型下 running 任务的线程随进程消亡，不回收会永远卡住：
+    - checkpoint 显示图停在 human_review 中断 → 恢复 awaiting_review，
+      人工决策仍可从持久化 checkpoint 续跑；
+    - 其余（跑图中途崩溃 / 无 checkpoint）→ 置 failed 并同步批次计数。
+    Celery worker 在线时跳过——执行权在 worker 进程，API 不能误杀在跑任务。
+    """
+    if _use_celery():
+        logger.info("Celery worker 在线，孤儿任务回收交给 worker 进程（跳过）")
+        return {"skipped": "celery"}
+
+    from src.core.agents import runtime
+
+    db = SessionLocal()
+    outcome: dict = {"recovered": 0, "failed": 0}
+    try:
+        orphans = db.query(ReviewTask).filter(ReviewTask.status == "running").all()
+        if not orphans:
+            return outcome
+
+        graph = runtime.get_hil_graph() if _human_review_enabled() else None
+        for task in orphans:
+            recovered = False
+            if graph is not None:
+                try:
+                    state = graph.get_state(
+                        {"configurable": {"thread_id": runtime.thread_id_for_task(task.id)}}
+                    )
+                except Exception:
+                    state = None
+                if state is not None and state.next == ("human_review",):
+                    # 从中断 payload 重建待复核清单（拿不到则给空表，续跑不受影响）
+                    pending: list = []
+                    for pregel_task in state.tasks or ():
+                        for interrupt in getattr(pregel_task, "interrupts", ()) or ():
+                            value = getattr(interrupt, "value", None)
+                            if isinstance(value, list):
+                                pending.extend(value)
+                    task.status = "awaiting_review"
+                    task.progress = 80
+                    task.stages = {"human_review": {"status": "awaiting", "pending": pending}}
+                    db.commit()
+                    outcome["recovered"] += 1
+                    logger.info(
+                        "task %s 启动自愈：恢复 awaiting_review（checkpoint 命中，待复核 %s 条）",
+                        task.id,
+                        len(pending),
+                    )
+                    recovered = True
+            if not recovered:
+                task.status = "failed"
+                task.progress = 100
+                db.commit()
+                _update_batch_counts(db, task)
+                runtime.cleanup_task_checkpoints(task.id)
+                outcome["failed"] += 1
+                logger.warning("task %s 启动自愈：无可用 checkpoint，置为 failed", task.id)
+        return outcome
+    finally:
+        db.close()
 
 # 系统自动确认标识（confirmed_by=0）：规则/双引擎高置信命中自动判违规，与人工复核区分。
 _AUTO_CONFIRM_BY = 0
@@ -302,12 +373,55 @@ def _auto_confirm(finding: dict, cfg: dict) -> tuple[str, datetime | None, int |
     return "pending_confirm", None, None
 
 
+def _bigrams(s: str) -> set[str]:
+    cleaned = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]", "", s or "")
+    return {cleaned[i : i + 2] for i in range(len(cleaned) - 1)}
+
+
+def _citation_for_rule(
+    db, rule_id: int | None, text: str
+) -> tuple[int | None, int | None]:
+    """规则 → (regulation_id, article_id) 结构化溯源。
+
+    优先取影响中心沉淀的规则-法规关联（带 article_id 的最精确）；
+    关联只到法规时，按 finding 文本与条款内容的二元组重叠挑最相关条款
+    （确定性启发式，不引入 LLM）。无关联的规则返回 (None, None)。
+    """
+    if not rule_id:
+        return None, None
+    link = (
+        db.query(RuleRegulationLink)
+        .filter(RuleRegulationLink.rule_id == rule_id)
+        .order_by(RuleRegulationLink.article_id.is_(None), RuleRegulationLink.id)
+        .first()
+    )
+    if link is None or link.regulation_id is None:
+        return None, None
+    if link.article_id:
+        return link.regulation_id, link.article_id
+    articles = (
+        db.query(Article).filter(Article.regulation_id == link.regulation_id).all()
+    )
+    if not articles:
+        return link.regulation_id, None
+    grams = _bigrams(text)
+    if not grams:
+        return link.regulation_id, articles[0].id
+    best = max(articles, key=lambda a: len(grams & _bigrams(a.content[:500])))
+    return link.regulation_id, best.id
+
+
 def _persist_results(db, task_id: int, findings: list[dict]) -> None:
     # 幂等：任务重跑/消息重投前清掉旧结果，避免同一任务结果重复追加
     db.query(ReviewResult).filter(ReviewResult.task_id == task_id).delete()
     auto_cfg = settings.app_config("workflow").get("auto_confirm", {})
     for item in findings:
         status, confirmed_at, confirmed_by = _auto_confirm(item, auto_cfg)
+        reg_id, art_id = _citation_for_rule(
+            db,
+            item.get("rule_id"),
+            (item.get("description") or "") + (item.get("original_text") or ""),
+        )
         db.add(
             ReviewResult(
                 task_id=task_id,
@@ -317,6 +431,8 @@ def _persist_results(db, task_id: int, findings: list[dict]) -> None:
                 location_page=item.get("page"),
                 location_paragraph=item.get("paragraph"),
                 rule_id=item.get("rule_id"),
+                regulation_id=reg_id,
+                article_id=art_id,
                 confidence_score=item.get("confidence", 0),
                 description=(item.get("description") or "")[:1000],
                 suggestion=(item.get("suggestion") or "")[:1000],

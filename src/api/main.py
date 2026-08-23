@@ -1,5 +1,8 @@
 """FastAPI 应用入口。"""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +33,20 @@ from src.utils.response import fail
 logger = get_logger(__name__)
 
 
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """启动钩子：回收上一进程崩溃遗留的 running 任务（孤儿任务自愈）。"""
+    try:
+        from src.services.review_service import recover_orphan_tasks
+
+        outcome = recover_orphan_tasks()
+        if outcome.get("recovered") or outcome.get("failed"):
+            logger.info("启动自愈完成：%s", outcome)
+    except Exception:
+        logger.exception("孤儿任务回收失败（不影响服务启动）")
+    yield
+
+
 def create_app() -> FastAPI:
     if settings.app_env == "prod" and (
         not settings.jwt_secret or settings.jwt_secret.startswith("change-me")
@@ -41,6 +58,7 @@ def create_app() -> FastAPI:
         version="0.1.0",
         docs_url="/docs",
         openapi_url="/api/v1/openapi.json",
+        lifespan=lifespan,
     )
 
     app.add_middleware(

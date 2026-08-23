@@ -4,6 +4,18 @@
     <el-table-column label="来源" width="100">
       <template #default="{ row }">{{ VIOLATION_SOURCE_LABELS[row.violation_type] }}</template>
     </el-table-column>
+    <el-table-column label="法规依据" min-width="180" show-overflow-tooltip>
+      <template #default="{ row }">
+        <el-tooltip
+          v-if="row.regulation_name"
+          :content="row.article_excerpt || row.regulation_name"
+          placement="top"
+        >
+          <span>《{{ row.regulation_name }}》{{ row.article_no || '' }}</span>
+        </el-tooltip>
+        <span v-else>—</span>
+      </template>
+    </el-table-column>
     <el-table-column label="风险" width="90">
       <template #default="{ row }"><SeverityTag :severity="row.risk_level" /></template>
     </el-table-column>

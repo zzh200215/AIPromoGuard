@@ -18,6 +18,12 @@ export interface ReviewResult {
   confirmed_by?: number
   /** 系统自动确认（方向②分流，confirmed_by=0）；人工复核/翻案后为 false */
   auto_confirmed?: boolean
+  /** 法规溯源：规则-法规关联反查的结构化依据（无关联时为 null） */
+  regulation_id?: number | null
+  article_id?: number | null
+  regulation_name?: string | null
+  article_no?: string | null
+  article_excerpt?: string | null
 }
 
 export interface ConfirmRequest {

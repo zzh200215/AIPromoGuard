@@ -125,6 +125,56 @@ def test_sync_batch_and_remediation_decision(isolated_materials):
 
 
 @pytest.mark.skipif(not _db_ready(), reason="数据库不可用")
+def test_remediation_export_excel(isolated_materials):
+    from io import BytesIO
+    from urllib.parse import unquote
+
+    from openpyxl import load_workbook
+    from sqlalchemy.orm.attributes import flag_modified
+
+    db = SessionLocal()
+    try:
+        ids = seed_demo(db)
+        assessment = analyze(db, ids["regulation_update_id"])
+        items = assessment.items or {}
+        items["remediation"] = [
+            {
+                "batch_id": 1,
+                "task_id": 1,
+                "task_status": "completed",
+                "material_id": None,
+                "material_name": "导出测试材料",
+                "violation_count": 2,
+                "requires_remediation": True,
+                "decision": "remediate",
+            }
+        ]
+        assessment.items = items
+        flag_modified(assessment, "items")
+        db.commit()
+
+        h = _admin_headers()
+        r = client.get(
+            f"/api/v1/impact/assessments/{assessment.id}/remediation/export", headers=h
+        )
+        assert r.status_code == 200, r.text
+        assert r.headers["content-type"].startswith(
+            "application/vnd.openxmlformats-officedocument"
+        )
+        disposition = unquote(r.headers["content-disposition"])  # filename* 为 UTF-8 百分号编码
+        assert "整改清单" in disposition and ".xlsx" in disposition
+        wb = load_workbook(BytesIO(r.content))
+        ws = wb.active
+        assert ws["A1"].value and str(ws["A1"].value).startswith("整改清单")
+        rows = list(ws.iter_rows(values_only=True))
+        assert any("导出测试材料" in str(row[1] or "") for row in rows)
+        assert any("整改中" in str(row[4] or "") for row in rows)
+    finally:
+        reset_demo(db)
+        db.close()
+
+
+@pytest.mark.skipif(not _db_ready(), reason="数据库不可用")
 def test_rule_version_publish_flow():
     db = SessionLocal()
     h = _admin_headers()

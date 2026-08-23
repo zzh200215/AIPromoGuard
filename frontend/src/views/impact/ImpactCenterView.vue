@@ -230,7 +230,12 @@
       </template>
 
       <template v-if="remediation.length">
-        <h4 class="block-title">整改清单（复审终态自动生成）</h4>
+        <h4 class="block-title remediation-title">
+          整改清单（复审终态自动生成）
+          <el-button size="small" type="primary" plain @click="onExportRemediation">
+            导出 Excel
+          </el-button>
+        </h4>
         <el-table :data="remediation" border size="small">
           <el-table-column prop="material_name" label="材料" min-width="200" show-overflow-tooltip>
             <template #default="{ row }">
@@ -314,6 +319,7 @@ import {
   createAssessment,
   createAssessmentBatch,
   decideRemediation,
+  exportRemediation,
   getAssessment,
   listAssessments,
   listImpactPenaltyCases,
@@ -575,6 +581,15 @@ async function onRetestFileChosen(event: Event) {
   }
 }
 
+async function onExportRemediation() {
+  if (!detail.value) return
+  try {
+    await exportRemediation(detail.value.id)
+  } catch {
+    // 拦截器已提示
+  }
+}
+
 onMounted(() => {
   loadUpdates()
   loadPenalties()
@@ -599,6 +614,11 @@ onMounted(() => {
 .block-title {
   margin: 16px 0 8px;
   font-weight: 600;
+}
+.remediation-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 .retest-tag {
   margin-left: 6px;

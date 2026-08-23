@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from src.api.middleware.auth import ensure_task_access, require_permission
 from src.api.schemas.rule import RuleOut
 from src.infrastructure.database.mysql import get_db
-from src.models import ReviewResult, ReviewTask, Rule, User
+from src.models import Article, Regulation, ReviewResult, ReviewTask, Rule, User
 from src.services.rule_tuning import apply_suggestion, build_rule_suggestions
 from src.utils.errors import AppError, ErrorCode
 from src.utils.response import ok
@@ -35,6 +35,37 @@ def list_results(
     if status:
         query = query.filter(ReviewResult.status == status)
     items = query.order_by(ReviewResult.id.asc()).all()
+
+    # 法规溯源展示：regulation/article 表都不大，直接建查找字典（无关联时字段为 None）
+    reg_ids = {r.regulation_id for r in items if r.regulation_id}
+    art_ids = {r.article_id for r in items if r.article_id}
+    reg_names = (
+        {
+            x.id: x.regulation_name
+            for x in db.query(Regulation)
+            .filter(Regulation.id.in_(reg_ids))
+            .all()
+        }
+        if reg_ids
+        else {}
+    )
+    articles = (
+        {x.id: x for x in db.query(Article).filter(Article.id.in_(art_ids)).all()}
+        if art_ids
+        else {}
+    )
+
+    def _basis(r: ReviewResult) -> dict:
+        regulation_name = reg_names.get(r.regulation_id) if r.regulation_id else None
+        article = articles.get(r.article_id) if r.article_id else None
+        return {
+            "regulation_id": r.regulation_id,
+            "article_id": r.article_id,
+            "regulation_name": regulation_name,
+            "article_no": article.article_no if article else None,
+            "article_excerpt": article.content[:80] if article else None,
+        }
+
     return ok(
         {
             "task_id": task_id,
@@ -55,6 +86,7 @@ def list_results(
                     "confirmed_at": r.confirmed_at.isoformat() if r.confirmed_at else None,
                     "confirmed_by": r.confirmed_by,
                     "auto_confirmed": r.confirmed_by == 0,  # 系统自动确认（方向②分流）
+                    **_basis(r),
                 }
                 for r in items
             ],

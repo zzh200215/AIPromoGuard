@@ -1,4 +1,5 @@
 /** 法规影响中心接口。 */
+import type { AxiosResponse } from 'axios'
 import { request } from './request'
 import type { Page, PaginationParams } from '@/types/api'
 import type {
@@ -111,4 +112,24 @@ export const retestMaterial = (materialId: number, assessmentId: number, file: F
     data: form,
     timeout: 120_000,
   })
+}
+
+/** 整改清单导出 Excel（blob 下载，文件名取自 Content-Disposition）。 */
+export async function exportRemediation(assessmentId: number): Promise<void> {
+  const res = await request<AxiosResponse<Blob>>({
+    url: `/impact/assessments/${assessmentId}/remediation/export`,
+    method: 'get',
+    responseType: 'blob',
+  })
+  const disposition = res.headers['content-disposition'] as string | null
+  const match = disposition?.match(/filename\*=UTF-8''([^;]+)/)
+  const filename = match ? decodeURIComponent(match[1]) : `整改清单-${assessmentId}.xlsx`
+  const url = URL.createObjectURL(res.data)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
