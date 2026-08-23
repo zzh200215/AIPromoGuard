@@ -11,7 +11,8 @@ from src.utils.response import ok
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-ALLOWED_EXTS = {"pdf", "doc", "docx", "txt", "png", "jpg", "jpeg", "bmp"}
+# "doc" 不收：解析器不支持旧版二进制 .doc，收了任务也必失败，上传端直接拒绝
+ALLOWED_EXTS = {"pdf", "docx", "txt", "png", "jpg", "jpeg", "bmp"}
 MAX_SIZE = 50 * 1024 * 1024  # 50MB，对齐 PRD 错误码 1003
 
 

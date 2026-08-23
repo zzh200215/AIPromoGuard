@@ -30,8 +30,11 @@ def _backup_mysql(out: Path) -> bool:
     try:
         proc = subprocess.run(
             [
-                "docker", "exec", "fcr-mysql", "mysqldump",
-                "-uroot", f"-p{settings.mysql_password}",
+                "docker", "exec",
+                # 密码经环境变量传入：-p 写在 argv 会暴露在进程列表/docker inspect 中
+                "-e", f"MYSQL_PWD={settings.mysql_password}",
+                "fcr-mysql", "mysqldump",
+                "-uroot",
                 "--single-transaction", settings.mysql_database,
             ],
             capture_output=True,
@@ -60,20 +63,27 @@ def _backup_chroma(out: Path) -> bool:
     if not src.exists():
         logger.warning("Chroma 目录不存在，跳过: %s", src)
         return False
+    # Chroma 底层是 SQLite：运行中拷贝可能拿到写一半的文件导致备份损坏。
+    # 此处无法代停服务，至少把风险说清楚（与 index_cases.py 的停写要求一致）。
+    logger.warning("注意: 建议backup前停止 api/worker 对 Chroma 的写入，运行中拷贝有损坏风险")
     shutil.copytree(src, out / "chroma", dirs_exist_ok=True)
     logger.info("Chroma 已备份: %s", src)
     return True
 
 
 def _backup_neo4j(out: Path) -> bool:
-    """通过 neo4j_client 导出图谱节点/关系为 JSON。"""
-    try:
-        from src.infrastructure.database.neo4j_client import run_cypher
+    """通过 neo4j_client 导出图谱节点/关系为 JSON。
 
-        nodes = run_cypher(
+    用 strict 版查询：普通 run_cypher 在服务不可用时降级返回空列表，
+    会写出空 neo4j.json 且被记为"成功"——恢复时数据全丢而无人知情。
+    """
+    try:
+        from src.infrastructure.database.neo4j_client import run_cypher_strict
+
+        nodes = run_cypher_strict(
             "MATCH (n) RETURN labels(n) AS labels, properties(n) AS props"
         )
-        rels = run_cypher(
+        rels = run_cypher_strict(
             "MATCH ()-[r]->() RETURN type(r) AS type, "
             "startNode(r).id AS source, endNode(r).id AS target, properties(r) AS props"
         )
@@ -83,8 +93,8 @@ def _backup_neo4j(out: Path) -> bool:
         )
         logger.info("Neo4j 图谱已备份: %d 节点 %d 关系", len(nodes), len(rels))
         return True
-    except Exception:
-        logger.warning("Neo4j 备份失败（图谱未启用时正常）")
+    except Exception as exc:
+        logger.warning("Neo4j 备份失败: %s", exc)
         return False
 
 

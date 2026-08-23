@@ -28,6 +28,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+# Windows 默认控制台代码页是 GBK，print 中文案会 UnicodeEncodeError
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+
 import httpx
 from bs4 import BeautifulSoup
 
@@ -54,11 +58,26 @@ _RELEVANT_RE = re.compile(
 _PENALTY_RE = re.compile(r"罚款|警告|禁止|没收|责令|取消|取消任职|终身")
 
 
-def _get(url: str) -> httpx.Response:
-    resp = httpx.get(url, timeout=_TIMEOUT, follow_redirects=True, headers=_HEADERS)
-    resp.raise_for_status()
-    time.sleep(_PAUSE)
-    return resp
+def _get(url: str, retries: int = 2) -> httpx.Response:
+    """限速抓取；瞬时网络抖动/限流做指数退避重试，避免单次失败中断全流程。"""
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            resp = httpx.get(url, timeout=_TIMEOUT, follow_redirects=True, headers=_HEADERS)
+            resp.raise_for_status()
+            time.sleep(_PAUSE)
+            return resp
+        except httpx.HTTPError as exc:
+            last_exc = exc
+            if attempt < retries:
+                wait = 2**attempt
+                print(
+                    f"  ! 请求失败({type(exc).__name__})，{wait}s 后重试"
+                    f" {attempt + 1}/{retries}: {url}"
+                )
+                time.sleep(wait)
+    assert last_exc is not None
+    raise last_exc
 
 
 def _clean(text: str) -> str:

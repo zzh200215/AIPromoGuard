@@ -9,7 +9,8 @@ from src.utils.errors import AppError, ErrorCode
 
 _PARSERS: dict[str, DocumentParser] = {
     "pdf": PdfParser(),
-    "doc": DocxParser(),
+    # "doc" 不映射：python-docx 打不开旧版二进制 .doc，上传能过但任务必失败
+    # （PackageNotFoundError），不如在上传端明确拒绝并提示转换
     "docx": DocxParser(),
     "txt": TxtParser(),
     "png": OcrParser(),
@@ -23,6 +24,11 @@ def get_parser(filename: str) -> DocumentParser:
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     parser = _PARSERS.get(ext)
     if parser is None:
+        if ext == "doc":
+            raise AppError(
+                ErrorCode.FILE_TYPE_NOT_SUPPORTED,
+                "旧版 .doc 不支持，请用 Word 另存为 .docx（或导出 txt）后上传",
+            )
         raise AppError(ErrorCode.FILE_TYPE_NOT_SUPPORTED, f"不支持的格式: .{ext}")
     return parser
 
