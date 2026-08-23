@@ -19,6 +19,8 @@ class Rule(Base):
     description: Mapped[str | None] = mapped_column(String(512))
     is_active: Mapped[int] = mapped_column(default=1, nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # 生效生命周期 draft/pending_review/active；is_active 仍是运行期启停开关
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
