@@ -1,0 +1,226 @@
+[
+  {
+    "regulation_name": "商业银行理财产品销售管理办法",
+    "domain": "banking",
+    "aliases": [
+      "理财产品销售管理办法"
+    ],
+    "issuer": "中国银行业监督管理委员会"
+  },
+  {
+    "regulation_name": "存款保险条例",
+    "domain": "banking",
+    "issuer": "国务院"
+  },
+  {
+    "regulation_name": "关于进一步促进信用卡业务规范健康发展的通知",
+    "domain": "banking",
+    "aliases": [
+      "信用卡业务规范健康发展"
+    ],
+    "issuer": "中国银保监会 中国人民银行"
+  },
+  {
+    "regulation_name": "关于规范商业银行通过互联网开展个人存款业务有关事项的通知",
+    "domain": "banking",
+    "aliases": [
+      "互联网开展个人存款业务"
+    ],
+    "issuer": "中国银保监会办公厅"
+  },
+  {
+    "regulation_name": "商业银行代理保险业务管理办法",
+    "domain": "banking",
+    "aliases": [
+      "商业银行代理保险业务"
+    ],
+    "issuer": "中国银保监会"
+  },
+  {
+    "regulation_name": "关于进一步规范商业银行结构性存款业务的通知",
+    "domain": "banking",
+    "aliases": [
+      "结构性存款业务"
+    ],
+    "issuer": "中国银保监会办公厅"
+  },
+  {
+    "regulation_name": "关于加强商业银行互联网助贷业务管理提升金融服务质效的通知",
+    "domain": "banking",
+    "aliases": [
+      "互联网助贷业务管理"
+    ],
+    "issuer": "国家金融监督管理总局"
+  },
+  {
+    "regulation_name": "证券投资顾问业务暂行规定",
+    "domain": "fund",
+    "issuer": "中国证监会"
+  },
+  {
+    "regulation_name": "私募投资基金监督管理暂行办法",
+    "domain": "fund",
+    "aliases": [
+      "私募投资基金监督管理"
+    ],
+    "issuer": "中国证监会"
+  },
+  {
+    "regulation_name": "证券投资基金评价业务管理暂行办法",
+    "domain": "fund",
+    "aliases": [
+      "基金评价业务管理"
+    ],
+    "issuer": "中国证监会"
+  },
+  {
+    "regulation_name": "证券公司代销金融产品管理规定",
+    "domain": "fund",
+    "aliases": [
+      "代销金融产品管理"
+    ],
+    "issuer": "中国证监会"
+  },
+  {
+    "regulation_name": "证券期货经营机构私募资产管理业务运作管理暂行规定",
+    "domain": "fund",
+    "aliases": [
+      "私募资产管理业务运作管理"
+    ],
+    "issuer": "中国证监会"
+  },
+  {
+    "regulation_name": "互联网保险业务监管办法",
+    "domain": "insurance",
+    "aliases": [
+      "互联网保险业务"
+    ],
+    "issuer": "中国银保监会"
+  },
+  {
+    "regulation_name": "保险经纪人监管规定",
+    "domain": "insurance",
+    "issuer": "中国银保监会"
+  },
+  {
+    "regulation_name": "保险公司销售行为可回溯管理暂行办法",
+    "domain": "insurance",
+    "aliases": [
+      "销售行为可回溯管理"
+    ],
+    "issuer": "原中国保监会"
+  },
+  {
+    "regulation_name": "关于规范互联网保险销售行为可回溯管理的通知",
+    "domain": "insurance",
+    "aliases": [
+      "互联网保险销售行为可回溯管理"
+    ],
+    "issuer": "中国银保监会"
+  },
+  {
+    "regulation_name": "意外伤害保险业务监管办法",
+    "domain": "insurance",
+    "aliases": [
+      "意外伤害保险业务"
+    ],
+    "issuer": "中国银保监会"
+  },
+  {
+    "regulation_name": "关于规范人身保险公司产品开发设计行为的通知",
+    "domain": "insurance",
+    "aliases": [
+      "人身保险公司产品开发设计"
+    ],
+    "issuer": "原中国保监会"
+  },
+  {
+    "regulation_name": "保险公司信息披露管理办法",
+    "domain": "insurance",
+    "issuer": "中国银保监会"
+  },
+  {
+    "regulation_name": "金融产品网络营销管理办法",
+    "domain": "consumer",
+    "aliases": [
+      "金融产品网络营销"
+    ],
+    "issuer": "中国人民银行等部门",
+    "_note": "2026-04 发布正式稿（gov.cn zhengcelibrary_bm 已确认存在）"
+  },
+  {
+    "regulation_name": "中华人民共和国消费者权益保护法实施条例",
+    "domain": "consumer",
+    "aliases": [
+      "消费者权益保护法实施条例"
+    ],
+    "issuer": "国务院"
+  },
+  {
+    "regulation_name": "网络交易监督管理办法",
+    "domain": "consumer",
+    "issuer": "国家市场监督管理总局"
+  },
+  {
+    "regulation_name": "互联网广告管理办法",
+    "domain": "advertising",
+    "issuer": "国家市场监督管理总局"
+  },
+  {
+    "regulation_name": "商业银行负债质量管理办法",
+    "domain": "banking",
+    "aliases": [
+      "负债质量管理"
+    ],
+    "issuer": "中国银保监会办公厅",
+    "_note": "含存款营销禁止性规定（第九章？）"
+  },
+  {
+    "regulation_name": "关于进一步规范保险机构互联网人身保险业务有关事项的通知",
+    "domain": "insurance",
+    "aliases": [
+      "互联网人身保险业务"
+    ],
+    "issuer": "中国银保监会办公厅"
+  },
+  {
+    "regulation_name": "关于规范银行服务市场调节价管理的指导意见",
+    "domain": "banking",
+    "aliases": [
+      "银行服务市场调节价"
+    ],
+    "issuer": "中国银保监会"
+  },
+  {
+    "regulation_name": "互联网信息服务算法推荐管理规定",
+    "domain": "consumer",
+    "aliases": [
+      "算法推荐管理"
+    ],
+    "issuer": "国家网信办等四部门"
+  },
+  {
+    "regulation_name": "网络直播营销管理办法（试行）",
+    "domain": "advertising",
+    "aliases": [
+      "网络直播营销"
+    ],
+    "issuer": "市场监管总局等七部门"
+  },
+  {
+    "regulation_name": "关于加强网络直播营销活动监管的指导意见",
+    "domain": "advertising",
+    "aliases": [
+      "网络直播营销活动监管"
+    ],
+    "issuer": "市场监管总局"
+  },
+  {
+    "regulation_name": "个人贷款管理办法",
+    "domain": "banking",
+    "aliases": [
+      "个人贷款管理"
+    ],
+    "issuer": "国家金融监督管理总局"
+  }
+]

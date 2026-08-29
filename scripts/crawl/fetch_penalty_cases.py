@@ -16,7 +16,7 @@ related_regulations 由法规库名称关键词匹配自动关联（未命中留
 
 用法（仓库根目录）:
     python scripts/crawl/fetch_penalty_cases.py [--out scripts/init_data/penalty_cases.json]
-        [--nfra-docs 6] [--csrc 6] [--max 32]
+        [--nfra-docs 30] [--nfra-pages 3] [--csrc 6] [--max 120]
 """
 
 import argparse
@@ -37,7 +37,7 @@ from bs4 import BeautifulSoup
 
 NFRA_LIST = (
     "https://www.nfra.gov.cn/cbircweb/DocInfo/SelectDocByItemIdAndChild"
-    "?itemId=4114&pageIndex=1&pageSize=20"
+    "?itemId=4114&pageIndex={page}&pageSize=20"
 )
 NFRA_DETAIL = "https://www.nfra.gov.cn/cbircweb/DocInfo/SelectByDocId?docId={doc_id}"
 NFRA_PAGE = "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId={doc_id}&itemId=4114"
@@ -86,10 +86,23 @@ def _clean(text: str) -> str:
 
 # ---------- 国家金融监督管理总局：行政处罚信息公开表 ----------
 
-def fetch_nfra(max_docs: int) -> list[dict]:
-    rows = _get(NFRA_LIST).json()["data"]["rows"]
+def fetch_nfra(max_docs: int, pages: int = 1) -> list[dict]:
+    """多页抓取信息公开表：翻 pages 页列表，逐行取详情，凑满 max_docs 即停。"""
     cases: list[dict] = []
-    for doc in rows[:max_docs]:
+    for page in range(1, pages + 1):
+        if len(cases) >= max_docs:
+            break
+        rows = _get(NFRA_LIST.format(page=page)).json()["data"]["rows"]
+        if not rows:
+            break
+        _nfra_detail_rows(rows, cases, max_docs)
+    return cases
+
+
+def _nfra_detail_rows(rows: list, cases: list, max_docs: int) -> None:
+    for doc in rows:
+        if len(cases) >= max_docs:
+            return
         doc_id = doc["docId"]
         detail = _get(NFRA_DETAIL.format(doc_id=doc_id)).json()["data"]
         soup = BeautifulSoup(detail.get("docClob") or "", "lxml")
@@ -272,13 +285,14 @@ def _match_regulations(cases: list[dict]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="抓取真实监管处罚案例")
     parser.add_argument("--out", default="scripts/init_data/penalty_cases.json")
-    parser.add_argument("--nfra-docs", type=int, default=6, help="NFRA 信息公开表文档数")
+    parser.add_argument("--nfra-docs", type=int, default=30, help="NFRA 信息公开表文档数")
+    parser.add_argument("--nfra-pages", type=int, default=3, help="NFRA 列表翻页数")
     parser.add_argument("--csrc", type=int, default=6, help="证监会决定书条数")
-    parser.add_argument("--max", type=int, default=32, help="输出案例总数上限")
+    parser.add_argument("--max", type=int, default=120, help="输出案例总数上限")
     args = parser.parse_args()
 
     print("== 抓取 国家金融监督管理总局 行政处罚信息公开表 ==")
-    cases = fetch_nfra(args.nfra_docs)
+    cases = fetch_nfra(args.nfra_docs, pages=args.nfra_pages)
     print("== 抓取 中国证监会 行政处罚决定书 ==")
     cases += fetch_csrc(args.csrc)
 

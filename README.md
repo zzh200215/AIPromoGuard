@@ -37,6 +37,27 @@ flowchart TD
 
 各节点耗时进 `stage_log`（前端任务详情可见），LLM token 用量随报告落盘，可选接入 Langfuse 做 LLM 调用链与成本观测。
 
+## 知识库数据飞轮（P1，2026-08-29）
+
+知识库不再靠纯人工维护，而是一条**官方渠道抓取 → LLM 结构化 → 人工确认 → 规则挖掘 → 对抗验证**的自动化管道，全程可溯源：
+
+```mermaid
+flowchart LR
+    A["官方源抓取 fetch_regulations.py<br/>gov.cn 检索API / 金监总局规章库JSON / 证监会规章库"] --> B["条款切分<br/>确定性锚点优先 + LLM 兜底"]
+    B --> C["人工确认 review_regulations.py<br/>pending 草稿区 → 采纳 → regulations_crawled.json"]
+    C --> D["入库导入（幂等 upsert）<br/>→ ChromaDB 向量化 → Neo4j 图谱"]
+    D --> E["规则挖掘 mine_rules_from_regulations.py<br/>营销条款 → 规则候选（条款级溯源）"]
+    E --> F["三重预校验<br/>regex 预编译 / 引擎冒烟（正例+确定性反例）/ 语义查重"]
+    F --> G["draft 规则 → 人工审核 / 证据驱动激活"]
+    G --> H["对抗验证 gen_variants.py<br/>LLM 生成保义改写样本 → 逐规则隔离门禁"]
+    H -->|不达标自动退回 draft| G
+    H -->|通过| I["variant_cases.json 扩充 + 回归门禁"]
+```
+
+**当前规模（2026-08-29）**：法规 **48 部 / 809 条款**（其中 20 部为官方渠道全文抓取，含《互联网保险业务监管办法》83 条、《保险经纪人监管规定》108 条全文）、规则 **82 条（75 条激活服役，其中 25 条为挖掘规则）**、真实罚单 **68 条**、对抗评估集 **44 案例 / 89 标注点**。
+
+三层质量关卡：条款切分过条号连续性校验；规则过引擎级冒烟测试（LLM 正例必须命中、否定变体与内置合规语料必须不命中、与库内规则语义查重）；激活前必须通过逐规则隔离门禁（自证召回 100% + 自身零误报）且不破坏回归基准集（gate 口径 0.98/0.02）。不达标者自动退回 draft。
+
 ## 技术栈
 
 | 层 | 选型 |
@@ -65,7 +86,8 @@ docker compose -f docker/docker-compose.yml up -d
 python scripts/init_data/init_admin.py            # admin / admin123
 python scripts/init_data/import_regulations.py
 python scripts/init_data/import_rules.py
-python scripts/init_data/import_penalty_cases.py  # 32 条真实罚单（scripts/init_data/penalty_cases.json）
+python scripts/init_data/import_penalty_cases.py  # 真实罚单（库内累计 68 条，快照 38 条）
+python scripts/init_data/import_rules.py --json scripts/init_data/rules_mined.json  # 25 条挖掘规则（与 rules.json 同 schema）
 python scripts/init_data/index_articles.py
 python scripts/init_data/index_cases.py
 
@@ -100,10 +122,10 @@ src/
 ├── parsers/             # txt/docx/pdf/ocr 解析 + chunker
 └── models/              # 10 张表 ORM
 scripts/
-├── crawl/               # 真实处罚数据爬虫（金监总局信息公开表 + 证监会决定书）
+├── crawl/               # 真实数据爬虫：罚单 + 法规全文（watchlist 驱动）+ 法规规则挖掘
 ├── demo/                # MCP 客户端接入演示
-├── evaluate/            # 评估集（含 held-out 变体集）+ 门禁脚本
-├── init_data/           # 法规/规则/案例导入 + 向量化 + 图谱构建
+├── evaluate/            # 评估集（回归/变体/挖掘对抗样本）+ 门禁 + 对抗样本生成
+├── init_data/           # 法规/规则/案例导入 + 向量化 + 图谱构建 + 草稿人工确认 CLI
 └── poller/              # 监管动态轮询（人行/金监总局/证监会真实源）
 frontend/                # Vue3 前端（任务/知识库/图谱/管理 18 个页面）
 ```
@@ -117,7 +139,9 @@ frontend/                # Vue3 前端（任务/知识库/图谱/管理 18 个�
 
 ## 已知限制（诚实清单）
 
-- 知识库为演示级：约 28 部法规（节选条款）/ 50 条规则 / 32 条真实处罚案例，距生产差 2-3 个数量级
+- 知识库规模仍距生产差 1-2 个数量级：48 部法规 / 809 条款 / 75 条激活规则 / 68 条罚单（数据飞轮已建成，扩规模是重复性劳动）
+- 法律类全文仍为节选（保险法/基金法等）：国家法律法规数据库已改版 SPA、检索 API 不可达，待接口恢复后补抓；11 部目标规章官方源未覆盖，记录于 watchlist 待人工兜底
+- 挖掘规则激活采用"证据驱动自动激活"（--auto-activate：过对抗门禁即激活），人工可在规则库复核停用；7 条 draft 挖掘规则待人工审核
 - `VectorStore` 抽象预留了 Milvus 分支但未实现（`NotImplementedError`），当前仅 ChromaDB
 - 人工复核关卡的 InMemorySaver 仅同进程有效，Celery worker 与 API 分进程部署需换持久化 checkpointer（MySQL/Redis 实现，接口已预留）
 - 前端未做生产托管（CI 已验证可构建）；数据库无外键约束（应用层维护一致性）
