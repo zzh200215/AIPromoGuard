@@ -1,5 +1,6 @@
 """审查结果管理：按任务列出结果、人工确认违规/误报、反馈闭环统计（PRD §5.5 / §3.2.4）。"""
 
+import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
@@ -10,7 +11,7 @@ from sqlalchemy.orm import Session
 from src.api.middleware.auth import ensure_task_access, require_permission
 from src.api.schemas.rule import RuleOut
 from src.infrastructure.database.mysql import get_db
-from src.models import Article, Regulation, ReviewResult, ReviewTask, Rule, User
+from src.models import Article, AuditLog, Regulation, ReviewResult, ReviewTask, Rule, User
 from src.services.rule_tuning import apply_suggestion, build_rule_suggestions
 from src.utils.errors import AppError, ErrorCode
 from src.utils.response import ok
@@ -39,9 +40,9 @@ def list_results(
     # 法规溯源展示：regulation/article 表都不大，直接建查找字典（无关联时字段为 None）
     reg_ids = {r.regulation_id for r in items if r.regulation_id}
     art_ids = {r.article_id for r in items if r.article_id}
-    reg_names = (
+    reg_meta = (
         {
-            x.id: x.regulation_name
+            x.id: x
             for x in db.query(Regulation)
             .filter(Regulation.id.in_(reg_ids))
             .all()
@@ -55,13 +56,21 @@ def list_results(
         else {}
     )
 
+    def _reg_field(r: ReviewResult, attr: str) -> str | None:
+        regulation = reg_meta.get(r.regulation_id) if r.regulation_id else None
+        value = getattr(regulation, attr) if regulation else None
+        return value.isoformat() if value else None
+
     def _basis(r: ReviewResult) -> dict:
-        regulation_name = reg_names.get(r.regulation_id) if r.regulation_id else None
+        regulation = reg_meta.get(r.regulation_id) if r.regulation_id else None
         article = articles.get(r.article_id) if r.article_id else None
         return {
             "regulation_id": r.regulation_id,
             "article_id": r.article_id,
-            "regulation_name": regulation_name,
+            "regulation_name": regulation.regulation_name if regulation else None,
+            "regulation_no": regulation.regulation_no if regulation else None,
+            "publish_date": _reg_field(r, "publish_date"),
+            "effective_date": _reg_field(r, "effective_date"),
             "article_no": article.article_no if article else None,
             "article_excerpt": article.content[:80] if article else None,
         }
@@ -123,11 +132,32 @@ def confirm_result(
     if task is None:
         raise AppError(ErrorCode.RESULT_NOT_FOUND)
     ensure_task_access(db, task, current_user)
+    # 判定前留痕：翻案率（采纳率报告口径）依赖"翻转前状态 + 是否系统自动确认"，
+    # confirmed_by 翻案后会被覆盖，事后无从还原，必须在这里落审计。
+    before_status = result.status
+    before_auto_confirmed = result.confirmed_by == 0
     result.status = body.verdict
     result.confirmed_at = datetime.now()
     result.confirmed_by = current_user.id
     if body.note:
         result.description = (result.description or "") + f"\n[复核] {body.note}"
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            username=current_user.username,
+            action="result.confirm",
+            resource_type="review_result",
+            resource_id=str(result.id),
+            detail=json.dumps(
+                {
+                    "before_status": before_status,
+                    "before_auto_confirmed": before_auto_confirmed,
+                    "verdict": body.verdict,
+                },
+                ensure_ascii=False,
+            ),
+        )
+    )
     db.commit()
     db.refresh(result)
     return ok(

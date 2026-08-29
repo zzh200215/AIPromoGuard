@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from src.api.main import app
 from src.infrastructure.database.mysql import SessionLocal
-from src.models import ReviewResult, Rule, User
+from src.models import AuditLog, ReviewResult, Rule, User
 
 client = TestClient(app)
 
@@ -222,5 +222,53 @@ def test_confirm_overturn_auto_confirmed():
         assert stats["by_source"]["rule"]["false_positive"] == base_rule_fp + 1
     finally:
         db.query(ReviewResult).filter(ReviewResult.task_id == 9876001).delete()
+        # confirm 端点现在会写判定审计（result.confirm），测试数据按约定自清理
+        db.query(AuditLog).filter(
+            AuditLog.action == "result.confirm",
+            AuditLog.resource_id == str(result_id),
+        ).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+
+
+@pytest.mark.skipif(not _db_ready(), reason="数据库不可用")
+def test_confirm_writes_audit_trail():
+    """判定留痕：confirm 写入带前后状态的审计行（采纳率报告的翻案口径数据源）。"""
+    import json as _json
+
+    _ensure_task_9876001()
+    db = SessionLocal()
+    result = _mk_result("rule", "confirmed", 0)  # 自动确认结果被人工翻案
+    db.add(result)
+    db.commit()
+    result_id = result.id
+    try:
+        r = client.post(
+            f"/api/v1/results/{result_id}/confirm",
+            headers=_admin_headers(),
+            json={"verdict": "false_positive"},
+        )
+        assert r.status_code == 200
+        db.rollback()  # 结束快照事务再读（REPEATABLE READ）
+        row = (
+            db.query(AuditLog)
+            .filter(
+                AuditLog.action == "result.confirm",
+                AuditLog.resource_id == str(result_id),
+            )
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert row is not None
+        detail = _json.loads(row.detail)
+        assert detail["before_status"] == "confirmed"
+        assert detail["before_auto_confirmed"] is True
+        assert detail["verdict"] == "false_positive"
+    finally:
+        db.query(ReviewResult).filter(ReviewResult.task_id == 9876001).delete()
+        db.query(AuditLog).filter(
+            AuditLog.action == "result.confirm",
+            AuditLog.resource_id == str(result_id),
+        ).delete(synchronize_session=False)
         db.commit()
         db.close()
