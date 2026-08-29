@@ -233,6 +233,20 @@ def search_hybrid(db: Session, query: str, domain: list[str] | None, top_k: int)
     return fused[:top_k]
 
 
+def fuse_graph_route(hybrid: list[dict], graph_articles: list[dict], top_k: int) -> list[dict]:
+    """图谱多跳召回作为第三路并入混合检索结果（P2 GraphRAG）。
+
+    与语义/关键词两路相同走 RRF 排名融合：同时被混合检索与图谱召回的条款
+    排名叠加增强；仅图谱召回的条款（如挖掘规则的条款级 VIOLATES 关联）也能
+    进入候选。图谱条款按模式相似度降序传入即为其"排名"，排序仍保持生效法规优先。
+    """
+    if not graph_articles:
+        return hybrid[:top_k]
+    fused = _rrf_fuse([hybrid, graph_articles])
+    fused.sort(key=lambda item: (item.get("status") != "effective", -item.get("score", 0)))
+    return fused[:top_k]
+
+
 def search(
     db: Session, query: str, search_type: str, domain: list[str] | None, top_k: int
 ) -> list[dict]:

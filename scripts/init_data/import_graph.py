@@ -138,6 +138,15 @@ def import_rules() -> tuple[int, int]:
     try:
         rules = db.query(Rule).filter(Rule.is_active == 1).all()
         reg_id_by_name = _load_regulations()
+        # 已有结构化条款级关联（rule_regulation_links）的规则：跳过法规级粗展开——
+        # 粗展开会把引用法规下全部条款连到规则上，稀释条款级多跳检索精度（P2 GraphRAG）
+        precise_rule_ids = {
+            row[0]
+            for row in db.query(RuleRegulationLink.rule_id)
+            .filter(RuleRegulationLink.article_id.isnot(None))
+            .distinct()
+            .all()
+        }
         linked = 0
         for rule in rules:
             vprops = {
@@ -169,8 +178,13 @@ def import_rules() -> tuple[int, int]:
                     {"tn": type_name, "d": rule.domain, "vid": rule.id},
                 )
 
-            # 引用法规的规则 → 建立 VIOLATES（限定同领域条款）
-            refs = (rule.rule_content or {}).get("related_regulations", [])
+            # 引用法规的规则 → 建立 VIOLATES（限定同领域条款）；
+            # 有条款级精确关联的规则只走下方结构化关联，不做粗展开
+            refs = (
+                []
+                if rule.id in precise_rule_ids
+                else (rule.rule_content or {}).get("related_regulations", [])
+            )
             for ref in refs:
                 core = _match_regulation_name(str(ref))
                 if core is None or core not in reg_id_by_name:

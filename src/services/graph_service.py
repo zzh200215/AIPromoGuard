@@ -12,7 +12,7 @@ from src.infrastructure.database.mysql import SessionLocal
 from src.infrastructure.database.neo4j_client import run_cypher
 from src.infrastructure.embedding import get_embedder
 from src.infrastructure.vectorstore import get_vector_store
-from src.models import PenaltyCase, Regulation
+from src.models import PenaltyCase, Regulation, Rule
 from src.utils.config import settings
 from src.utils.logger import get_logger
 
@@ -285,6 +285,154 @@ def _scored_patterns(text: str, domain: str | None, top_k: int) -> list[tuple[fl
             scored.append((score, p))
     scored.sort(key=lambda x: x[0], reverse=True)
     return scored[:top_k]
+
+
+# GraphRAG 条款级多跳召回（P2）的展开上限
+_GRAPH_MAX_PATTERNS = 4   # 参与多跳的违规模式数（覆盖度最高的前 N 个）
+_GRAPH_MAX_ARTICLES = 6   # 单模式展开条款数上限（防历史粗关联边稀释精度）
+# 模式短语覆盖度阈值：审查文本是整段营销话术、模式名是短语，bigram 按
+# 查询侧为分母的 _bigram_score 恒低于 0.2，此处改为"模式被文本覆盖"口径
+_GRAPH_PATTERN_THRESHOLD = 0.4
+
+
+def _pattern_containment(text: str, pattern: dict) -> float:
+    """模式名/描述的 bigram 被文本覆盖的比例（长文本 × 短模式名的相似度口径）。
+
+    _bigram_score 以查询 bigram 数为分母，适合检索框短查询；审查工作流传入
+    整段文档时模式侧覆盖度才有区分度——模式措辞基本出现在文本中 → 高分。
+    """
+    t = text.strip()
+    if len(t) < 2:
+        return 0.0
+    t_grams = {t[i : i + 2] for i in range(len(t) - 1)}
+    best = 0.0
+    for field in ("pattern_name", "description"):
+        s = (pattern.get(field) or "").strip()
+        if len(s) < 2:
+            continue
+        p_grams = {s[i : i + 2] for i in range(len(s) - 1)}
+        if p_grams:
+            best = max(best, len(t_grams & p_grams) / len(p_grams))
+    return best
+
+
+def _select_patterns_for_text(text: str, domain: str | None) -> list[tuple[float, dict]]:
+    """按模式覆盖度选出参与多跳的违规模式（降序）。"""
+    scored = [
+        (score, p)
+        for p in _load_patterns(domain)
+        if (score := _pattern_containment(text, p)) >= _GRAPH_PATTERN_THRESHOLD
+    ]
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return scored[:_GRAPH_MAX_PATTERNS]
+
+
+def _fired_pattern_ids(text: str, domain: str | None) -> list[tuple[float, int]]:
+    """规则引擎实扫：命中规则的 id 即图谱 ViolationPattern 节点 id（同源于 Rule 表）。
+
+    规则引擎（regex/keyword）对违规措辞的判别远强于 bigram 字面相似度——
+    引擎命中哪个模式，多跳就展开哪个模式的条款级溯源（挖掘规则的精确关联）。
+    返回 [(confidence, rule_id)] 按置信度降序；引擎未配置/无命中返回空。
+    """
+    try:
+        from src.core.rule_engine import rule_scanner
+        from src.parsers.base import TextBlock
+    except Exception:  # pragma: no cover - 规则引擎缺失属部署异常，直接放弃图谱路
+        return []
+    db = SessionLocal()
+    try:
+        rules = db.query(Rule).filter(Rule.is_active == 1).all()
+        min_conf = float(settings.app_config("rule_engine").get("min_confidence", 0.5))
+        block = TextBlock(text=text[:2000], page=1, paragraph=1, heading=False)
+        hits = rule_scanner.scan([block], rules, domain=domain)
+    except Exception:
+        logger.exception("规则引擎实扫失败，图谱路退化为模式覆盖度匹配")
+        return []
+    finally:
+        db.close()
+    hits = [h for h in hits if h.confidence >= min_conf]
+    hits.sort(key=lambda h: -h.confidence)
+    out: list[tuple[float, int]] = []
+    for h in hits:
+        if all(pid != h.rule_id for _, pid in out):
+            out.append((float(h.confidence), int(h.rule_id)))
+        if len(out) >= _GRAPH_MAX_PATTERNS:
+            break
+    return out
+
+
+def _candidate_patterns(text: str, domain: str | None) -> list[tuple[float, int]]:
+    """图谱路候选违规模式：引擎实扫优先，模式短语覆盖度兜底。"""
+    fired = _fired_pattern_ids(text, domain)
+    if fired:
+        return fired
+    return [(score, p["id"]) for score, p in _select_patterns_for_text(text, domain)]
+
+
+def related_articles_for_text(text: str, domain: str | None = None, top_k: int = 5) -> list[dict]:
+    """GraphRAG 条款级多跳召回：文本 → 违规模式 →（VIOLATES 反向边）→ 法规条款。
+
+    候选模式由规则引擎实扫（优先）或模式短语覆盖度（兜底）选出，再一条
+    Cypher 多跳展开（Article-[:VIOLATES]->ViolationPattern 与
+    Regulation-[:HAS_ARTICLE]->Article），返回与 regulation_service 检索结果
+    同 schema 的条款列表（另带 source="graph" 与 matched_pattern 溯源字段），
+    供 regulation_match 作为第三路并入 RRF 融合。
+    Neo4j 不在线 / 无候选模式时返回空列表。
+    """
+    candidates = _candidate_patterns(text, domain)
+    if not candidates:
+        return []
+    rows = run_cypher(
+        """
+        MATCH (v:ViolationPattern) WHERE v.id IN $ids
+        OPTIONAL MATCH (a:Article)-[:VIOLATES]->(v)
+        OPTIONAL MATCH (r:Regulation)-[:HAS_ARTICLE]->(a)
+        RETURN v.id AS pattern_id, v.pattern_name AS pattern_name,
+               collect(DISTINCT {
+                 article_id: a.id, article_no: a.article_no, content: a.content,
+                 regulation_id: r.id, regulation_name: r.name, status: r.status
+               }) AS articles
+        """,
+        {"ids": [pid for _, pid in candidates]},
+    )
+    by_pattern = {r["pattern_id"]: r for r in rows}
+
+    results: list[dict] = []
+    seen: set[int] = set()
+    for score, pid in candidates:
+        row = by_pattern.get(pid)
+        if not row:
+            continue
+        # 条款按 article_id 升序保证展开顺序稳定（collect 不保证顺序；条款号中文
+        # 序数按码位排序会乱）；article_id 为 None 的条目是无关联条款的模式展开出
+        # 的空 map，跳过
+        articles = sorted(
+            (a for a in (row.get("articles") or []) if a.get("article_id") is not None),
+            key=lambda a: int(a["article_id"]),
+        )
+        for a in articles[:_GRAPH_MAX_ARTICLES]:
+            aid = int(a["article_id"])
+            if aid in seen:
+                continue
+            seen.add(aid)
+            results.append(
+                {
+                    "article_id": aid,
+                    "regulation_id": a.get("regulation_id"),
+                    "regulation_name": a.get("regulation_name") or "",
+                    "article_no": a.get("article_no") or "",
+                    "content": a.get("content") or "",
+                    "status": a.get("status") or "effective",
+                    "score": round(score, 6),
+                    "highlight": "",
+                    "source": "graph",
+                    "matched_pattern": row.get("pattern_name") or "",
+                    "pattern_similarity": round(score, 3),
+                }
+            )
+            if len(results) >= top_k:
+                return results
+    return results
 
 
 def graph_stats() -> dict:
