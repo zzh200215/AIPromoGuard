@@ -220,6 +220,39 @@ def _apply_rerank(query: str, items: list[dict]) -> list[dict]:
     return items
 
 
+_EMPTY_REG_META = {"regulation_no": None, "publish_date": None, "effective_date": None}
+
+
+def enrich_regulation_meta(db: Session, articles: list[dict]) -> list[dict]:
+    """检索结果补法规文号与发布/生效日期（可验证证据链：不只给条款号，还给版本信息）。
+
+    语义路与图谱路的产物只带向量/图谱元数据，没有库表里的文号与日期；
+    融合定稿后按 regulation_id 一次批量查询补齐。幂等（已带字段的不重查），
+    查询失败静默跳过——证据链是增强信息，不能因补齐失败阻断审查主流程。
+    """
+    if articles and all("regulation_no" in a for a in articles):
+        return articles
+    reg_ids = {a["regulation_id"] for a in articles if a.get("regulation_id")}
+    if not reg_ids:
+        return articles
+    try:
+        rows = db.query(Regulation).filter(Regulation.id.in_(reg_ids)).all()
+    except Exception:
+        logger.warning("法规元数据补齐失败，本次跳过文号/日期透出")
+        return articles
+    meta = {
+        r.id: {
+            "regulation_no": r.regulation_no,
+            "publish_date": r.publish_date.isoformat() if r.publish_date else None,
+            "effective_date": r.effective_date.isoformat() if r.effective_date else None,
+        }
+        for r in rows
+    }
+    for a in articles:
+        a.update(meta.get(a.get("regulation_id")) or _EMPTY_REG_META.copy())
+    return articles
+
+
 def search_hybrid(db: Session, query: str, domain: list[str] | None, top_k: int) -> list[dict]:
     """混合检索：语义 + 关键词 RRF 融合（量纲无关），可选 rerank 精排，生效法规优先。"""
     fused = _rrf_fuse(
@@ -230,7 +263,7 @@ def search_hybrid(db: Session, query: str, domain: list[str] | None, top_k: int)
     )
     fused = _apply_rerank(query, fused)
     fused.sort(key=lambda item: (item.get("status") != "effective", -item.get("score", 0)))
-    return fused[:top_k]
+    return enrich_regulation_meta(db, fused[:top_k])
 
 
 def fuse_route_lists(result_lists: list[list[dict]], top_k: int) -> list[dict]:
@@ -256,7 +289,7 @@ def search(
     db: Session, query: str, search_type: str, domain: list[str] | None, top_k: int
 ) -> list[dict]:
     if search_type == "keyword":
-        return search_keyword(db, query, domain, top_k)
+        return enrich_regulation_meta(db, search_keyword(db, query, domain, top_k))
     if search_type == "semantic":
-        return search_semantic(query, domain, top_k)
+        return enrich_regulation_meta(db, search_semantic(query, domain, top_k))
     return search_hybrid(db, query, domain, top_k)
