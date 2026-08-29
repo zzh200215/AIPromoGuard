@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.infrastructure.database.mysql import SessionLocal
 from src.infrastructure.database.neo4j_client import run_cypher_strict
-from src.models import Article, PenaltyCase, Regulation, Rule
+from src.models import Article, PenaltyCase, Regulation, Rule, RuleRegulationLink
 
 # 领域 → 产品类型（ProductType 节点，PRD 图谱五元之一）
 PRODUCT_TYPES = {
@@ -190,6 +190,24 @@ def import_rules() -> tuple[int, int]:
                         {"aid": art.id, "vid": rule.id},
                     )
                     linked += 1
+        # 结构化关联表（rule_regulation_links）：挖掘/影响分析写入的条款级关联，
+        # 精度高于 related_regulations 的"法规下全部条款"展开，优先采用
+        link_rows = (
+            db.query(RuleRegulationLink, Rule)
+            .join(Rule, RuleRegulationLink.rule_id == Rule.id)
+            .filter(Rule.is_active == 1, RuleRegulationLink.article_id.isnot(None))
+            .all()
+        )
+        for link, _rule in link_rows:
+            run_cypher_strict(
+                """
+                MATCH (a:Article {id: $aid}), (v:ViolationPattern {id: $vid})
+                MERGE (a)-[:VIOLATES {confidence: 0.9}]->(v)
+                """,
+                {"aid": link.article_id, "vid": _rule.id},
+            )
+            linked += 1
+
         print(f"规则 {len(rules)} 条导入为 ViolationPattern，关联条款 {linked} 处")
         return len(rules), linked
     finally:

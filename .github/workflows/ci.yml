@@ -94,7 +94,10 @@ jobs:
       - name: Seed data (rules / regulations / penalty cases / admin)
         run: |
           python scripts/init_data/import_rules.py
+          python scripts/init_data/import_rules.py --json scripts/init_data/rules_mined.json
           python scripts/init_data/import_regulations.py
+          python scripts/init_data/import_regulations.py --json scripts/init_data/regulations_core_extra.json
+          python scripts/init_data/import_regulations.py --json scripts/init_data/regulations_crawled.json
           python scripts/init_data/import_penalty_cases.py
           python scripts/init_data/init_admin.py
 
