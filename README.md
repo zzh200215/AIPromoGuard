@@ -58,6 +58,15 @@ flowchart LR
 
 三层质量关卡：条款切分过条号连续性校验；规则过引擎级冒烟测试（LLM 正例必须命中、否定变体与内置合规语料必须不命中、与库内规则语义查重）；激活前必须通过逐规则隔离门禁（自证召回 100% + 自身零误报）且不破坏回归基准集（gate 口径 0.98/0.02）。不达标者自动退回 draft。
 
+## 检索与评估升级（P2-P5，2026-08-29）
+
+围绕"检索质量与评估自动化"的四个增量，全部带降级链路与离线单测（详见 docs/graphrag.md / docs/agentic-rag.md）：
+
+- **P2 GraphRAG 条款级多跳检索**：`regulation_match` 新增图谱第三路——规则引擎实扫命中的违规模式（节点 id 即规则 id）经条款级 VIOLATES 边多跳展开为"条款级法规依据"，与语义/关键词两路 RRF 融合；挖掘规则的精确条款关联由此直达 LLM 审查上下文
+- **P3 Agentic RAG（可选）**：LLM 自评召回条款对文档的覆盖充分性，不充分时生成监管术语化补检查询再检索融合；轮次/查询数/无新增收敛三重护栏，常规开销 = 每任务 1 次评估，`workflow.agentic_retrieval: true` 显式开启
+- **P4 LLM-as-a-Judge**：`scripts/evaluate/judge.py` 对 full 引擎输出做语义判分（true_violation / false_positive / wrong_basis）+ 引用可支撑率（确定性幻觉检查）+ 检索相关性（RAGAS 式），弥补 span 口径对 LLM 改写文本的系统性低估；本地 observe-only，不进门禁
+- **P5 LLM 精确匹配缓存（可选）**：MySQL 存储的响应缓存（prompt+模型+温度 完全一致才命中，TTL 30 天），任何存储异常按未命中降级；有意不采纳"语义相似度缓存"——合规判定对措辞极度敏感，拿正确性换成本不值得。管理 CLI：`python scripts/llm_cache.py --stats`
+
 ## 技术栈
 
 | 层 | 选型 |
@@ -105,6 +114,8 @@ cd frontend && npm install && npm run dev   # Vite proxy /api/v1 -> localhost:80
 - 单元测试：`pytest tests/ --basetemp=.pytest-tmp`（数据库不可用的用例自动 skip）
 - 评估门禁：`bash scripts/evaluate/gate.sh`（详见 docs/evaluation.md）
 - 真实罚单更新：`python scripts/crawl/fetch_penalty_cases.py`（金监总局/证监会官方渠道）
+- LLM-as-a-Judge 评估：`python scripts/evaluate/judge.py --limit 10`（需 API key，observe-only）
+- LLM 缓存管理：`python scripts/llm_cache.py --stats`
 
 ## 目录结构
 
@@ -117,14 +128,14 @@ src/
 │   ├── llm/             # QWEN 客户端（结构化输出/异步并发/降级链）+ Langfuse 埋点
 │   └── report/          # 报告生成：JSON / Markdown / PDF
 ├── mcp_server/          # MCP server：审查能力封装为 stdio 工具（复用 workflow 节点）
-├── services/            # 业务编排：审查/法规检索(RRF)/图谱/监管动态抓取
+├── services/            # 业务编排：审查/法规检索(RRF)/图谱/LLM 缓存/监管动态抓取
 ├── infrastructure/      # MySQL/Neo4j/ChromaDB/Embedding/Celery
 ├── parsers/             # txt/docx/pdf/ocr 解析 + chunker
 └── models/              # 10 张表 ORM
 scripts/
 ├── crawl/               # 真实数据爬虫：罚单 + 法规全文（watchlist 驱动）+ 法规规则挖掘
 ├── demo/                # MCP 客户端接入演示
-├── evaluate/            # 评估集（回归/变体/挖掘对抗样本）+ 门禁 + 对抗样本生成
+├── evaluate/            # 评估集（回归/变体/挖掘对抗样本）+ 门禁 + 对抗样本生成 + Judge 判分
 ├── init_data/           # 法规/规则/案例导入 + 向量化 + 图谱构建 + 草稿人工确认 CLI
 └── poller/              # 监管动态轮询（人行/金监总局/证监会真实源）
 frontend/                # Vue3 前端（任务/知识库/图谱/管理 18 个页面）
@@ -132,7 +143,7 @@ frontend/                # Vue3 前端（任务/知识库/图谱/管理 18 个�
 
 ## 质量保障
 
-- **单元 + 集成测试**：198 个用例（规则引擎 / LangGraph 工作流与人工复核 / LLM 输出校验 / 检索融合 / 爬虫解析 / API 层 / MCP stdio 协议级集成），`pytest tests/ --basetemp=.pytest-tmp`
+- **单元 + 集成测试**：344 个用例（规则引擎 / LangGraph 工作流与人工复核 / LLM 输出校验 / 检索融合与 GraphRAG、Agentic 检索 / 爬虫解析与规则挖掘 / Judge 判分与 LLM 缓存 / API 层 / MCP stdio 协议级集成），`pytest tests/ --basetemp=.pytest-tmp`
 - **CI（GitHub Actions）**：ruff 静态检查 + 全量测试（MySQL service + 完整种子与向量索引配方，本地已用全新库验证）+ 前端生产构建；另有独立的规则引擎指标门禁 workflow（跌破召回/误报阈值即红）
 - **评估门禁**：独立于单测的准确率评估（精确字符级 span 匹配），`--min-recall/--max-fpr` 退出码可接 CI
 - **数据卫生**：人工复核统计只计真实人工数据（排除系统自动确认，避免循环论证）；有标注集构建与数据事故的复盘记录（docs/evaluation.md）
@@ -142,6 +153,7 @@ frontend/                # Vue3 前端（任务/知识库/图谱/管理 18 个�
 - 知识库规模仍距生产差 1-2 个数量级：48 部法规 / 809 条款 / 75 条激活规则 / 68 条罚单（数据飞轮已建成，扩规模是重复性劳动）
 - 法律类全文仍为节选（保险法/基金法等）：国家法律法规数据库已改版 SPA、检索 API 不可达，待接口恢复后补抓；11 部目标规章官方源未覆盖，记录于 watchlist 待人工兜底
 - 挖掘规则激活采用"证据驱动自动激活"（--auto-activate：过对抗门禁即激活），人工可在规则库复核停用；7 条 draft 挖掘规则待人工审核
+- Agentic RAG 与 LLM 缓存为显式开启（workflow.agentic_retrieval / workflow.llm_cache），Judge 为本地工具——三者均为成本护栏下的可选增强；judge 判分未经人工金标准校准且与被评模型同源，仅作观测不进门禁
 - `VectorStore` 抽象预留了 Milvus 分支但未实现（`NotImplementedError`），当前仅 ChromaDB
 - 人工复核关卡的 InMemorySaver 仅同进程有效，Celery worker 与 API 分进程部署需换持久化 checkpointer（MySQL/Redis 实现，接口已预留）
 - 前端未做生产托管（CI 已验证可构建）；数据库无外键约束（应用层维护一致性）
