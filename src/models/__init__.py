@@ -2,6 +2,7 @@ from src.models.article import Article
 from src.models.audit_log import AuditLog
 from src.models.batch import ReviewBatch
 from src.models.impact import ImpactAssessment
+from src.models.llm_cache import LlmCache
 from src.models.material import ProductMaterial
 from src.models.penalty_case import PenaltyCase
 from src.models.regulation import Regulation
@@ -28,4 +29,5 @@ __all__ = [
     "AuditLog",
     "ReviewBatch",
     "RegulationUpdate",
+    "LlmCache",
 ]

@@ -11,6 +11,7 @@ from src.core.agents.state import ReviewState
 from src.core.llm.client import get_llm
 from src.infrastructure.database.mysql import SessionLocal
 from src.services import agentic_retrieval, graph_service, regulation_service
+from src.services.llm_cache import CachedLLM
 from src.utils.config import settings
 from src.utils.logger import get_logger
 
@@ -41,6 +42,8 @@ def regulation_match(state: ReviewState) -> dict:
         retrieval_meta: dict = {}
         if cfg.get("agentic_retrieval", False):
             llm = get_llm()
+            if llm is not None and cfg.get("llm_cache", False):
+                llm = CachedLLM(llm)  # P5：评估 prompt 确定性，同文档复测零成本
             if llm is not None:
                 try:
                     articles, retrieval_meta = agentic_retrieval.agentic_refine(
