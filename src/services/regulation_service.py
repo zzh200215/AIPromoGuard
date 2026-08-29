@@ -233,6 +233,13 @@ def search_hybrid(db: Session, query: str, domain: list[str] | None, top_k: int)
     return fused[:top_k]
 
 
+def fuse_route_lists(result_lists: list[list[dict]], top_k: int) -> list[dict]:
+    """多路检索结果 RRF 融合 + 生效法规优先排序（agentic 补检等场景的通用入口）。"""
+    fused = _rrf_fuse(result_lists)
+    fused.sort(key=lambda item: (item.get("status") != "effective", -item.get("score", 0)))
+    return fused[:top_k]
+
+
 def fuse_graph_route(hybrid: list[dict], graph_articles: list[dict], top_k: int) -> list[dict]:
     """图谱多跳召回作为第三路并入混合检索结果（P2 GraphRAG）。
 
@@ -242,9 +249,7 @@ def fuse_graph_route(hybrid: list[dict], graph_articles: list[dict], top_k: int)
     """
     if not graph_articles:
         return hybrid[:top_k]
-    fused = _rrf_fuse([hybrid, graph_articles])
-    fused.sort(key=lambda item: (item.get("status") != "effective", -item.get("score", 0)))
-    return fused[:top_k]
+    return fuse_route_lists([hybrid, graph_articles], top_k)
 
 
 def search(

@@ -3,11 +3,14 @@
 走混合检索（语义 + 关键词融合，生效法规优先）；混合检索失败回退纯关键词。
 P2 GraphRAG：图谱"违规模式→条款"多跳召回作为第三路并入 RRF——挖掘规则的
 条款级 VIOLATES 关联让语义/关键词都召不回的条款也能进入 LLM 审查上下文。
+P3 Agentic RAG（可选，workflow.agentic_retrieval）：LLM 自评召回充分性，
+不充分时生成监管术语化补检查询再检索融合；LLM 未配置/失败保持基础召回。
 """
 
 from src.core.agents.state import ReviewState
+from src.core.llm.client import get_llm
 from src.infrastructure.database.mysql import SessionLocal
-from src.services import graph_service, regulation_service
+from src.services import agentic_retrieval, graph_service, regulation_service
 from src.utils.config import settings
 from src.utils.logger import get_logger
 
@@ -33,6 +36,32 @@ def regulation_match(state: ReviewState) -> dict:
         except Exception:
             logger.exception("混合检索失败，回退关键词检索")
             articles = regulation_service.search_keyword(db, text, domain_list, top_k)
+
+        # P3 Agentic RAG（可选）：充分性自评 + 按需补检；未配置 key / 失败时保持基础召回
+        retrieval_meta: dict = {}
+        if cfg.get("agentic_retrieval", False):
+            llm = get_llm()
+            if llm is not None:
+                try:
+                    articles, retrieval_meta = agentic_retrieval.agentic_refine(
+                        db,
+                        llm,
+                        text,
+                        domain,
+                        articles,
+                        top_k,
+                        max_rounds=int(cfg.get("agentic_max_rounds", 2)),
+                    )
+                    if retrieval_meta.get("added"):
+                        logger.info(
+                            "agentic 补检新增 %s 条款（%s 轮，查询：%s）",
+                            retrieval_meta["added"],
+                            retrieval_meta["rounds"],
+                            retrieval_meta["queries"],
+                        )
+                except Exception:
+                    logger.exception("agentic 补检失败，保留基础召回")
+                    retrieval_meta = {}
     finally:
         db.close()
 
@@ -48,4 +77,4 @@ def regulation_match(state: ReviewState) -> dict:
         if graph_articles:
             articles = regulation_service.fuse_graph_route(articles, graph_articles, top_k)
             logger.info("图谱多跳召回 %s 条，融合后 %s 条", len(graph_articles), len(articles))
-    return {"matched_articles": articles}
+    return {"matched_articles": articles, "retrieval_meta": retrieval_meta}

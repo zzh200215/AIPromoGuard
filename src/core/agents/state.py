@@ -19,6 +19,7 @@ class ReviewState(TypedDict, total=False):
     blocks: list[dict[str, Any]]
     domain: str | None
     matched_articles: list[dict[str, Any]]
+    retrieval_meta: dict[str, Any]  # 检索过程元数据（agentic 轮次/补检查询/token 用量，可观测）
     rule_hits: list[dict[str, Any]]
     llm_findings: list[dict[str, Any]]
     llm_usage: dict[str, Any]  # LLM token 用量/调用统计（成本观测，随报告落盘）
