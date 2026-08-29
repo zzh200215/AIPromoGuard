@@ -66,6 +66,30 @@
 
 **已激活挖掘规则种子**：`scripts/crawl/mine_rules_from_regulations.py export-approved` 导出 `rules_mined.json`（与 rules.json 同 schema），已接入 CI 种子配方，保证 CI 环境与本地规则集一致。
 
+## LLM-as-a-Judge 语义判分（P4，2026-08-29）
+
+span 重叠口径对规则引擎是精确的（字面命中），但对 full 引擎系统性低估——LLM findings
+会改写/概括原文，字符级重叠经常失配；变体集又刻意绕开规则触发词，其 full 引擎效果
+此前只有人工口径。`scripts/evaluate/judge.py` 引入 LLM 复核员做**语义级判分**（本地工具，
+observe-only，不进 CI 门禁）：
+
+- **结论判分**：逐条 finding 判 `true_violation / false_positive / wrong_basis`（举证责任
+  在系统，拿不准判误报）→ judge_precision
+- **引用可支撑率**：确定性检查（零 LLM）——结论引用的法规是否出现在召回条款中，
+  无书名号时退化为子串匹配，"根据监管规定"式泛引记为不可支撑
+- **检索相关性**（RAGAS 式）：召回条款与文档主题逐条判定相关/无关 → context_precision，
+  并输出文档涉及但未召回的监管主题（missing_topics）
+- **span 口径对照**：同案例并报 span_recall，两种口径可并读
+
+用法：`python scripts/evaluate/judge.py --limit 10 --out judge_report.json`（需 API key；
+`--engine rule` 可复核规则引擎输出）。首轮 smoke（变体集 3 例，full 引擎）：judge_precision
+1.0（3 true / 0 FP）、span_recall 1.0、引用可支撑率 1.0、检索相关性 0.4-0.8，成本约
+750 token/例——判分本身便宜，贵的是 full 引擎扫描（每案例全 workflow）。
+
+诚实边界：judge 自身是 LLM，其判分无人工金标准校准（首轮人工抽检一致后才可作为
+软参考）；judge 与被评对象同源（同一家模型自评存在偏乐观风险），后续可换异构模型
+当复核员；该指标不进 gate，仅作 full 引擎效果观测与回归对比基线。
+
 ## 数据卫生
 - 人工复核统计（feedback / 规则精调建议）只计 `confirmed_by>0` 的真实人工数据；
   系统自动确认（`confirmed_by=0`）不计入（避免循环论证）。
