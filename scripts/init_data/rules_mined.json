@@ -1,0 +1,402 @@
+[
+  {
+    "domain": "fund",
+    "rule_name": "禁止承诺基金收益或承担损失",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《中华人民共和国证券投资基金法（2015年修正）》第七十七条第（三）项",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "保本|保收益|保本保收益|稳赚不赔|零风险|本金无忧|承诺收益|承诺赔付|承担亏损|兜底|代偿|刚性兑付"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止预测基金证券投资业绩",
+    "rule_type": "regex",
+    "severity": "medium",
+    "description": "依据：《中华人民共和国证券投资基金法（2015年修正）》第七十七条第（二）项",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "预期收益率可达|预计年化|预估收益|未来收益可达|业绩可达|涨幅预计|将突破|稳超|吊打指数|必涨|稳赢"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止宣称理财产品保本",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《商业银行理财业务监督管理办法》第三条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "保本|本金保障|本金安全|100%保本|零风险保本|保本型"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止承诺投资者不承担风险",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《商业银行理财业务监督管理办法》第六条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "投资者零风险|风险由银行承担|银行兜底|本金无忧|风险全免|风险我方承担"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止承诺保本保收益表述",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《商业银行理财业务监督管理办法》第二十六条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "保本|保收益|稳赚不赔|零风险|无风险|本金无忧|100%本金保障|绝对安全|稳赚|保本保息"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止保险销售中虚假或夸大表述",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《保险销售行为管理办法》第十七条第三项",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "稳赚不赔|绝对安全|零风险|100%赔付| guaranteed|稳拿收益|躺赢|年化收益高达|预期收益可达|保本保息"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止隐瞒或欺骗性产品信息披露",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《人身保险产品信息披露管理办法》第四条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "guaranteed|稳赚不赔|保本保息|本金无忧|零风险|绝对安全|100%赔付|肯定能赔|一定兑付|不会亏损|无任何风险"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止刚性兑付表述",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《关于规范金融机构资产管理业务的指导意见》第三十条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "刚性兑付|保本保息|本金无忧|收益兜底|100%兑付|到期兑付|全额赔付"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止使用保本及无风险类表述",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《理财公司理财产品销售管理暂行办法》第二十六条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "保本|本金保障|100%保本|零风险|无风险|绝对安全|稳赚不赔|资金零损耗|本息无忧"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止保本保收益宣传",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《商业银行理财子公司管理办法》第六条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "保本|保收益|本金无忧|零风险|稳赚不赔|稳赚|绝对安全|无风险|100%兑付|刚性兑付|兜底|担保本金|担保收益|保本理财|保本型|保本保息"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止混淆投资收益与存款本息表述",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《银行保险机构消费者权益保护管理办法》第十六条第（二）项",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "等同存款|本金无忧|跟银行存款一样安全|保底利息|存入即享固定回报"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止宣传预期收益率表述",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《公开募集证券投资基金销售机构监督管理办法》第二十四条第（三）项",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "预期收益率.*?可达|预期年化.*?[%％]|预期收益.*?[%％]|业绩比较基准.*?可达|预估收益|预计收益"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止基金宣传中登载预期收益率",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《公开募集证券投资基金宣传推介材料管理暂行规定》第六条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "预期收益率(?:可达|为|.*?%|.*?年化|.*?约|.*?最高)?|年化预期.*?%|预期年化.*?%"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止夸大健康保险保障范围",
+    "rule_type": "regex",
+    "severity": "medium",
+    "description": "依据：《健康保险管理办法》第十五条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "全覆盖|全包干|所有疾病都保|生病就赔|住院全报销|不限病种|不限治疗方式|0免赔|100%报销|花多少报多少|无门槛赔付"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止超出合同承诺保单利益",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《人身保险新型产品信息披露管理办法》第七条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "guaranteed|稳赚不赔|保本保息|保底收益|预期年化.*?超.*?合同|合同外收益|额外红利承诺|保证分红|刚兑收益"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止将保险产品与银行存款等金融产品不当类比",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《保险代理人监管规定》第四十五条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "跟银行存款一样|和银行存款差不多|相当于银行存款|类比银行存款|媲美银行存款|比基金还稳|比货币基金更安全|像存钱一样|当存款用|存款替代品|理财替代品|保本理财"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止夸大或片面宣传私募基金",
+    "rule_type": "regex",
+    "severity": "medium",
+    "description": "依据：《私募投资基金监督管理条例》第二十条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "稳赚|必涨|绝对收益|稳赢|只赚不亏|无风险收益|历史业绩=未来表现|过往高收益代表未来"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止宣称分期可享最低还款额服务",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《关于进一步促进信用卡业务规范健康发展的通知》第十九条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "分期.*?最低还款|最低还款.*?分期|分期支持最低还"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止将结构性存款宣传为一般性存款",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《关于进一步规范商业银行结构性存款业务的通知》第六条（二）",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "跟普通存款一样|和银行存款一样|等同于存款|就是存款|存款产品|存款类理财|存款型产品|存款性质"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止未显著揭示结构性存款风险本质",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《关于进一步规范商业银行结构性存款业务的通知》第六条（二）",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "结构性存款是存款|结构性存款属于存款|受存款保险保障|本金100%保障|存款保险赔付|保本保息"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止违规承诺收益或承担损失",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《互联网保险业务监管办法》第十五条第四项",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "保本|保收益|稳赚不赔|零风险|本金无忧|100%兑付|承诺赔付|包赔| guaranteed|guarantee|保本保息|保本保值"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止保险营销中使用虚假宣传话术",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《保险经纪人监管规定》第六十五条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "全行业第一|唯一指定|国家认证|央行推荐|银保监批准|100%赔付|零风险投保| guaranteed|guarantee|100%保障|绝对安全"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止夸大意外险保障范围",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《意外伤害保险业务监管办法》第十七条第（五）项",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "保所有意外|全保障|全覆盖|100%赔付|任何意外都赔|大小意外全包"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "insurance",
+    "rule_name": "禁止意外险虚假记载或误导性陈述",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《意外伤害保险业务监管办法》第二十条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "100%赔付|秒赔不拒|出险必赔|零门槛理赔|躺赢理赔|买了就赔|确诊即赔|无需审核即赔付"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止提前支取靠档计息表述",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《商业银行负债质量管理办法》第二十四条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "提前支取.*靠档|靠档.*提前支取|提前支取按.*利率|按.*档计息|靠档计息"
+        }
+      ]
+    }
+  }
+]
