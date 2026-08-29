@@ -238,7 +238,9 @@ def main() -> int:
     print(f"naive token 用量：{naive_usage}")
 
     if args.out:
-        Path(args.out).write_text(
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
             json.dumps(
                 {
                     "cases_file": str(args.cases),
