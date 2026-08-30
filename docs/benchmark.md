@@ -45,13 +45,30 @@
 
 ## 3. 检索与结论质量（LLM-as-a-Judge，observe-only）
 
-[judge.py](../scripts/evaluate/judge.py) 对审查结论做语义判分（true_violation / false_positive / wrong_basis，举证责任在系统）、引用幻觉检查（结论引用的法规是否在召回上下文中，确定性零 LLM）、RAGAS 式上下文精度与缺失主题。运行：
+[judge.py](../scripts/evaluate/judge.py) 对审查结论做语义判分（true_violation / false_positive / wrong_basis，举证责任在系统）、引用幻觉检查（结论引用的法规是否在召回上下文中，确定性零 LLM）、RAGAS 式上下文精度与缺失主题。
 
-```bash
-python scripts/evaluate/judge.py --limit 10 --out judge_report.json
-```
+**2026-08-30 实测（full 引擎，71 例变体集）**：
 
-## 4. 质量门禁（CI 三件套）
+| 指标 | 数值 | 说明 |
+|---|---|---|
+| 结论判分精度 | **95.7%**（303 true / 9 false_positive / 1 wrong_basis） | 逐条结论经 Judge 复核成立的比例 |
+| span 口径召回 | 100% | 与 span 匹配口径互证 |
+| 引用可支撑率 | 62.1% | 引用的法规出现在召回上下文中的比例——引用可能正确但不在 top-5 召回内，故生产流处置为"证据待核→人工复核"，不直接采信也不丢弃 |
+| 检索相关性 | 48.7% | RAGAS 式 context_precision（top-5 召回含噪声的正常水位） |
+
+## 4. 组件贡献（消融实验，`ablation.py`）
+
+逐组件关闭跑全链路（71 例 / 170 标注点，同一 span 口径）：
+
+| 对照臂 | 召回率 | 误报率 | 检出 | 说明 |
+|---|---|---|---|---|
+| full（规则+图谱+LLM） | 100% | 0.1% | 728 | 完整链路 |
+| no_graph（关图谱路） | 100% | 0.1% | 736 | 本集上召回贡献 0——图谱路与规则路信息重叠（挖掘规则的变体案例本身锚定规则），其价值在规则失效场景的冗余兜底，属诚实读数 |
+| no_rule（纯检索+LLM） | 100% | 0.0% | 179 | 检索+白名单 prompt 使 LLM 语义路自身零误报；规则路把检出量放大 4 倍且零 token |
+
+与 §1 裸 LLM 直查（误报 9.3%）对照得出组件价值链：**裸 LLM 9.3% 误报 → +检索+披露白名单 → 0% → +规则引擎 → 检出量 ×4 且可解释可复现**。
+
+## 5. 人机协同漏斗（复核采纳率）
 
 回归基准集（50 案例/139 标注点）+ 变体集（44 案例/89 标注点）逐规则隔离扫描：自证召回 100% + 自身零误报 + 不破坏回归集（gate 口径 0.98/0.02），不达标规则自动退回 draft。`scripts/evaluate/gate.sh`，GitHub Actions 每次提交运行。
 
