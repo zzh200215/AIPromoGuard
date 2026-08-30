@@ -18,6 +18,10 @@ class TaskCreate(BaseModel):
         None, description="说明书/协议/宣传材料"
     )
     domain: str | None = Field(None, description="banking/fund/insurance")
+    profile: str | None = Field(
+        None,
+        description="审查策略：strict=对外投放(全量人工复核)/standard=常规/loose=内部预检(放宽自动确认)",
+    )
     base_document_id: str | None = Field(
         None,
         pattern=_DOC_ID_PATTERN,
@@ -39,6 +43,7 @@ class TaskOut(BaseModel):
     document_name: str
     document_type: str | None = None
     domain: str | None = None
+    profile: str | None = None  # 审查策略（strict/standard/loose，None=standard）
     status: str
     progress: int
     stages: dict | None = None  # 各 Agent 节点状态/耗时（PRD §11.3）

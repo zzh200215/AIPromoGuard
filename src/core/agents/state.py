@@ -43,6 +43,8 @@ class ReviewState(TypedDict, total=False):
     text: str
     blocks: list[dict[str, Any]]
     domain: str | None
+    # 审查策略（strict/standard/loose，None=standard），human_review 节点据此覆盖配置
+    profile: str | None
     matched_articles: list[dict[str, Any]]
     retrieval_meta: dict[str, Any]  # 检索过程元数据（agentic 轮次/补检查询/token 用量，可观测）
     rule_hits: list[dict[str, Any]]

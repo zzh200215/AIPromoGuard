@@ -22,6 +22,7 @@ from src.core.agents.runtime import (
     start_review_with_hil,
     thread_id_for_task,
 )
+from src.core.profiles import effective_auto_confirm, resolve_human_review, safe_profile
 from src.infrastructure.database.mysql import SessionLocal
 from src.models import (
     Article,
@@ -42,6 +43,19 @@ _executor = ThreadPoolExecutor(max_workers=2)
 
 def _human_review_enabled() -> bool:
     return (settings.app_config("workflow").get("human_review") or {}).get("enabled", False)
+
+
+def _task_profile(task_id: int) -> str | None:
+    """读任务的审查策略（DB 只读一次，失败回退 standard）。"""
+    db = SessionLocal()
+    try:
+        task = db.get(ReviewTask, task_id)
+        return safe_profile(task.profile) if task else None
+    except Exception:
+        logger.warning("task %s 读取 profile 失败，按 standard 处理", task_id, exc_info=True)
+        return None
+    finally:
+        db.close()
 
 
 def recover_orphan_tasks() -> dict:
@@ -66,7 +80,10 @@ def recover_orphan_tasks() -> dict:
         if not orphans:
             return outcome
 
-        graph = runtime.get_hil_graph() if _human_review_enabled() else None
+        graph = None
+        if _human_review_enabled() or any(safe_profile(t.profile) == "strict" for t in orphans):
+            # strict 任务即使全局 HIL 关闭也会在关卡中断，checkpoint 恢复同样可达
+            graph = runtime.get_hil_graph()
         for task in orphans:
             recovered = False
             if graph is not None:
@@ -139,10 +156,11 @@ def start_review(task_id: int) -> None:
 
     人工复核（HIL）任务要求 checkpointer 跨进程可读：默认 MySQLCheckpointSaver
     满足，可正常入队 Celery；DB 不可用回退 InMemorySaver 时强制线程池，
-    保证 resume 发生在同进程（API 侧）。
+    保证 resume 发生在同进程（API 侧）。strict 策略强制 HIL（全局关闭也拦）。
     """
+    hil = resolve_human_review(_task_profile(task_id), _human_review_enabled())
     if _use_celery():
-        if _human_review_enabled() and not saver_is_persistent():
+        if hil and not saver_is_persistent():
             logger.warning(
                 "task %s: checkpointer 非持久（DB 回退），HIL 任务强制线程池执行",
                 task_id,
@@ -235,6 +253,7 @@ def execute_review(task_id: int) -> None:
         task.progress = 20
         db.commit()
 
+        profile = safe_profile(task.profile)
         initial_state = {
             "task_id": task.id,
             "document_path": task.document_path,
@@ -243,9 +262,10 @@ def execute_review(task_id: int) -> None:
             "text": review_text,
             "blocks": review_blocks,
             "diff_changes": diff_changes,
+            "profile": profile,
         }
 
-        if _human_review_enabled():
+        if resolve_human_review(profile, _human_review_enabled()):
             outcome = start_review_with_hil(initial_state, thread_id_for_task(task.id))
             if outcome["interrupted"]:
                 # 图在 human_review 暂停：任务挂起等人，决策经
@@ -283,7 +303,7 @@ def _finalize_task(db, task: ReviewTask, result: dict) -> None:
     """图跑完后的落库：结果明细、节点耗时、报告路径与任务终态。"""
     report_data = result.get("report") or {}
     findings = report_data.get("violations", [])
-    _persist_results(db, task.id, findings)
+    _persist_results(db, task.id, findings, profile=safe_profile(task.profile))
 
     task.stages = result.get("stage_log")  # 各 Agent 节点耗时（W14）
     task.llm_usage = result.get("llm_usage")  # token 用量/预估成本（成本归因）
@@ -416,10 +436,12 @@ def _citation_for_rule(
     return link.regulation_id, best.id
 
 
-def _persist_results(db, task_id: int, findings: list[dict]) -> None:
+def _persist_results(db, task_id: int, findings: list[dict], profile: str | None = None) -> None:
     # 幂等：任务重跑/消息重投前清掉旧结果，避免同一任务结果重复追加
     db.query(ReviewResult).filter(ReviewResult.task_id == task_id).delete()
-    auto_cfg = settings.app_config("workflow").get("auto_confirm", {})
+    auto_cfg = effective_auto_confirm(
+        profile, settings.app_config("workflow").get("auto_confirm", {})
+    )
     for item in findings:
         status, confirmed_at, confirmed_by = _auto_confirm(item, auto_cfg)
         reg_id, art_id = _citation_for_rule(

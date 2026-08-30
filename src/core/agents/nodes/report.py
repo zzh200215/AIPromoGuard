@@ -17,6 +17,7 @@ def report(state: ReviewState) -> dict:
         findings=state.get("merged_findings", []),
         diff_changes=state.get("diff_changes"),
         llm_usage=state.get("llm_usage"),
+        profile=state.get("profile"),
     )
     base = Path(settings.report_dir) / f"task_{state['task_id']}"
     json_path = base.with_suffix(".json")

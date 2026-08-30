@@ -15,6 +15,8 @@ class ReviewTask(Base):
     document_path: Mapped[str | None] = mapped_column(String(512))
     document_type: Mapped[str | None] = mapped_column(String(32))
     domain: Mapped[str | None] = mapped_column(String(32))
+    # 审查策略 strict/standard/loose（NULL=standard）
+    profile: Mapped[str | None] = mapped_column(String(16))
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     progress: Mapped[int] = mapped_column(default=0, nullable=False)  # 0-100
     stages: Mapped[dict | None] = mapped_column(JSON)  # 各 Agent 节点状态/耗时（PRD §11.3）

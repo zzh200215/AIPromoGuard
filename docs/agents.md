@@ -114,3 +114,13 @@ Schema、何时交接、失败与降级、是否允许自动通过、用什么�
 
 - **成本归因**：LLM 客户端逐次采集 `resp.usage`，节点经 `state.llm_usage` reducer 累加（llm_scan 扫描 + agentic 检索两处计入），报告生成时按牌价表换算预估金额（`src/core/llm/pricing.py`，家族子串匹配，未收录模型只报 token）。用量与预估随报告 JSON/Markdown 落盘并持久化到 `review_tasks.llm_usage`（API TaskOut 同步暴露）——每次审查"花了多少 token、约多少钱"可追溯。
 - **待人工核验清单**：报告第五节聚合机器无法闭环背书的存疑项——证据门禁判 False（引用法规未命中召回条款）、LLM/hybrid 无引用或召回为空（自动核验未覆盖）、适当性判定（需产品风险等级与目标客群材料佐证）。清单按风险降序，空时显式声明"无"，与复核队列（`pending_confirm`）互补：清单面向"补充证据/材料"，队列面向"确认/否决结论"。
+
+## 八、审查策略 profile
+
+同一引擎按使用场景切换复核强度（`src/core/profiles.py`，任务级选择，`review_tasks.profile` 持久化）：
+
+- **strict（对外投放）**：自动确认关闭 + 人工复核关卡强制全量拦截（全局 HIL 关闭也拦、不限 severity/source），任何结论未经人工确认不得视为已定；
+- **standard（常规，默认）**：完全跟随 configs/app.yaml，行为与既有任务一致；
+- **loose（内部预检）**：跳过人工复核关卡，自动确认阈值放宽 0.85→0.6（仍限 rule/hybrid 来源），草稿/培训材料快速预检少打扰。
+
+接线点：API TaskCreate.profile（非法值 400）→ review_service 按 profile 解析 HIL 走向与自动确认配置 → state.profile 进图（human_review 节点覆盖开关）→ 报告头部标注策略。

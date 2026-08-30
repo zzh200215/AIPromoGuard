@@ -53,6 +53,7 @@ def build_report(
     findings: list[dict],
     diff_changes: list[dict] | None = None,
     llm_usage: dict | None = None,
+    profile: str | None = None,
 ) -> dict:
     risk_counter = Counter(item.get("risk_level", "medium") for item in findings)
     summary = {
@@ -79,4 +80,6 @@ def build_report(
     pending = collect_pending_verification(findings)
     report["pending_verification"] = pending
     summary["pending_verification"] = len(pending)
+    if profile:
+        report["profile"] = profile
     return report

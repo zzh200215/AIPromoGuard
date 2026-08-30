@@ -12,6 +12,7 @@ from src.api.middleware.auth import (
     task_access_filter,
 )
 from src.api.schemas.task import HumanReviewDecision, TaskCreate, TaskOut
+from src.core.profiles import normalize_profile
 from src.infrastructure.database.mysql import get_db
 from src.models import ReviewTask, User
 from src.services.review_service import resume_human_review, start_review
@@ -46,12 +47,17 @@ def create_task(
             raise AppError(ErrorCode.PARAM_ERROR, "非法的文档标识", http_status=400)
         base_name = base_matched[0].name
         base_path = str(base_matched[0])
+    try:
+        profile = normalize_profile(body.profile)
+    except ValueError as exc:
+        raise AppError(ErrorCode.PARAM_ERROR, str(exc)) from exc
     task = ReviewTask(
         task_name=body.task_name or document_name,
         document_name=document_name,
         document_path=str(matched[0]),
         document_type=body.document_type,
         domain=body.domain,
+        profile=profile,
         status="pending",
         created_by=current_user.id,
         base_document_name=base_name,

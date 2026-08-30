@@ -8,6 +8,8 @@ LangGraph interrupt + checkpointer 实现的 human-in-the-loop：
   结论从 merged_findings 剔除，随后继续 risk_assess → report；
 - 配置未启用或无待复核项时直通，行为与线性流程完全一致（默认关闭，
   既有 API 审查路径不受影响）。
+- 审查策略 profile（state.profile）覆盖全局开关：strict 强制启用关卡
+  （全局关闭也拦），loose 强制直通（全局开启也放行）。
 
 interrupt() 依赖编译期注入 checkpointer（见 runtime.py InMemorySaver）；
 Celery worker 与 API 分进程部署时需换成持久化 checkpointer（MySQL/Redis）。
@@ -22,7 +24,6 @@ from src.utils.config import settings
 def _review_cfg() -> dict:
     return (settings.app_config("workflow").get("human_review") or {})
 
-
 def _pending_indexes(findings: list[dict], severities: set, sources: set) -> list[int]:
     return [
         i
@@ -33,13 +34,20 @@ def _pending_indexes(findings: list[dict], severities: set, sources: set) -> lis
 
 def human_review(state: ReviewState) -> dict:
     cfg = _review_cfg()
-    if not cfg.get("enabled", False):
+    # profile 覆盖全局开关：strict（对外投放）强制人工复核，loose（内部预检）直通
+    profile = state.get("profile")
+    enabled = cfg.get("enabled", False) or profile == "strict"
+    if profile == "loose" or not enabled:
         return {}
 
     findings = state.get("merged_findings", [])
     severities = set(cfg.get("review_severities", ["high"]))
     sources = set(cfg.get("review_sources", ["hybrid"]))
-    pending = _pending_indexes(findings, severities, sources)
+    if profile == "strict":
+        # 对外投放：全量人工复核，任何结论未经人工确认不得视为已定
+        pending = list(range(len(findings)))
+    else:
+        pending = _pending_indexes(findings, severities, sources)
     if not pending:
         return {"human_review": {"required": False, "rejected_indexes": []}}
 

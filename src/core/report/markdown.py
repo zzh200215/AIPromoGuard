@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from src.core.profiles import PROFILE_LABELS
+
 _RISK_LABEL = {"high": "高", "medium": "中", "low": "低"}
 _SOURCE_LABEL = {"rule": "规则引擎", "llm": "LLM 语义", "hybrid": "规则+LLM"}
 
@@ -27,6 +29,12 @@ def render_markdown(report: dict) -> str:
         f"低风险 **{summary.get('low_risk', 0)}** 处。",
         "",
     ]
+
+    profile = report.get("profile")
+    if profile:
+        lines.insert(
+            5, f"- **审查策略**：{profile}（{PROFILE_LABELS.get(profile, profile)}）"
+        )
 
     usage = report.get("llm_usage")
     if usage:
