@@ -116,8 +116,13 @@ def generate_for_rule(llm, rule) -> dict | None:
     return case
 
 
-def load_rules_for_validation(db, auto_activate: bool, limit: int):
-    """取待验证规则：默认已激活的挖掘规则；--auto-activate 时把 draft 也纳入并先激活。"""
+def load_rules_for_validation(db, limit: int):
+    """取挖掘规则清单（draft = 待激活候选，active = 复验对象）。
+
+    注意：此处不做任何激活。draft 规则必须先生成对抗样本并逐规则过门禁，
+    通过才激活——此前"先批量激活后验证"的顺序会让没生成到样本的 draft
+    绕过门禁直接生效（is_active=1 落库后再退回，门禁形同虚设）。
+    """
     from src.models import Rule, RuleRegulationLink
 
     link_rule_ids = [
@@ -127,17 +132,7 @@ def load_rules_for_validation(db, auto_activate: bool, limit: int):
         .all()
     ]
     rules = db.query(Rule).filter(Rule.id.in_(link_rule_ids)).all() if link_rule_ids else []
-    activated = 0
-    for rule in rules:
-        if auto_activate and not rule.is_active:
-            rule.is_active = 1
-            rule.status = "active"
-            activated += 1
-    if auto_activate:
-        db.commit()
-        print(f"激活此前为 draft 的挖掘规则 {activated} 条")
-    active = [r for r in rules if r.is_active][:limit]
-    return active, rules
+    return rules
 
 
 def verify_cases(cases: list[dict], evaluate) -> tuple[list[dict], list[str]]:
@@ -185,7 +180,7 @@ def verify_cases(cases: list[dict], evaluate) -> tuple[list[dict], list[str]]:
             passed_cases.append(case)
         else:
             detail = f"召回 {matched}/{len(gt)} 自身误报 {own_fp}"
-            print(f"  - 门禁未过，退回 draft: {target.rule_name} ({detail})")
+            print(f"  - 门禁未过: {target.rule_name} ({detail})")
             failed_rules.append(target.rule_name)
     return passed_cases, failed_rules
 
@@ -216,9 +211,7 @@ def main() -> None:
 
     db = SessionLocal()
     try:
-        rules, all_mined = load_rules_for_validation(
-            db, auto_activate=args.auto_activate, limit=args.limit
-        )
+        rules = load_rules_for_validation(db, limit=args.limit)
         llm = get_llm()
         if llm is None:
             raise SystemExit("未配置 DASHSCOPE_API_KEY")
@@ -228,24 +221,53 @@ def main() -> None:
         existing_fps = {_fingerprint(c) for c in variants_doc.get("cases", [])}
 
         new_cases: list[dict] = []
-        for rule in rules:
-            case = generate_for_rule(llm, rule)
-            if case is None:
-                print(f"  - 生成失败跳过: {rule.rule_name}")
-                continue
-            if _fingerprint(case) in existing_fps:
-                continue
-            new_cases.append(case)
+        if args.verify_only:
+            # 不生成新样本：把既有变体集中属于挖掘规则的 case 原样重跑门禁
+            mined_names = {r.rule_name for r in rules}
+            new_cases = [
+                c
+                for c in variants_doc.get("cases", [])
+                if (c.get("ground_truth") or [{}])[0].get("rule_name") in mined_names
+            ]
+            print(f"== verify-only：重跑 {len(new_cases)} 个既有 case 门禁 ==")
+        else:
+            for rule in rules:
+                case = generate_for_rule(llm, rule)
+                if case is None:
+                    print(f"  - 生成失败跳过: {rule.rule_name}")
+                    continue
+                if _fingerprint(case) in existing_fps:
+                    continue
+                new_cases.append(case)
 
         evaluate = _load_evaluate()
         print(f"== 生成 {len(new_cases)} 个新 case，开始引擎门禁 ==")
         passed, failed = verify_cases(new_cases, evaluate)
 
-        if failed and args.auto_activate:
-            n = demote_rules(db, failed)
-            print(f"退回 draft {n} 条: {failed}")
-        elif failed:
-            print(f"未达标规则（未自动退回）: {failed}")
+        # 门禁通过才激活：只有"本轮生成了对抗样本且全部通过"的 draft 才配生效
+        activated = 0
+        if args.auto_activate:
+            passed_names = {
+                c["ground_truth"][0].get("rule_name")
+                for c in passed
+                if c.get("ground_truth")
+            }
+            for rule in rules:
+                if not rule.is_active and rule.rule_name in passed_names:
+                    rule.is_active = 1
+                    rule.status = "active"
+                    activated += 1
+            db.commit()
+        n_demoted = 0
+        if failed:
+            n_demoted = demote_rules(db, failed)
+            mode = "退回 draft" if args.auto_activate else "未达标（保持 draft）"
+            print(f"{mode} {n_demoted} 条: {failed}")
+        if args.auto_activate:
+            print(
+                f"门禁通过并激活 {activated} 条；"
+                f"未生成新样本或未通过的 draft 保持待审（不激活）"
+            )
 
         # 幸存样本合并进 variant_cases.json
         merged = 0

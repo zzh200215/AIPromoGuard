@@ -226,7 +226,14 @@ def _semantically_duplicate(candidate: dict, existing_literal_sets: list[set[str
     return False
 
 
-def mine_from_regulations(db, limit: int, dry_run: bool, domain: str | None) -> list[dict]:
+def mine_from_regulations(
+    db,
+    limit: int,
+    dry_run: bool,
+    domain: str | None,
+    keyword: str | None = None,
+    focus: str | None = None,
+) -> list[dict]:
     """主挖掘流程：选条款 → LLM 提炼 → 三重预校验 → 落 draft 规则。"""
     from src.core.llm.client import get_llm
     from src.models import Article, Regulation, Rule, RuleRegulationLink
@@ -261,6 +268,10 @@ def mine_from_regulations(db, limit: int, dry_run: bool, domain: str | None) -> 
         for a, reg in rows
         if a.content and _MARKETING_RE.search(a.content) and len(a.content) > 30
     ]
+    if keyword:
+        # 主题定向挖掘：只挖包含关键词的条款（如"适当性"），避免全量重扫的 LLM 开销
+        candidates_articles = [(a, reg) for a, reg in candidates_articles if keyword in a.content]
+        print(f"主题过滤「{keyword}」后候选 {len(candidates_articles)} 条")
     print(f"候选条款 {len(candidates_articles)} / 全部条款 {len(rows)}（营销合规相关预过滤）")
 
     report: list[dict] = []
@@ -272,6 +283,8 @@ def mine_from_regulations(db, limit: int, dry_run: bool, domain: str | None) -> 
             f"《{reg.regulation_name}》{article.article_no}（domain={reg.domain}）：\n"
             f"{article.content[:1200]}\n\n请提炼规则候选："
         )
+        if focus:
+            user += f"\n本次挖掘聚焦：{focus}（条款内其他已覆盖主题不要重复产出）"
         try:
             content = llm.chat(
                 [
@@ -389,6 +402,14 @@ def main() -> None:
     exp = sub.add_parser("export-approved", help="导出已激活的挖掘规则为 CI 种子")
     exp.add_argument("--out", default=str(_ROOT / "scripts" / "init_data" / "rules_mined.json"))
     parser.add_argument("--domain", choices=sorted(_VALID_DOMAINS), default=None)
+    parser.add_argument(
+        "--keyword", default=None, help="主题定向：只挖包含该关键词的条款（如 适当性）"
+    )
+    parser.add_argument(
+        "--focus",
+        default=None,
+        help="聚焦提示：告诉 LLM 本次要挖的违规话术方向，避免重复产出已覆盖主题",
+    )
     parser.add_argument("--limit", type=int, default=40, help="本次最多新增 draft 规则数")
     parser.add_argument("--dry-run", action="store_true", help="只打印候选不落库")
     args = parser.parse_args()
@@ -401,7 +422,14 @@ def main() -> None:
 
     db = SessionLocal()
     try:
-        mine_from_regulations(db, limit=args.limit, dry_run=args.dry_run, domain=args.domain)
+        mine_from_regulations(
+            db,
+            limit=args.limit,
+            dry_run=args.dry_run,
+            domain=args.domain,
+            keyword=args.keyword,
+            focus=args.focus,
+        )
     finally:
         db.close()
 

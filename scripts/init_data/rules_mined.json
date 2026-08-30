@@ -33,22 +33,6 @@
   },
   {
     "domain": "banking",
-    "rule_name": "禁止宣称理财产品保本",
-    "rule_type": "regex",
-    "severity": "high",
-    "description": "依据：《商业银行理财业务监督管理办法》第三条",
-    "rule_content": {
-      "operator": "OR",
-      "conditions": [
-        {
-          "type": "regex",
-          "pattern": "保本|本金保障|本金安全|100%保本|零风险保本|保本型"
-        }
-      ]
-    }
-  },
-  {
-    "domain": "banking",
     "rule_name": "禁止承诺投资者不承担风险",
     "rule_type": "regex",
     "severity": "high",
@@ -59,22 +43,6 @@
         {
           "type": "regex",
           "pattern": "投资者零风险|风险由银行承担|银行兜底|本金无忧|风险全免|风险我方承担"
-        }
-      ]
-    }
-  },
-  {
-    "domain": "banking",
-    "rule_name": "禁止承诺保本保收益表述",
-    "rule_type": "regex",
-    "severity": "high",
-    "description": "依据：《商业银行理财业务监督管理办法》第二十六条",
-    "rule_content": {
-      "operator": "OR",
-      "conditions": [
-        {
-          "type": "regex",
-          "pattern": "保本|保收益|稳赚不赔|零风险|无风险|本金无忧|100%本金保障|绝对安全|稳赚|保本保息"
         }
       ]
     }
@@ -145,16 +113,16 @@
   },
   {
     "domain": "banking",
-    "rule_name": "禁止保本保收益宣传",
+    "rule_name": "禁止夸大产品收益表述",
     "rule_type": "regex",
-    "severity": "high",
-    "description": "依据：《商业银行理财子公司管理办法》第六条",
+    "severity": "medium",
+    "description": "依据：《银行保险机构消费者权益保护管理办法》第十六条第（一）项",
     "rule_content": {
       "operator": "OR",
       "conditions": [
         {
           "type": "regex",
-          "pattern": "保本|保收益|本金无忧|零风险|稳赚不赔|稳赚|绝对安全|无风险|100%兑付|刚性兑付|兜底|担保本金|担保收益|保本理财|保本型|保本保息"
+          "pattern": "稳赚不赔|年化高达|翻倍收益|收益翻番|躺赢|白捡钱|零风险高回报"
         }
       ]
     }
@@ -251,6 +219,22 @@
         {
           "type": "regex",
           "pattern": "跟银行存款一样|和银行存款差不多|相当于银行存款|类比银行存款|媲美银行存款|比基金还稳|比货币基金更安全|像存钱一样|当存款用|存款替代品|理财替代品|保本理财"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止承诺本金不受损失或最低收益",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《私募投资基金监督管理条例》第二十条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "保本|本金无忧|零风险|稳赚不赔|稳赢|保底收益|最低收益|年化保底|兜底|安全垫|100%本金保障|躺赢"
         }
       ]
     }
@@ -385,16 +369,48 @@
   },
   {
     "domain": "banking",
-    "rule_name": "禁止提前支取靠档计息表述",
+    "rule_name": "禁止将高风险理财宣传为适合保守型或稳健型投资者",
     "rule_type": "regex",
     "severity": "high",
-    "description": "依据：《商业银行负债质量管理办法》第二十四条",
+    "description": "依据：《商业银行理财业务监督管理办法》第六条（投资者适当性管理要求）",
     "rule_content": {
       "operator": "OR",
       "conditions": [
         {
           "type": "regex",
-          "pattern": "提前支取.*靠档|靠档.*提前支取|提前支取按.*利率|按.*档计息|靠档计息"
+          "pattern": "适合保守型投资者|适合稳健型投资者|适合所有投资者|老少皆宜|无需风险测评|不测也能买|测评不过也能买"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "banking",
+    "rule_name": "禁止面向老年人作收益承诺或误导性适配表述",
+    "rule_type": "regex",
+    "severity": "high",
+    "description": "依据：《商业银行理财业务监督管理办法》第二十六条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "老年人专享收益|银发族稳赚|退休金理财保本|爸妈也能放心买|老年客户专属高收益"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "fund",
+    "rule_name": "禁止面向老年人作收益承诺",
+    "rule_type": "regex",
+    "severity": "medium",
+    "description": "依据：《证券期货投资者适当性管理办法》第三条",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        {
+          "type": "regex",
+          "pattern": "老年人专享|银发族稳赚|退休金增值无忧|养老钱必涨|爸妈放心买"
         }
       ]
     }
