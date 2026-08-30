@@ -161,3 +161,21 @@ def test_persist_results_disabled_all_pending(monkeypatch):
         db.query(ReviewResult).filter(ReviewResult.task_id == task_id).delete()
         db.commit()
         db.close()
+
+
+def test_auto_confirm_blocked_by_unsupported_evidence():
+    """证据核验闸门：evidence_supported=False 的 hybrid 即使高置信也强制人工复核。"""
+    status, _, confirmed_by = _auto_confirm(
+        {"violation_type": "hybrid", "confidence": 0.95, "evidence_supported": False}, _CFG
+    )
+    assert status == "pending_confirm"
+    assert confirmed_by is None
+    # 支撑（True）与未引用（None）不拦自动确认
+    status, _, _ = _auto_confirm(
+        {"violation_type": "hybrid", "confidence": 0.95, "evidence_supported": True}, _CFG
+    )
+    assert status == "confirmed"
+    status, _, _ = _auto_confirm(
+        {"violation_type": "hybrid", "confidence": 0.95, "evidence_supported": None}, _CFG
+    )
+    assert status == "confirmed"

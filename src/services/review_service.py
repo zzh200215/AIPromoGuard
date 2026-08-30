@@ -360,10 +360,14 @@ def _auto_confirm(finding: dict, cfg: dict) -> tuple[str, datetime | None, int |
 
     - violation_type in (rule, hybrid) 且 confidence >= threshold → 自动 confirmed，
       confirmed_by=0（系统自动），confirmed_at 记录自动确认时刻。
+    - evidence_supported=False（引用的法规不在召回条款中，证据核验关卡标记）
+      → 即使 hybrid 高置信也强制 pending_confirm：引用幻觉必须由人工裁决。
     - 其余（纯 llm、低于阈值的 rule/hybrid）→ pending_confirm。
     - cfg 为空或 enabled=false 时全部 pending_confirm（开关回退）。
     """
     if not cfg.get("enabled", True):
+        return "pending_confirm", None, None
+    if finding.get("evidence_supported") is False:
         return "pending_confirm", None, None
     threshold = float(cfg.get("threshold", 0.85))
     vtype = str(finding.get("violation_type", "rule"))

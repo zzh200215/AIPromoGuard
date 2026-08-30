@@ -28,6 +28,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.core.agents.nodes.regulation_match import regulation_match  # noqa: E402
 from src.core.llm.client import get_llm, merge_usage  # noqa: E402
+from src.services.evidence import (
+    citation_supported,  # noqa: F401,E402  生产流复用同一实现，此处 re-export
+)
 from src.utils.logger import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
@@ -55,7 +58,6 @@ _CONTEXT_SYSTEM = (
 
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.S)
 _MAX_FINDINGS_PER_CASE = 6  # 单案例判定的结论数上限（控成本，超出部分计数不判）
-_CITE_NAME_RE = re.compile(r"《([^》]{4,40})》")
 
 
 def _load_evaluate():
@@ -131,29 +133,6 @@ def judge_finding(llm, case_text: str, finding: dict) -> tuple[dict | None, dict
     if not data or data.get("verdict") not in ("true_violation", "false_positive", "wrong_basis"):
         return None, usage
     return {"verdict": data["verdict"], "reason": str(data.get("reason") or "")}, usage
-
-
-def citation_supported(finding: dict, articles: list[dict]) -> bool | None:
-    """结论引用的法规是否出现在召回上下文（确定性检查，零 LLM）。
-
-    结论未引用法规（regulation 为空 / 无可匹配名）→ None（不参与统计）；
-    有《书名号》名时按名匹配；否则退化为子串匹配——召回法规名出现在引用
-    文本中即支撑；引用文本里找不到任何召回法规名（含"根据监管规定"式泛引）
-    记为不可支撑。
-    """
-    citation = (finding.get("regulation") or "").strip()
-    if not citation:
-        return None
-    recalled = {str(a.get("regulation_name") or "").strip("《》") for a in articles}
-    recalled.discard("")
-    if not recalled:
-        return None
-    names = _CITE_NAME_RE.findall(citation)
-    if names:
-        return any(name in recalled for name in names)
-    if len(citation) < 6:
-        return None
-    return any(name in citation for name in recalled)
 
 
 def judge_context(llm, case_text: str, articles: list[dict]) -> tuple[dict | None, dict | None]:

@@ -55,9 +55,13 @@ def render_markdown(report: dict) -> str:
         for v in violations:
             # page/paragraph 值可能为 None（txt/docx 块无页码），get 默认值对 None 不生效
             location = f"第{v.get('page') or '-'}页/第{v.get('paragraph') or '-'}段"
+            source = _SOURCE_LABEL.get(v.get("source"), v.get("source"))
+            if v.get("evidence_supported") is False:
+                # 证据核验交接关卡：引用的法规不在召回条款中（含泛引）→ 强制人工复核
+                source = f"{source} ⚠️证据待核"
             lines.append(
                 f"| {_RISK_LABEL.get(v.get('risk_level'), v.get('risk_level'))} "
-                f"| {_SOURCE_LABEL.get(v.get('source'), v.get('source'))} "
+                f"| {source} "
                 f"| {_escape(v.get('type')) or '—'} "
                 f"| {v.get('confidence', '—')} "
                 f"| {_escape(v.get('rule_name') or v.get('description'))} "

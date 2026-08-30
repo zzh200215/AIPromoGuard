@@ -316,3 +316,52 @@ def test_classify_config_driven_new_domain(monkeypatch):
         SimpleNamespace(app_config=lambda section: {}),
     )
     assert c._detect_domain("本信托计划由受托人管理") is None
+
+
+def test_conflict_resolve_evidence_verification():
+    """证据核验交接关卡：llm/hybrid 结论带 evidence_supported 三态，rule 结论不标注。"""
+    state = {
+        "matched_articles": [
+            {"regulation_name": "互联网保险业务监管办法", "article_no": "第二十六条"}
+        ],
+        "rule_hits": [
+            {
+                "rule_id": 1,
+                "rule_name": "禁止保本保收益",
+                "matched_text": "保本保收益",
+                "page": 1,
+                "paragraph": 1,
+                "confidence": 0.95,
+                "severity": "high",
+                "description": "d",
+            }
+        ],
+        "llm_findings": [
+            {   # 引用法规在召回条款中 → 支撑
+                "issue": "保本承诺",
+                "original_text": "保本保收益",
+                "regulation": "《互联网保险业务监管办法》第二十六条",
+            },
+            {   # 引用法规不在召回条款中 → 不可支撑（幻觉引用/泛引）
+                "issue": "夸大宣传",
+                "original_text": "稳赚不赔",
+                "regulation": "《某随机办法》第五条",
+            },
+            {   # 未引用法规 → None
+                "issue": "模糊表述",
+                "original_text": "收益可观",
+                "regulation": "",
+            },
+        ],
+    }
+    merged = conflict_resolve(state)["merged_findings"]
+    # 规则条目与交叉命中的 llm 条目并存：原文同为"保本保收益"，来源分别是 rule 与 hybrid
+    rule_entry = next(m for m in merged if m["source"] == "rule")
+    assert "evidence_supported" not in rule_entry  # 规则路走结构化关联溯源，不做文本核验
+    hybrid_entry = next(m for m in merged if m["source"] == "hybrid")
+    assert hybrid_entry["evidence_supported"] is True  # 交叉命中的自由文本引用同样被核验
+    llm_supported = {
+        m["original_text"]: m["evidence_supported"] for m in merged if m["source"] == "llm"
+    }
+    assert llm_supported["稳赚不赔"] is False
+    assert llm_supported["收益可观"] is None

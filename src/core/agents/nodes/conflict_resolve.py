@@ -2,9 +2,16 @@
 
 规则优先策略：规则引擎命中即权威采信；LLM 单独检出的违规标注"建议关注"；
 规则与 LLM 均命中的合并为 hybrid（交叉验证，置信度提升）。
+
+证据核验交接关卡：llm/hybrid 结论的法规引用是自由文本，落库前先对召回条款
+做确定性核验（src/services/evidence，零 LLM）——引用的法规不在召回上下文中
+（含泛引）标记 evidence_supported=False，Markdown 报告可见且不参与自动确认。
+规则路的依据是规则-法规关联表的结构化溯源（review_service._citation_for_rule），
+不经过自由文本引用，不做此核验。
 """
 
 from src.core.agents.state import ReviewState
+from src.services import evidence
 
 # 规则 DSL 无违规性质字段，按 severity 推导（risk_assess 的类型权重需要）：
 # high 规则（如"禁止刚性兑付"）语义上属禁止性，medium 属限制性，low 属披露性。
@@ -29,6 +36,7 @@ def _overlaps(a: str, b: str) -> bool:
 def conflict_resolve(state: ReviewState) -> dict:
     rule_hits = state.get("rule_hits", [])
     llm_findings = state.get("llm_findings", [])
+    articles = state.get("matched_articles", [])
 
     merged: list[dict] = []
     for hit in rule_hits:
@@ -69,6 +77,7 @@ def conflict_resolve(state: ReviewState) -> dict:
                 "regulation": item.get("regulation"),
                 "suggestion": item.get("suggestion"),
                 "flag": None if confirmed else "建议关注",
+                "evidence_supported": evidence.citation_supported(item, articles),
             }
         )
 
