@@ -236,9 +236,10 @@ def mine_from_regulations(
 ) -> list[dict]:
     """主挖掘流程：选条款 → LLM 提炼 → 三重预校验 → 落 draft 规则。"""
     from src.core.llm.client import get_llm
+    from src.core.llm.usage_ledger import recording_llm
     from src.models import Article, Regulation, Rule, RuleRegulationLink
 
-    llm = get_llm()
+    llm = recording_llm(get_llm())
     if llm is None:
         raise SystemExit("未配置 DASHSCOPE_API_KEY，无法挖掘规则候选")
 
@@ -418,6 +419,7 @@ def main() -> None:
         export_approved(Path(args.out))
         return
 
+    from src.core.llm.usage_ledger import print_cost_summary
     from src.infrastructure.database.mysql import SessionLocal
 
     db = SessionLocal()
@@ -432,6 +434,7 @@ def main() -> None:
         )
     finally:
         db.close()
+    print_cost_summary("规则挖掘")
 
 
 if __name__ == "__main__":

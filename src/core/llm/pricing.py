@@ -29,13 +29,16 @@ def resolve_price(model: str | None) -> tuple[float, float] | tuple[None, None]:
 def estimate_cost(usage: dict, model: str | None) -> dict:
     """由 token 用量预估成本（元）。未收录模型 priced=False，只统计 token。
 
-    返回 {"estimated_cost_cny": float | None, "priced": bool}，就地并报告告不修改入参。
+    返回 {"estimated_cost_cny": float | None, "priced": bool}，不修改入参。
+    记录缺失 prompt/completion 拆分时按输入价保守估算总量。
     """
     input_rate, output_rate = resolve_price(model)
     if input_rate is None:
         return {"estimated_cost_cny": None, "priced": False}
-    cost = (
-        int(usage.get("prompt_tokens") or 0) * input_rate / 1_000_000
-        + int(usage.get("completion_tokens") or 0) * output_rate / 1_000_000
-    )
-    return {"estimated_cost_cny": round(cost, 4), "priced": True}
+    prompt = int(usage.get("prompt_tokens") or 0)
+    completion = int(usage.get("completion_tokens") or 0)
+    if prompt + completion == 0:
+        prompt = int(usage.get("total_tokens") or 0)
+    cost = prompt * input_rate / 1_000_000 + completion * output_rate / 1_000_000
+    # 保留 6 位：小额调用（几十 token）在 4 位精度下会整成 0
+    return {"estimated_cost_cny": round(cost, 6), "priced": True}

@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
 
 from src.core.llm.client import get_llm, merge_usage  # noqa: E402
+from src.core.llm.usage_ledger import print_cost_summary, recording_llm  # noqa: E402
 from src.utils.config import settings  # noqa: E402
 from src.utils.logger import get_logger  # noqa: E402
 
@@ -161,10 +162,15 @@ def main() -> int:
     if not settings.dashscope_api_key:
         print("未配置 DASHSCOPE_API_KEY，无法跑 naive/full 对比（exit 2）")
         return 2
-    llm = get_llm()
+    llm = recording_llm(get_llm())
     if llm is None:
         print("LLM 客户端初始化失败（exit 2）")
         return 2
+    # full 臂经 evaluate → llm_scan.get_llm() 另起客户端，包上同一记账层
+    from src.core.agents.nodes import llm_scan as _llm_scan
+
+    _orig_get_llm = _llm_scan.get_llm
+    _llm_scan.get_llm = lambda: recording_llm(_orig_get_llm())
 
     data = json.loads(Path(args.cases).read_text(encoding="utf-8"))
     cases = data["cases"][: args.limit] if args.limit else data["cases"]
@@ -236,6 +242,7 @@ def main() -> int:
             f"（极差 {_fmt_pct(spread)}）| 误报率 {_fmt_pct(mean_fpr)}"
         )
     print(f"naive token 用量：{naive_usage}")
+    print_cost_summary("baseline")
 
     if args.out:
         out_path = Path(args.out)

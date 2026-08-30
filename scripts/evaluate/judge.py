@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.core.agents.nodes.regulation_match import regulation_match  # noqa: E402
 from src.core.llm.client import get_llm, merge_usage  # noqa: E402
+from src.core.llm.usage_ledger import print_cost_summary, recording_llm  # noqa: E402
 from src.services.evidence import (
     citation_supported,  # noqa: F401,E402  生产流复用同一实现，此处 re-export
 )
@@ -233,7 +234,7 @@ def main() -> int:
     parser.add_argument("--out", default=None, help="结果 JSON 输出路径（缺省只打印）")
     args = parser.parse_args()
 
-    llm = get_llm()
+    llm = recording_llm(get_llm())
     if llm is None:
         print("未配置 DASHSCOPE_API_KEY，Judge 评估需要 LLM（CI 不运行本脚本）")
         return 2
@@ -280,9 +281,9 @@ def main() -> int:
         f" / false_positive {summary['verdicts']['false_positive']}"
         f" / wrong_basis {summary['verdicts']['wrong_basis']}）\n"
         f"span 口径召回 {summary['span_recall']}（对照既有口径）\n"
-        f"引用可支撑率 {summary['citation_support']}  检索相关性 {summary['context_precision']}\n"
-        f"token: {summary['usage']}"
+        f"引用可支撑率 {summary['citation_support']}  检索相关性 {summary['context_precision']}"
     )
+    print_cost_summary("Judge")
     if args.out:
         Path(args.out).write_text(
             json.dumps({"summary": summary, "cases": results}, ensure_ascii=False, indent=2),

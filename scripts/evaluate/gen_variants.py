@@ -207,12 +207,13 @@ def main() -> None:
     args = parser.parse_args()
 
     from src.core.llm.client import get_llm
+    from src.core.llm.usage_ledger import print_cost_summary, recording_llm
     from src.infrastructure.database.mysql import SessionLocal
 
     db = SessionLocal()
     try:
         rules = load_rules_for_validation(db, limit=args.limit)
-        llm = get_llm()
+        llm = recording_llm(get_llm())
         if llm is None:
             raise SystemExit("未配置 DASHSCOPE_API_KEY")
 
@@ -323,6 +324,7 @@ def main() -> None:
             f"终验②：挖掘对抗样本 {len(mined_cases)} case: "
             f"全引擎召回 {m_tp}/{m_gt} 误报 {m_fp}/{m_fd}"
         )
+        print_cost_summary("gen_variants")
         return 0 if gate_ok else 1
     finally:
         db.close()

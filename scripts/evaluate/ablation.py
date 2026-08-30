@@ -29,6 +29,7 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
 
+from src.core.llm.usage_ledger import print_cost_summary, recording_llm  # noqa: E402
 from src.utils.config import settings  # noqa: E402
 from src.utils.logger import get_logger  # noqa: E402
 
@@ -113,6 +114,12 @@ def main() -> int:
         print("未配置 DASHSCOPE_API_KEY，无法跑全链路消融（exit 2）")
         return 2
 
+    # 全链路各臂经 evaluate → llm_scan.get_llm() 取客户端，包上运行级记账层
+    from src.core.agents.nodes import llm_scan as _llm_scan
+
+    _orig_get_llm = _llm_scan.get_llm
+    _llm_scan.get_llm = lambda: recording_llm(_orig_get_llm())
+
     data = json.loads(Path(args.cases).read_text(encoding="utf-8"))
     cases = data["cases"][: args.limit] if args.limit else data["cases"]
     ev = _load_module("evaluate_for_ablation", _EVALUATE_PATH)
@@ -186,6 +193,7 @@ def main() -> int:
             encoding="utf-8",
         )
         print(f"\n明细已写入 {args.out}")
+    print_cost_summary("ablation")
     return 0
 
 
