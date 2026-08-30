@@ -136,7 +136,7 @@ import { DOMAIN_OPTIONS, PROFILE_OPTIONS } from '@/constants/enums'
 import type { Domain } from '@/types/api'
 import type { ReviewProfile } from '@/types/task'
 
-const DOC_TYPES = ['说明书', '协议', '宣传材料']
+const DOC_TYPES = ['说明书', '协议', '宣传材料', '宣传图片']
 
 const COMPARE_MODES = [
   { label: '普通审查', value: 'normal' },
