@@ -42,6 +42,7 @@ class TaskOut(BaseModel):
     status: str
     progress: int
     stages: dict | None = None  # 各 Agent 节点状态/耗时（PRD §11.3）
+    llm_usage: dict | None = None  # LLM token 用量/预估成本（成本归因）
     created_at: datetime
     started_at: datetime | None = None
     completed_at: datetime | None = None

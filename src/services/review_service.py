@@ -286,6 +286,7 @@ def _finalize_task(db, task: ReviewTask, result: dict) -> None:
     _persist_results(db, task.id, findings)
 
     task.stages = result.get("stage_log")  # 各 Agent 节点耗时（W14）
+    task.llm_usage = result.get("llm_usage")  # token 用量/预估成本（成本归因）
     task.report_path = result.get("report_path")
     task.status = "completed"
     task.progress = 100

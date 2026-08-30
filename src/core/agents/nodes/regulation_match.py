@@ -41,11 +41,13 @@ def regulation_match(state: ReviewState) -> dict:
 
         # P3 Agentic RAG（可选）：充分性自评 + 按需补检；未配置 key / 失败时保持基础召回
         retrieval_meta: dict = {}
+        retrieval_model: str | None = None
         if cfg.get("agentic_retrieval", False):
             llm = get_llm()
-            if llm is not None and cfg.get("llm_cache", False):
-                llm = CachedLLM(llm)  # P5：评估 prompt 确定性，同文档复测零成本
             if llm is not None:
+                retrieval_model = getattr(llm, "model", None)
+                if cfg.get("llm_cache", False):
+                    llm = CachedLLM(llm)  # P5：评估 prompt 确定性，同文档复测零成本
                 try:
                     articles, retrieval_meta = agentic_retrieval.agentic_refine(
                         db,
@@ -88,4 +90,12 @@ def regulation_match(state: ReviewState) -> dict:
     finally:
         db.close()
 
-    return {"matched_articles": articles, "retrieval_meta": retrieval_meta}
+    # agentic 检索的 token 用量并入 llm_usage（state reducer 累加，成本归因覆盖检索侧）
+    usage = retrieval_meta.get("usage")
+    usage_delta = {**usage, "model": retrieval_model} if usage else None
+
+    return {
+        "matched_articles": articles,
+        "retrieval_meta": retrieval_meta,
+        "llm_usage": usage_delta,
+    }

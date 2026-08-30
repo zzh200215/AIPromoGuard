@@ -10,6 +10,31 @@ def _merge_stage_logs(a: dict | None, b: dict | None) -> dict:
     return merged
 
 
+_LLM_USAGE_NUMERIC = (
+    "prompt_tokens",
+    "completion_tokens",
+    "total_tokens",
+    "calls",
+    "failed_blocks",
+)
+
+
+def _merge_llm_usage(a: dict | None, b: dict | None) -> dict | None:
+    """llm_usage 合并器（reducer）：llm_scan 与 agentic 检索各自累计的 token 用量相加。
+
+    无任何真实用量（全 None/零）时归一为 None，保持 no-LLM 路径下
+    state.llm_usage 缺省语义（报告省略字段、API 返回 None）。
+    """
+    merged = dict(a or {})
+    for key in _LLM_USAGE_NUMERIC:
+        merged[key] = int(merged.get(key) or 0) + int((b or {}).get(key) or 0)
+    if not merged.get("model"):
+        merged["model"] = (b or {}).get("model")
+    if not merged.get("total_tokens") and not merged.get("calls"):
+        return None
+    return merged
+
+
 class ReviewState(TypedDict, total=False):
     task_id: int
     document_path: str
@@ -22,7 +47,8 @@ class ReviewState(TypedDict, total=False):
     retrieval_meta: dict[str, Any]  # 检索过程元数据（agentic 轮次/补检查询/token 用量，可观测）
     rule_hits: list[dict[str, Any]]
     llm_findings: list[dict[str, Any]]
-    llm_usage: dict[str, Any]  # LLM token 用量/调用统计（成本观测，随报告落盘）
+    # LLM token 用量/调用统计（成本观测，随报告落盘）；reducer 累加多节点用量
+    llm_usage: Annotated[dict[str, Any], _merge_llm_usage]
     merged_findings: list[dict[str, Any]]
     human_review: dict[str, Any]  # 人工复核关卡结果（interrupt 决策记录，未启用时无此键）
     diff_changes: list[dict[str, Any]]  # 对比审查变更片段（普通任务不存在）

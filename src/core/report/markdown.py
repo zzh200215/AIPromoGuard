@@ -30,16 +30,16 @@ def render_markdown(report: dict) -> str:
 
     usage = report.get("llm_usage")
     if usage:
-        lines.append(
+        usage_line = (
             f"LLM 用量：{usage.get('model', '-')} 共 {usage.get('calls', 0)} 次调用 / "
             f"{usage.get('total_tokens', 0)} tokens"
-            + (
-                f"（{usage.get('failed_blocks', 0)} 块降级）"
-                if usage.get("failed_blocks")
-                else ""
-            )
         )
-        lines.append("")
+        cost = usage.get("estimated_cost_cny")
+        if cost is not None:
+            usage_line += f" / 预估 ¥{cost:.2f}（按牌价）"
+        if usage.get("failed_blocks"):
+            usage_line += f"（{usage.get('failed_blocks', 0)} 块降级）"
+        lines += [usage_line, ""]
 
     lines += [
         "## 二、违规明细",
@@ -89,6 +89,21 @@ def render_markdown(report: dict) -> str:
             )
     else:
         lines.append("知识图谱未匹配到关联处罚案例（Neo4j 图谱未启用或该领域无对应案例）。")
+
+    lines += ["", "## 五、待人工核验清单", ""]
+    pending = report.get("pending_verification") or []
+    if pending:
+        lines.append("以下各项自动核验未覆盖或需业务材料佐证，请人工确认后再对外发布结论：")
+        lines.append("")
+        for item in pending:
+            location = f"第{item.get('page') or '-'}页/第{item.get('paragraph') or '-'}段"
+            lines.append(
+                f"- **[{_RISK_LABEL.get(item.get('risk_level'), item.get('risk_level') or '—')}]** "
+                f"{_escape(item.get('original_text'))[:60]} —— "
+                f"{'；'.join(item.get('reasons') or [])}（{location}）"
+            )
+    else:
+        lines.append("无。本报告没有需要人工补充核验的存疑项。")
 
     diff = report.get("diff_changes") or []
     if diff:

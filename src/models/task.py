@@ -18,6 +18,7 @@ class ReviewTask(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     progress: Mapped[int] = mapped_column(default=0, nullable=False)  # 0-100
     stages: Mapped[dict | None] = mapped_column(JSON)  # 各 Agent 节点状态/耗时（PRD §11.3）
+    llm_usage: Mapped[dict | None] = mapped_column(JSON)  # LLM token 用量/预估成本（成本归因）
     created_by: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
