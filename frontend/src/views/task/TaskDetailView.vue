@@ -47,6 +47,13 @@
                 class="summary-card"
               />
               <el-alert
+                v-if="usageText"
+                :title="usageText"
+                type="info"
+                :closable="false"
+                class="summary-card"
+              />
+              <el-alert
                 v-if="report.message && !report.violations?.length"
                 :title="report.message"
                 type="warning"
@@ -60,6 +67,34 @@
                 <el-button type="primary" plain @click="download('pdf')">下载 PDF</el-button>
               </div>
               <ViolationTable :violations="report.violations ?? []" />
+              <el-card
+                v-if="report.pending_verification?.length"
+                class="summary-card pending-card"
+              >
+                <template #header>
+                  <span class="pending-title">
+                    待人工核验清单（{{ report.pending_verification.length }}）
+                  </span>
+                </template>
+                <ul class="pending-list">
+                  <li v-for="(item, i) in report.pending_verification" :key="i">
+                    <div class="pending-main">
+                      <el-tag
+                        :type="SEVERITY_TAG_TYPE[item.risk_level ?? 'low']"
+                        size="small"
+                        class="pending-risk"
+                      >
+                        {{ SEVERITY_LABELS[item.risk_level ?? 'low'] }}风险
+                      </el-tag>
+                      <span class="pending-text">{{ item.original_text }}</span>
+                      <span v-if="item.page" class="pending-loc">
+                        第{{ item.page }}页/第{{ item.paragraph ?? '-' }}段
+                      </span>
+                    </div>
+                    <div class="pending-reasons">{{ item.reasons.join('；') }}</div>
+                  </li>
+                </ul>
+              </el-card>
             </template>
           </div>
         </el-tab-pane>
@@ -92,7 +127,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { downloadReport, getReport } from '@/api/reports'
 import { listResults } from '@/api/results'
 import { useTaskPolling } from '@/composables/useTaskPolling'
-import { DOMAIN_LABELS, PROFILE_LABELS } from '@/constants/enums'
+import { DOMAIN_LABELS, PROFILE_LABELS, SEVERITY_LABELS, SEVERITY_TAG_TYPE } from '@/constants/enums'
 import { useAuthStore } from '@/stores/auth'
 import type { ReportData } from '@/types/report'
 import type { ReviewResult } from '@/types/result'
@@ -109,6 +144,22 @@ const { task, start } = useTaskPolling(taskId)
 const isRunning = computed(() => {
   const s = task.value?.status
   return s === 'pending' || s === 'running' || s === 'processing'
+})
+
+/** LLM 用量一行文案（成本归因，无 LLM 调用时报告省略该字段） */
+const usageText = computed(() => {
+  const u = report.value?.llm_usage
+  if (!u?.calls) return ''
+  const parts = [
+    `LLM 用量：${u.model || '—'}`,
+    `${u.calls} 次调用`,
+    `${(u.total_tokens ?? 0).toLocaleString()} tokens`,
+  ]
+  if (u.priced && u.estimated_cost_cny != null) {
+    parts.push(`预估 ¥${u.estimated_cost_cny.toFixed(2)}（按牌价）`)
+  }
+  if (u.failed_blocks) parts.push(`${u.failed_blocks} 块降级`)
+  return parts.join(' · ')
 })
 
 const activeTab = ref('report')
@@ -218,5 +269,48 @@ onMounted(() => {
 
 .report-actions {
   margin-bottom: 16px;
+}
+
+.pending-card :deep(.el-card__header) {
+  padding: 10px 16px;
+}
+
+.pending-title {
+  font-weight: 600;
+  color: #e6a23c;
+}
+
+.pending-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pending-list li + li {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #ebeef5;
+}
+
+.pending-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pending-text {
+  color: #303133;
+}
+
+.pending-loc {
+  color: #909399;
+  font-size: 12px;
+}
+
+.pending-reasons {
+  margin-top: 4px;
+  color: #909399;
+  font-size: 12px;
 }
 </style>

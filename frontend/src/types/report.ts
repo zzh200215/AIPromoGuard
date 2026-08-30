@@ -5,6 +5,8 @@ export interface ReportSummary {
   high_risk: number
   medium_risk: number
   low_risk: number
+  /** 待人工核验项数量（见 src/core/report/generator.py） */
+  pending_verification?: number
 }
 
 /** 相似处罚案例（图谱推荐，risk_assess 注入） */
@@ -41,6 +43,29 @@ export interface ViolationItem {
   related_cases: RelatedCase[]
 }
 
+/** LLM 用量与预估成本（成本归因，随报告落盘；无 LLM 调用时省略） */
+export interface LlmUsage {
+  prompt_tokens?: number
+  completion_tokens?: number
+  total_tokens?: number
+  calls?: number
+  model?: string
+  failed_blocks?: number
+  /** 牌价预估（元）；未收录模型 priced=false 时为 null */
+  estimated_cost_cny?: number | null
+  priced?: boolean
+}
+
+/** 待人工核验项：机器无法闭环背书的存疑项（证据未命中/无引用/适当性需材料） */
+export interface PendingVerificationItem {
+  risk_level?: Severity
+  original_text: string
+  description?: string
+  page?: number
+  paragraph?: number
+  reasons: string[]
+}
+
 export interface ReportData {
   report_version: string
   task_id: number
@@ -49,6 +74,8 @@ export interface ReportData {
   generated_at: string
   summary: ReportSummary
   violations: ViolationItem[]
+  llm_usage?: LlmUsage
+  pending_verification?: PendingVerificationItem[]
   /** 未完成时存在：报告生成中占位 */
   message?: string
 }
