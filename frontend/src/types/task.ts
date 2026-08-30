@@ -15,12 +15,16 @@ export interface TaskStageDetail {
   cost_ms: number
 }
 
+/** 审查策略：strict=对外投放(全量人工复核) / standard=常规 / loose=内部预检 */
+export type ReviewProfile = 'strict' | 'standard' | 'loose'
+
 export interface TaskOut {
   id: number
   task_name: string
   document_name: string
   document_type?: string
   domain?: string
+  profile?: ReviewProfile
   status: string
   progress: number
   stages?: Record<string, TaskStageDetail>
@@ -36,5 +40,6 @@ export interface TaskCreate {
   task_name?: string
   document_type?: string
   domain?: string
+  profile?: ReviewProfile
   base_document_id?: string
 }

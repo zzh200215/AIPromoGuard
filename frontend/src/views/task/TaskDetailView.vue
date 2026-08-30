@@ -9,6 +9,9 @@
         <el-descriptions-item label="领域">
           {{ task.domain ? DOMAIN_LABELS[task.domain] : '—' }}
         </el-descriptions-item>
+        <el-descriptions-item label="审查策略">
+          {{ PROFILE_LABELS[task.profile || 'standard'] }}
+        </el-descriptions-item>
         <el-descriptions-item label="状态">
           <TaskStatusTag :status="task.status" />
         </el-descriptions-item>
@@ -89,7 +92,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { downloadReport, getReport } from '@/api/reports'
 import { listResults } from '@/api/results'
 import { useTaskPolling } from '@/composables/useTaskPolling'
-import { DOMAIN_LABELS } from '@/constants/enums'
+import { DOMAIN_LABELS, PROFILE_LABELS } from '@/constants/enums'
 import { useAuthStore } from '@/stores/auth'
 import type { ReportData } from '@/types/report'
 import type { ReviewResult } from '@/types/result'

@@ -15,6 +15,19 @@ export const DOMAIN_OPTIONS: Array<{ value: Domain; label: string }> = [
   { value: 'insurance', label: DOMAIN_LABELS.insurance },
 ]
 
+/** 审查策略（对齐 src/core/profiles.py）：不传 = standard */
+export const PROFILE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'standard', label: '常规审查' },
+  { value: 'strict', label: '对外投放（全量人工复核）' },
+  { value: 'loose', label: '内部预检（快速过审）' },
+]
+
+export const PROFILE_LABELS: Record<string, string> = {
+  strict: '对外投放',
+  standard: '常规审查',
+  loose: '内部预检',
+}
+
 export const SEVERITY_LABELS: Record<Severity, string> = {
   high: '高',
   medium: '中',

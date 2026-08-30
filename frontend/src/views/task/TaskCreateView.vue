@@ -81,6 +81,17 @@
               />
             </el-select>
           </el-form-item>
+          <el-form-item label="审查策略">
+            <el-select v-model="form.profile" placeholder="默认常规审查">
+              <el-option
+                v-for="p in PROFILE_OPTIONS"
+                :key="p.value"
+                :label="p.label"
+                :value="p.value"
+              />
+            </el-select>
+            <div class="profile-tip">{{ PROFILE_TIP[form.profile] }}</div>
+          </el-form-item>
         </el-form>
       </div>
 
@@ -121,8 +132,9 @@
 import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { createTask } from '@/api/tasks'
-import { DOMAIN_OPTIONS } from '@/constants/enums'
+import { DOMAIN_OPTIONS, PROFILE_OPTIONS } from '@/constants/enums'
 import type { Domain } from '@/types/api'
+import type { ReviewProfile } from '@/types/task'
 
 const DOC_TYPES = ['说明书', '协议', '宣传材料']
 
@@ -130,6 +142,13 @@ const COMPARE_MODES = [
   { label: '普通审查', value: 'normal' },
   { label: '对比审查（旧版+新版）', value: 'compare' },
 ]
+
+/** 策略说明：与 src/core/profiles.py 三档语义一致 */
+const PROFILE_TIP: Record<string, string> = {
+  standard: '跟随系统配置：规则/双引擎高置信自动确认，其余进人工复核队列',
+  strict: '对外投放：全部结论强制人工确认，自动确认关闭',
+  loose: '内部预检：跳过人工复核关卡，放宽自动确认，适合草稿快速过审',
+}
 
 const router = useRouter()
 
@@ -144,6 +163,7 @@ const form = reactive({
   taskName: '',
   documentType: '',
   domain: '' as Domain | '',
+  profile: 'standard' as ReviewProfile | '',
 })
 
 /** 下一步是否可用：普通模式需新版文档；对比模式需旧版+新版 */
@@ -210,6 +230,7 @@ async function submit() {
       task_name: form.taskName || undefined,
       document_type: form.documentType || undefined,
       domain: form.domain || undefined,
+      profile: form.profile || undefined,
     })
     ElMessage.success('任务已创建，开始审查')
     router.push(`/tasks/${res.task_id}`)
@@ -267,6 +288,13 @@ async function submit() {
 .create-form {
   width: 100%;
   max-width: 520px;
+}
+
+.profile-tip {
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 4px;
 }
 
 .flow-tip {
