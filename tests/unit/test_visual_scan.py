@@ -1,0 +1,185 @@
+"""视觉层审查（VLM）测试：归一/降级/conflict_resolve 合入/待核验/标签。"""
+
+import pytest
+from src.core.agents.nodes.conflict_resolve import conflict_resolve
+from src.core.report.generator import build_report
+from src.core.report.markdown import render_markdown
+from src.services import visual_scan
+from src.services.review_service import _auto_confirm
+from src.utils.config import settings
+
+_VLM_JSON = (
+    '{"findings": ['
+    '{"issue": "收益数字放大", "reason": "5.8% 用 72px 红字居中", '
+    '"original_text": "预期年化收益率 5.8%", "severity": "high", '
+    '"confidence": 0.9, "suggestion": "统一字号"},'
+    '{"issue": "", "reason": "缺 issue 丢弃"},'
+    '{"issue": "图形暗示", "severity": "critical", "confidence": 5}'
+    ']}'
+)
+
+
+class _FakeMessage:
+    def __init__(self, content):
+        self.content = content
+
+
+class _FakeChoice:
+    def __init__(self, content):
+        self.message = _FakeMessage(content)
+
+
+class _FakeUsage:
+    prompt_tokens = 100
+    completion_tokens = 50
+    total_tokens = 150
+
+
+class _FakeResp:
+    def __init__(self, content=_VLM_JSON):
+        self.choices = [_FakeChoice(content)]
+        self.usage = _FakeUsage()
+
+
+class _FakeCompletions:
+    def __init__(self, resp):
+        self._resp = resp
+        self.kwargs = None
+
+    def create(self, **kwargs):
+        self.kwargs = kwargs
+        if isinstance(self._resp, Exception):
+            raise self._resp
+        return self._resp
+
+
+class _FakeChat:
+    def __init__(self, resp):
+        self.completions = _FakeCompletions(resp)
+
+
+class _FakeClient:
+    def __init__(self, resp):
+        self.chat = _FakeChat(resp)
+
+
+@pytest.fixture(autouse=True)
+def _vlm_on(monkeypatch):
+    monkeypatch.setattr(settings, "dashscope_api_key", "key")
+    monkeypatch.setattr(settings, "vlm_enabled", True)
+    monkeypatch.setattr(settings, "vlm_model", "qwen-vl-plus")
+
+
+def _image(tmp_path, ext="png"):
+    path = tmp_path / f"poster.{ext}"
+    path.write_bytes(b"\x89fake-image-bytes")
+    return str(path)
+
+
+# ---------- scan_image_visual ----------
+
+
+def _scan(tmp_path, client, ext="png", text="text"):
+    return visual_scan.scan_image_visual(_image(tmp_path, ext), text, None, client)
+
+
+def test_scan_success_normalizes_and_returns_usage(tmp_path):
+    client = _FakeClient(_FakeResp())
+    findings, usage = _scan(tmp_path, client, text="预期年化收益率 5.8%")
+    assert len(findings) == 2  # 缺 issue 的条目被丢弃
+    first = findings[0]
+    assert first["issue"] == "收益数字放大"
+    assert first["severity"] == "high"
+    assert first["confidence"] == 0.9
+    second = findings[1]
+    assert second["severity"] == "medium"  # critical 夹取回 medium
+    assert second["confidence"] == 1.0  # 越界夹取到上界（0.7 仅用于缺失）
+    assert usage["total_tokens"] == 150
+    # 模型与图片走多模态消息结构
+    assert client.chat.completions.kwargs["model"] == "qwen-vl-plus"
+    content = client.chat.completions.kwargs["messages"][1]["content"]
+    assert content[1]["type"] == "image_url"
+    assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
+
+
+def test_scan_no_key_degrades(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "dashscope_api_key", "")
+    assert _scan(tmp_path, _FakeClient(_FakeResp())) == ([], None)
+
+
+def test_scan_disabled_degrades(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "vlm_enabled", False)
+    assert _scan(tmp_path, _FakeClient(_FakeResp())) == ([], None)
+
+
+def test_scan_client_error_degrades(tmp_path):
+    assert _scan(tmp_path, _FakeClient(RuntimeError("boom"))) == ([], None)
+
+
+def test_scan_unsupported_ext_skips_client(tmp_path):
+    client = _FakeClient(RuntimeError("不应被调用"))
+    assert _scan(tmp_path, client, ext="gif") == ([], None)
+
+
+# ---------- conflict_resolve 合入 ----------
+
+
+def test_conflict_resolve_merges_vlm_findings():
+    state = {
+        "rule_hits": [],
+        "llm_findings": [],
+        "vlm_findings": [
+            {
+                "issue": "收益数字放大",
+                "reason": "红字 72px",
+                "original_text": "预期年化收益率 5.8%",
+                "severity": "high",
+                "confidence": 0.9,
+                "suggestion": "统一字号",
+                "page": 1,
+            }
+        ],
+    }
+    merged = conflict_resolve(state)["merged_findings"]
+    assert len(merged) == 1
+    item = merged[0]
+    assert item["source"] == "vlm"
+    assert item["violation_type"] == "vlm"
+    assert item["type"] == "禁止性"  # severity 推导与规则路同口径
+    assert item["flag"] == "视觉关注"
+    assert item["evidence_supported"] is None
+    assert item["suggestion"] == "统一字号"
+
+
+# ---------- 分流与呈现 ----------
+
+
+def test_auto_confirm_never_confirms_vlm():
+    """视觉判断永不自动确认（含 loose 放宽后也不确认）。"""
+    loose = {"enabled": True, "threshold": 0.6}
+    status, _, _ = _auto_confirm({"violation_type": "vlm", "confidence": 0.99}, loose)
+    assert status == "pending_confirm"
+
+
+def test_report_pending_list_flags_vlm():
+    finding = {
+        "violation_type": "vlm",
+        "source": "vlm",
+        "rule_name": "收益数字放大",
+        "original_text": "预期年化收益率 5.8%",
+        "risk_level": "high",
+        "severity": "high",
+        "page": 1,
+    }
+    report = build_report(1, "海报.png", "banking", [finding])
+    pending = report["pending_verification"]
+    assert len(pending) == 1
+    assert "视觉层判断" in pending[0]["reasons"][0]
+    md = render_markdown(report)
+    assert "视觉模型" in md
+    assert "待人工核验清单" in md
+
+
+def test_vlm_model_setting_default():
+    assert settings.vlm_model == "qwen-vl-plus"
+    assert settings.vlm_enabled is True

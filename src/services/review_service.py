@@ -33,6 +33,7 @@ from src.models import (
 )
 from src.services.diff_service import build_review_blocks, diff_documents
 from src.services.document_service import document_service
+from src.services.visual_scan import scan_image_visual
 from src.utils.config import settings
 from src.utils.errors import AppError, ErrorCode
 from src.utils.logger import get_logger
@@ -254,6 +255,16 @@ def execute_review(task_id: int) -> None:
         db.commit()
 
         profile = safe_profile(task.profile)
+
+        # 图片文档：OCR 文本管线之外叠加视觉层审查（VLM，失败降级为空不阻断）
+        vlm_findings: list = []
+        vlm_usage = None
+        doc_ext = (task.document_path or "").rsplit(".", 1)[-1].lower()
+        if doc_ext in {"png", "jpg", "jpeg", "bmp"}:
+            vlm_findings, vlm_usage = scan_image_visual(
+                task.document_path, parsed.text, task.domain
+            )
+
         initial_state = {
             "task_id": task.id,
             "document_path": task.document_path,
@@ -263,6 +274,9 @@ def execute_review(task_id: int) -> None:
             "blocks": review_blocks,
             "diff_changes": diff_changes,
             "profile": profile,
+            "vlm_findings": vlm_findings,
+            # 预置视觉模型用量：reducer 与 llm_scan 的文本扫描用量相加（成本归因覆盖视觉层）
+            "llm_usage": vlm_usage,
         }
 
         if resolve_human_review(profile, _human_review_enabled()):

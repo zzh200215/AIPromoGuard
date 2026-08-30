@@ -49,6 +49,7 @@ class ReviewState(TypedDict, total=False):
     retrieval_meta: dict[str, Any]  # 检索过程元数据（agentic 轮次/补检查询/token 用量，可观测）
     rule_hits: list[dict[str, Any]]
     llm_findings: list[dict[str, Any]]
+    vlm_findings: list[dict[str, Any]]  # 视觉层审查 findings（VLM，图片文档专用，仅初始态写入）
     # LLM token 用量/调用统计（成本观测，随报告落盘）；reducer 累加多节点用量
     llm_usage: Annotated[dict[str, Any], _merge_llm_usage]
     merged_findings: list[dict[str, Any]]

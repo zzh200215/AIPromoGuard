@@ -81,6 +81,7 @@ export const VIOLATION_SOURCE_LABELS: Record<string, string> = {
   rule: '规则引擎',
   llm: 'LLM',
   hybrid: '混合',
+  vlm: '视觉模型',
 }
 
 export const ROLE_LABELS: Record<Role, string> = {

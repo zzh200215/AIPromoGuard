@@ -15,7 +15,9 @@ def _pending_reasons(finding: dict) -> list[str]:
     """单条 finding 的待核验原因；空列表表示可自动背书，不进清单。"""
     reasons: list[str] = []
     source = finding.get("violation_type") or finding.get("source")
-    if finding.get("evidence_supported") is False:
+    if source == "vlm":
+        reasons.append("视觉层判断基于图像排版/图形暗示，需人工对照原图确认")
+    elif finding.get("evidence_supported") is False:
         reasons.append("引用法规未在召回条款中命中，需人工核对法规原文")
     elif finding.get("evidence_supported") is None and source in ("llm", "hybrid"):
         reasons.append("未附法规引用或召回条款为空，自动证据核验未覆盖")

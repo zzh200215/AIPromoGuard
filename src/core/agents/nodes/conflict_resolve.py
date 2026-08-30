@@ -81,4 +81,28 @@ def conflict_resolve(state: ReviewState) -> dict:
             }
         )
 
+    # 视觉层（VLM，图片文档）：排版强调/图形暗示等文字引擎看不到的风险。
+    # 判断无法规引用概念（evidence 恒 None），severity 推导 type 与规则路同口径。
+    for item in state.get("vlm_findings", []):
+        severity = item.get("severity", "medium")
+        merged.append(
+            {
+                "source": "vlm",
+                "violation_type": "vlm",
+                "type": _SEVERITY_TYPE_MAP.get(severity, "披露性"),
+                "rule_id": None,
+                "rule_name": item.get("issue", ""),
+                "original_text": item.get("original_text", ""),
+                "page": item.get("page"),
+                "paragraph": item.get("paragraph"),
+                "confidence": item.get("confidence", 0.7),
+                "severity": severity,
+                "description": item.get("reason", ""),
+                "related_regulations": [],
+                "suggestion": item.get("suggestion"),
+                "flag": "视觉关注",
+                "evidence_supported": None,
+            }
+        )
+
     return {"merged_findings": merged}

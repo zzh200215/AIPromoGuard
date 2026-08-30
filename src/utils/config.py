@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.2
     llm_timeout: int = 120
 
+    # 视觉层审查（VLM，图片文档专用；走同一 DashScope 兼容端点的多模态模型）
+    vlm_model: str = "qwen-vl-plus"
+    vlm_enabled: bool = True
+
     # LLM 可观测性（Langfuse，可选：两 Key 均配置才启用，未配置时埋点 no-op）
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""

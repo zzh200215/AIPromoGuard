@@ -5,7 +5,7 @@ from typing import Any
 from src.core.profiles import PROFILE_LABELS
 
 _RISK_LABEL = {"high": "高", "medium": "中", "low": "低"}
-_SOURCE_LABEL = {"rule": "规则引擎", "llm": "LLM 语义", "hybrid": "规则+LLM"}
+_SOURCE_LABEL = {"rule": "规则引擎", "llm": "LLM 语义", "hybrid": "规则+LLM", "vlm": "视觉模型"}
 
 
 def _escape(text: Any) -> str:
