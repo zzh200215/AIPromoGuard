@@ -257,8 +257,8 @@ const todos = computed(() => {
     {
       label: '依据失效待更新',
       count: o.stale_materials?.stale_count ?? 0,
-      hint: '规则停用或法规废止，引用该依据的在用材料需更新',
-      to: '/materials',
+      hint: '规则停用或法规废止，引用该依据的在用材料需更新（影响中心可写入整改清单）',
+      to: '/impact',
       tone: 'amber',
     },
     {

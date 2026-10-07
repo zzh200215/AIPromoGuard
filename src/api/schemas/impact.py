@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class AssessmentCreate(BaseModel):
@@ -42,8 +42,17 @@ class AssessmentBatchCreate(BaseModel):
 
 
 class RemediationDecision(BaseModel):
-    task_id: int
+    """整改决策：审查整改项按 task_id、待更新项（stale）按 material_id 定位。"""
+
+    task_id: int | None = None
+    material_id: int | None = None
     decision: Literal["remediate", "reject", "done"]
+
+    @model_validator(mode="after")
+    def _require_identifier(self) -> "RemediationDecision":
+        if self.task_id is None and self.material_id is None:
+            raise ValueError("需提供 task_id 或 material_id")
+        return self
 
 
 class MaterialCreate(BaseModel):

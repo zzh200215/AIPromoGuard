@@ -111,13 +111,34 @@ export const listRemediation = (id: number) =>
 
 export const decideRemediation = (
   id: number,
-  taskId: number,
   decision: 'remediate' | 'reject' | 'done',
+  identifier: { taskId?: number; materialId?: number },
 ) =>
   request<{ items: RemediationItem[] }>({
     url: `/impact/assessments/${id}/remediation`,
     method: 'post',
-    data: { task_id: taskId, decision },
+    // 审查整改项传 task_id；stale 待更新项（无审查任务）传 material_id
+    data: {
+      task_id: identifier.taskId ?? null,
+      material_id: identifier.taskId == null ? (identifier.materialId ?? null) : null,
+      decision,
+    },
+  })
+
+/** 依据失效材料写入系统整改清单（R3-2 v2）：返回增量计数与容器评估 id。 */
+export const syncStaleMaterials = () =>
+  request<{
+    assessment_id: number
+    checked: number
+    stale_count: number
+    added: number
+    refreshed: number
+    resolved: number
+    reopened: number
+    total: number
+  }>({
+    url: '/impact/materials/stale/sync',
+    method: 'post',
   })
 
 /** 上传整改版材料并发起复测（multipart：file + assessment_id）。 */

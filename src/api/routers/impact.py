@@ -290,6 +290,21 @@ def patrol_published_materials(
     return ok(content_patrol.patrol_materials(db, material_ids))
 
 
+@router.post("/materials/stale/sync")
+def sync_stale_materials(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("manage_rules")),
+) -> dict:
+    """依据失效材料写入系统整改清单（R3-2 v2）。
+
+    幂等：仍失效的刷新原因并保留人工决策；依据恢复的 pending/整改中条目
+    自动关闭；结果落系统容器评估的 remediation，人工决策与整改复测走既有链路。
+    """
+    from src.services.impact_service import sync_stale_to_assessment
+
+    return ok(sync_stale_to_assessment(db))
+
+
 @router.post("/materials/{material_id}/retest", status_code=201)
 async def retest_material(
     material_id: int,
@@ -662,7 +677,13 @@ def set_remediation_decision(
     current_user: User = Depends(require_permission("confirm")),
 ) -> dict:
     try:
-        items = decide_remediation(db, assessment_id, body.task_id, body.decision)
+        items = decide_remediation(
+            db,
+            assessment_id,
+            body.decision,
+            task_id=body.task_id,
+            material_id=body.material_id,
+        )
     except KeyError as exc:
         raise AppError(ErrorCode.PARAM_ERROR, str(exc), http_status=404) from exc
     return ok({"items": items})

@@ -80,10 +80,15 @@
       <template #header>
         <div class="card-header">
           <span class="card-title">影响评估</span>
-          <el-select v-model="statusFilter" size="small" style="width: 140px" @change="reload">
-            <el-option label="全部状态" value="" />
-            <el-option v-for="(label, key) in STATUS_LABELS" :key="key" :label="label" :value="key" />
-          </el-select>
+          <div class="header-actions">
+            <el-button size="small" :loading="syncingStale" @click="onSyncStale">
+              同步依据失效材料
+            </el-button>
+            <el-select v-model="statusFilter" size="small" style="width: 140px" @change="reload">
+              <el-option label="全部状态" value="" />
+              <el-option v-for="(label, key) in STATUS_LABELS" :key="key" :label="label" :value="key" />
+            </el-select>
+          </div>
         </div>
       </template>
       <el-table :data="assessments" v-loading="listLoading" highlight-current-row @row-click="onSelectAssessment">
@@ -234,6 +239,9 @@
               <el-table-column prop="material_name" label="材料" min-width="190" show-overflow-tooltip>
                 <template #default="{ row }">
                   {{ row.material_name }}
+                  <el-tag v-if="row.kind === 'stale'" size="small" effect="light" type="warning" class="retest-tag">
+                    依据失效
+                  </el-tag>
                   <el-tag v-if="row.retest" size="small" effect="light" class="retest-tag">复测</el-tag>
                   <span v-else-if="row.retest_task_id && row.decision !== 'done'" class="retesting">
                     复测中（任务 #{{ row.retest_task_id }}）
@@ -242,9 +250,18 @@
               </el-table-column>
               <el-table-column label="违规数" width="80">
                 <template #default="{ row }">
-                  <el-tag size="small" effect="light" :type="row.violation_count > 0 ? 'danger' : 'success'">
+                  <span v-if="row.kind === 'stale'" class="muted">—</span>
+                  <el-tag v-else size="small" effect="light" :type="(row.violation_count ?? 0) > 0 ? 'danger' : 'success'">
                     {{ row.violation_count }}
                   </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column v-if="hasStaleRows" label="失效依据" min-width="220">
+                <template #default="{ row }">
+                  <span v-if="row.kind === 'stale'" class="stale-reasons">
+                    {{ (row.reasons || []).join('；') }}
+                  </span>
+                  <span v-else class="muted">—</span>
                 </template>
               </el-table-column>
               <el-table-column label="需整改" width="80">
@@ -255,6 +272,9 @@
                   <el-tag size="small" effect="light" :type="DECISION_TAG[row.decision] ?? 'info'">
                     {{ DECISION_LABELS[row.decision] ?? row.decision }}
                   </el-tag>
+                  <el-tooltip v-if="row.resolved" :content="row.resolved" placement="top">
+                    <span class="resolved-note">系统关闭</span>
+                  </el-tooltip>
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="250" fixed="right">
@@ -317,6 +337,7 @@ import {
   listImpactPenaltyCases,
   minePenaltyRules,
   retestMaterial,
+  syncStaleMaterials,
 } from '@/api/impact'
 import { listRegulationTrends } from '@/api/regulationTrend'
 import { useAuthStore } from '@/stores/auth'
@@ -380,6 +401,7 @@ const page = ref(1)
 const pageSize = 10
 const statusFilter = ref<AssessmentStatus | ''>('')
 const listLoading = ref(false)
+const syncingStale = ref(false)
 let loadSeq = 0
 
 // ---------- 详情抽屉 ----------
@@ -396,6 +418,8 @@ const materials = computed(() => detail.value?.items?.materials ?? [])
 const remediation = computed<RemediationItem[]>(
   () => (detail.value?.items as { remediation?: RemediationItem[] } | null | undefined)?.remediation ?? [],
 )
+// stale 待更新条目存在时补"失效依据"列（审查整改项无此字段）
+const hasStaleRows = computed(() => remediation.value.some((r) => r.kind === 'stale'))
 
 async function loadUpdates() {
   updatesLoading.value = true
@@ -452,6 +476,23 @@ async function loadDetail(id: number) {
 function onSelectAssessment(row: ImpactAssessment) {
   drawerVisible.value = true
   void loadDetail(row.id)
+}
+
+// R3-2 v2：依据失效材料（规则停用/法规废止反向定位）写入系统容器评估的整改清单，
+// 成功后直接打开容器详情（决策/上传整改版复用既有链路）
+async function onSyncStale() {
+  syncingStale.value = true
+  try {
+    const result = await syncStaleMaterials()
+    ElMessage.success(
+      `已同步：新增 ${result.added} 条待更新项，关闭 ${result.resolved} 条（共 ${result.total} 条）`,
+    )
+    await loadAssessments()
+    drawerVisible.value = true
+    await loadDetail(result.assessment_id)
+  } finally {
+    syncingStale.value = false
+  }
 }
 
 function goBatch(row: { id: number }) {
@@ -550,7 +591,11 @@ async function onCreateBatch() {
 // ---------- 整改决策 ----------
 async function onDecide(row: RemediationItem, decision: 'remediate' | 'reject' | 'done') {
   if (!detail.value) return
-  await decideRemediation(detail.value.id, row.task_id, decision)
+  // stale 待更新项无审查任务：按 material_id 定位决策
+  await decideRemediation(detail.value.id, decision, {
+    taskId: row.task_id,
+    materialId: row.material_id ?? undefined,
+  })
   ElMessage.success('整改决策已记录')
   await loadDetail(detail.value.id)
 }
@@ -696,6 +741,24 @@ function handleDeepLinkQuery() {
 
 .retest-tag {
   margin-left: 6px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stale-reasons {
+  font-size: 12.5px;
+  color: var(--el-text-color-regular);
+}
+
+.resolved-note {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  cursor: default;
 }
 
 .retesting {

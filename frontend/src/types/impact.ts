@@ -28,12 +28,12 @@ export interface ImpactMaterialItem {
 }
 
 export interface RemediationItem {
-  batch_id: number
-  task_id: number
-  task_status: string
+  batch_id?: number
+  task_id?: number
+  task_status?: string
   material_id: number | null
   material_name: string
-  violation_count: number
+  violation_count?: number
   requires_remediation: boolean
   decision: 'pending' | 'remediate' | 'reject' | 'done'
   /** 本条为整改复测结果条目（针对 retest_for_task_id 指向的原整改项） */
@@ -41,6 +41,15 @@ export interface RemediationItem {
   retest_for_task_id?: number
   /** 原整改项发起的复测任务 id（复测完成前可据此显示"复测中"） */
   retest_task_id?: number
+  /** R3-2 v2：依据失效待更新条目（无审查任务，按 material_id 定位决策） */
+  kind?: 'stale'
+  /** stale 条目的失效依据清单（规则停用/法规废止） */
+  reasons?: string[]
+  /** stale 条目的材料版本号 */
+  version?: string
+  last_review_status?: string | null
+  /** 依据恢复被系统自动关闭时的说明（存在即表示系统关闭，非人工） */
+  resolved?: string
 }
 
 export interface RetestResult {

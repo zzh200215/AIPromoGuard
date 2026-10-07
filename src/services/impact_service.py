@@ -3,6 +3,11 @@
 整改清单存于 ImpactAssessment.items["remediation"]，按 task_id 幂等合并；
 人工决策（remediate/reject/done）由 API 层写入并留审计。整改复测走单任务
 复审批次回挂原评估，复测通过（零违规）时原整改项自动标记 done。
+
+R3-2 v2（2026-10-07）：依据失效材料（规则停用/法规废止反向定位）经
+sync_stale_to_assessment 写入系统单例容器评估的整改清单（条目 kind="stale"，
+无审查任务、按 material_id 定位），与审查产生的整改项共用决策/复测/自动
+关闭链路——两类条目以命名空间前缀区分（_entry_key）。
 """
 
 import re
@@ -25,6 +30,137 @@ def _doc_id_from_path(path: str | None) -> str | None:
         return None
     stem = Path(path).stem
     return stem if stem.startswith("doc_") else None
+
+
+# 系统单例容器评估的标题（R3-2 v2）：无触发源、状态 confirmed，
+# 承载依据失效材料的"待更新"整改项——语义上就是"规则停用/法规废止 → 反向影响材料"
+STALE_CONTAINER_TITLE = "时效性告警：依据失效待更新材料"
+
+
+def _entry_key(entry: dict) -> str:
+    """整改条目定位键：审查条目按 task_id；待更新条目（stale）按 material_id。
+
+    两类条目共处同一 remediation 列表，合并时用命名空间前缀区分——
+    否则 stale 条目缺少 task_id 会让字典推导 KeyError（复测回写时必现）。
+    """
+    if entry.get("task_id"):
+        return f"task:{entry['task_id']}"
+    return f"stale:{entry.get('material_id')}"
+
+
+def get_or_create_stale_container(db: Session) -> ImpactAssessment:
+    """系统单例容器评估：承载依据失效材料的"待更新"整改项（幂等）。"""
+    container = (
+        db.query(ImpactAssessment)
+        .filter(ImpactAssessment.title == STALE_CONTAINER_TITLE)
+        .first()
+    )
+    if container is not None:
+        return container
+    container = ImpactAssessment(
+        title=STALE_CONTAINER_TITLE,
+        summary="系统自动维护：规则停用/法规废止反向定位的在用材料，决策后走既有整改复测链闭环",
+        status="confirmed",
+        items={"remediation": []},
+    )
+    db.add(container)
+    db.commit()
+    db.refresh(container)
+    logger.info("创建时效性告警容器评估 %s", container.id)
+    return container
+
+
+def merge_stale_entries(remediation: list[dict], stale_materials: list[dict]) -> dict:
+    """纯函数：把失效材料合并进整改清单（原地修改 remediation），返回增量统计。
+
+    幂等规则（按 material_id 定位 kind="stale" 条目）：
+    - 新失效材料 → 追加 pending 条目；
+    - 仍失效 → 刷新原因/版本/台账状态，保留人工决策；
+    - 依据恢复（不在本次失效清单）→ pending/整改中条目自动关闭并留 resolved 说明；
+      人工已驳回（reject）或已通过复测关闭（done 且无 resolved 标记）的不动；
+    - 靠"依据恢复"被系统关闭的条目再次失效 → 重新置 pending（自愈）。
+    """
+    by_material = {
+        e.get("material_id"): e for e in remediation if e.get("kind") == "stale"
+    }
+    counts = {"added": 0, "refreshed": 0, "resolved": 0, "reopened": 0}
+    stale_ids: set[int] = set()
+
+    for m in stale_materials:
+        mid = m["material_id"]
+        stale_ids.add(mid)
+        entry = by_material.get(mid)
+        if entry is None:
+            remediation.append(
+                {
+                    "kind": "stale",
+                    "material_id": mid,
+                    "material_name": m["name"],
+                    "version": m.get("version"),
+                    "last_review_status": m.get("last_review_status"),
+                    "reasons": m["reasons"],
+                    "requires_remediation": True,
+                    "decision": "pending",
+                }
+            )
+            counts["added"] += 1
+            continue
+        entry["material_name"] = m["name"]
+        entry["version"] = m.get("version")
+        entry["last_review_status"] = m.get("last_review_status")
+        if entry.get("reasons") != m["reasons"]:
+            entry["reasons"] = m["reasons"]
+            counts["refreshed"] += 1
+        if entry.get("decision") == "done" and entry.get("resolved"):
+            entry["decision"] = "pending"
+            entry.pop("resolved", None)
+            entry.pop("resolved_at", None)
+            counts["reopened"] += 1
+
+    for entry in [e for e in remediation if e.get("kind") == "stale"]:
+        if entry.get("material_id") in stale_ids:
+            continue
+        if entry.get("decision") in (None, "pending", "remediate"):
+            entry["decision"] = "done"
+            entry["resolved"] = "依据已恢复（规则重新启用/法规状态更新）"
+            entry["resolved_at"] = datetime.now().isoformat(timespec="seconds")
+            counts["resolved"] += 1
+
+    return counts
+
+
+def sync_stale_to_assessment(db: Session) -> dict:
+    """写入"待更新"整改项（R3-2 v2）：依据失效材料合并进系统容器的整改清单。
+
+    复用 stale_materials_check 只读查询 + merge_stale_entries 纯函数；
+    结果落容器评估，人工决策与整改复测走既有链路（见模块 docstring）。
+    """
+    summary = stale_materials_check(db)
+    container = get_or_create_stale_container(db)
+    items = container.items or {}
+    remediation: list[dict] = items.get("remediation") or []
+
+    counts = merge_stale_entries(remediation, summary["materials"])
+
+    items["remediation"] = remediation
+    container.items = items
+    flag_modified(container, "items")
+    db.commit()
+    logger.info(
+        "时效性告警同步：新增 %s / 刷新 %s / 关闭 %s / 重开 %s（共 %s 条）",
+        counts["added"],
+        counts["refreshed"],
+        counts["resolved"],
+        counts["reopened"],
+        len(remediation),
+    )
+    return {
+        "assessment_id": container.id,
+        "checked": summary["checked"],
+        "stale_count": summary["stale_count"],
+        "total": len(remediation),
+        **counts,
+    }
 
 
 def sync_batch_to_assessment(db: Session, batch_id: int) -> None:
@@ -53,8 +189,9 @@ def sync_batch_to_assessment(db: Session, batch_id: int) -> None:
     )
 
     # 原整改项记录的复测任务 → 新条目带 retest 标记并回指原任务
+    # （原条目可能是 stale 待更新项：无 task_id，回指留空由 material 侧兜底）
     retest_map = {
-        e["retest_task_id"]: e["task_id"]
+        e["retest_task_id"]: e.get("task_id")
         for e in (assessment.items or {}).get("remediation") or []
         if e.get("retest_task_id")
     }
@@ -87,21 +224,25 @@ def sync_batch_to_assessment(db: Session, batch_id: int) -> None:
         }
         if task.id in retest_map:
             entry["retest"] = True
-            entry["retest_for_task_id"] = retest_map[task.id]
+            if retest_map[task.id]:  # 原条目为 stale 待更新项时无 task_id，不设回指
+                entry["retest_for_task_id"] = retest_map[task.id]
         remediation.append(entry)
 
     items = assessment.items or {}
-    merged = {entry["task_id"]: entry for entry in items.get("remediation") or []}
+    # 合并键按命名空间区分（task:{id} / stale:{material_id}）——容器里可能
+    # 同时存在审查整改项与 R3-2 的 stale 待更新项，后者无 task_id
+    merged = {_entry_key(entry): entry for entry in items.get("remediation") or []}
     for entry in remediation:
-        old = merged.get(entry["task_id"])
+        key = _entry_key(entry)
+        old = merged.get(key)
         # 已人工决策的条目保留决策，仅刷新审查侧字段
         if old and old.get("decision") not in (None, "pending"):
             old.update(
                 {k: v for k, v in entry.items() if k != "decision"}
             )
-            merged[entry["task_id"]] = old
+            merged[key] = old
         else:
-            merged[entry["task_id"]] = entry
+            merged[key] = entry
     items["remediation"] = list(merged.values())
 
     # 整改复测闭环：复测通过（completed 且零违规）→ 原整改项自动标记 done；
@@ -135,17 +276,31 @@ def sync_batch_to_assessment(db: Session, batch_id: int) -> None:
 
 
 def decide_remediation(
-    db: Session, assessment_id: int, task_id: int, decision: str
+    db: Session,
+    assessment_id: int,
+    decision: str,
+    task_id: int | None = None,
+    material_id: int | None = None,
 ) -> list[dict]:
-    """记录人工整改决策（remediate/reject/done），返回最新整改清单。"""
+    """记录人工整改决策（remediate/reject/done），返回最新整改清单。
+
+    条目定位：审查整改项用 task_id；待更新项（stale，无审查任务）用 material_id。
+    """
     assessment = db.get(ImpactAssessment, assessment_id)
     if assessment is None:
         raise KeyError("影响评估不存在")
     items = assessment.items or {}
     remediation = items.get("remediation") or []
-    entry = next((e for e in remediation if e.get("task_id") == task_id), None)
+    if task_id is not None:
+        entry = next((e for e in remediation if e.get("task_id") == task_id), None)
+        missing = f"整改项 task_id={task_id} 不存在"
+    elif material_id is not None:
+        entry = next((e for e in remediation if e.get("material_id") == material_id), None)
+        missing = f"整改项 material_id={material_id} 不存在"
+    else:
+        raise KeyError("需提供 task_id 或 material_id 定位整改项")
     if entry is None:
-        raise KeyError(f"整改项 task_id={task_id} 不存在")
+        raise KeyError(missing)
     entry["decision"] = decision
     items["remediation"] = remediation
     assessment.items = items

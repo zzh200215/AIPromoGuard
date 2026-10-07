@@ -409,11 +409,19 @@ const routes = {
         remediation: [
           { batch_id: 2, task_id: 12, task_status: 'completed', material_id: 1, material_name: '稳健回报混合基金单页A', violation_count: 3, requires_remediation: true, decision: 'pending' },
           { batch_id: 2, task_id: 13, task_status: 'completed', material_id: 2, material_name: '安享养老保险产品海报', violation_count: 0, requires_remediation: false, decision: 'done' },
+          // R3-2 v2 演示：依据失效待更新条目（无审查任务，按 material_id 决策）
+          { kind: 'stale', material_id: 3, material_name: '结构性存款产品说明书', version: 'v3', last_review_status: 'failed', reasons: ['规则已停用：禁止宣称理财产品保本', '法规已废止/失效：旧版理财销售管理办法'], requires_remediation: true, decision: 'pending' },
         ],
       },
       batches: [{ id: 2, batch_name: '复批：网络营销新规影响材料', status: 'completed', total_count: 6, completed_count: 6 }],
     }),
   'GET /api/v1/impact/assessments/8': () => routes['GET /api/v1/impact/assessments/9'](),
+
+  // R3-2 v2：依据失效材料写入系统整改清单（演示：同步后返回容器评估 9）
+  'POST /api/v1/impact/materials/stale/sync': () =>
+    ok({ assessment_id: 9, checked: 3, stale_count: 1, added: 1, refreshed: 0, resolved: 0, reopened: 0, total: 3 }),
+  // 整改决策（审查项传 task_id、stale 项传 material_id）：前端决策后重新拉详情，这里只回 ok
+  'POST /api/v1/impact/assessments/9/remediation': () => ok({ items: [] }),
 
   'GET /api/v1/impact/materials': () =>
     ok({
