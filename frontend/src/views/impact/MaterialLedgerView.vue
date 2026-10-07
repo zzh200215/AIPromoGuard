@@ -1,6 +1,9 @@
 <template>
-  <div>
-    <PageHeader title="产品材料台账">
+  <div class="app-page">
+    <PageHeader
+      title="材料台账"
+      description="在用营销材料全生命周期台账：登记材料与审查文档的对应关系，复审与整改都在这里追溯"
+    >
       <el-button
         v-if="auth.hasPermission('manage_rules')"
         type="primary"
@@ -28,8 +31,7 @@
         </el-select>
       </div>
 
-      <el-table :data="rows" border v-loading="loading">
-        <el-table-column prop="id" label="ID" width="70" />
+      <el-table :data="rows" v-loading="loading">
         <el-table-column prop="name" label="材料名称" min-width="200" show-overflow-tooltip />
         <el-table-column label="产品" width="100">
           <template #default="{ row }">{{ PRODUCT_LABELS[row.product_type] ?? row.product_type }}</template>
@@ -53,8 +55,41 @@
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="130" fixed="right">
+        <el-table-column label="线上巡检" width="110">
           <template #default="{ row }">
+            <el-tooltip
+              v-if="row.patrol_status"
+              :content="PATROL_TIP[row.patrol_status] ?? ''"
+              placement="top"
+            >
+              <el-tag size="small" :type="PATROL_TAG[row.patrol_status] ?? 'info'">
+                {{ PATROL_LABELS[row.patrol_status] ?? row.patrol_status }}
+              </el-tag>
+            </el-tooltip>
+            <span v-else class="patrol-none">{{ row.publish_url ? '未巡检' : '未登记渠道' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="250" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              v-if="row.document_id && auth.hasPermission('create_task')"
+              size="small"
+              type="primary"
+              link
+              @click="startReview(row)"
+            >
+              发起审查
+            </el-button>
+            <el-button
+              v-if="row.publish_url && auth.hasPermission('create_task')"
+              size="small"
+              :loading="patrollingId === row.id"
+              type="warning"
+              link
+              @click="patrolOne(row)"
+            >
+              巡检
+            </el-button>
             <el-button
               v-if="auth.hasPermission('manage_rules')"
               size="small"
@@ -113,6 +148,16 @@
         <el-form-item label="关联文档">
           <el-input v-model="form.document_id" placeholder="doc_xxxxxxxx（已上传文档 ID）" />
         </el-form-item>
+        <el-form-item label="发布渠道">
+          <el-select v-model="form.channel" style="width: 120px" clearable placeholder="渠道">
+            <el-option label="官网" value="web" />
+            <el-option label="公众号" value="wechat" />
+            <el-option label="抖音" value="douyin" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="发布地址">
+          <el-input v-model="form.publish_url" placeholder="https://（已授权的自有渠道地址，登记后可巡检）" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -123,17 +168,44 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'material-ledger' })
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { createMaterial, listMaterials, updateMaterial } from '@/api/impact'
+import { useRouter } from 'vue-router'
+import { createMaterial, listMaterials, patrolMaterials, updateMaterial } from '@/api/impact'
 import { useAuthStore } from '@/stores/auth'
 import type { MaterialLedger } from '@/types/impact'
 
 const auth = useAuthStore()
+const router = useRouter()
 
 const PRODUCT_LABELS: Record<string, string> = { fund: '基金', insurance: '保险', wealth: '银行理财' }
 const REVIEW_LABELS: Record<string, string> = { violation: '违规', clean: '干净', failed: '失败' }
 const REVIEW_TAG: Record<string, string> = { violation: 'danger', clean: 'success', failed: 'warning' }
+
+/** R3-1 巡检结论的呈现语义：对网页导航/页脚噪声免疫的 containment 判定 + 关键数字校验 */
+const PATROL_LABELS: Record<string, string> = {
+  ok: '与批准版一致',
+  drift: '轻微漂移',
+  changed: '已变更',
+  gone: '已失联',
+  error: '巡检异常',
+}
+const PATROL_TAG: Record<string, string> = {
+  ok: 'success',
+  drift: 'warning',
+  changed: 'danger',
+  gone: 'danger',
+  error: 'info',
+}
+const PATROL_TIP: Record<string, string> = {
+  ok: '线上内容与批准版一致（containment ≥0.98）',
+  drift: '个别文字漂移但关键数字齐全，建议关注',
+  changed: '关键数字缺失或内容实质变更，已自动创建复审任务',
+  gone: '页面已下线（HTTP 404/410）',
+  error: '抓取失败（网络/超时），需人工检查',
+}
+const patrollingId = ref<number | null>(null)
 
 const rows = ref<MaterialLedger[]>([])
 const loading = ref(false)
@@ -154,6 +226,8 @@ const form = ref({
   version: 'v1',
   owner: '',
   document_id: '',
+  channel: '',
+  publish_url: '',
 })
 
 let loadSeq = 0
@@ -187,9 +261,17 @@ function onPageChange(next: number) {
   load()
 }
 
+/** 台账 → 审查打通：携带已关联文档直达新建审查（跳过上传步骤） */
+function startReview(row: MaterialLedger) {
+  router.push({
+    path: '/tasks/new',
+    query: { document_id: row.document_id as string, material: row.name },
+  })
+}
+
 function openCreate() {
   editing.value = null
-  form.value = { name: '', product_type: 'fund', material_type: '', version: 'v1', owner: '', document_id: '' }
+  form.value = { name: '', product_type: 'fund', material_type: '', version: 'v1', owner: '', document_id: '', channel: '', publish_url: '' }
   dialogVisible.value = true
 }
 
@@ -202,6 +284,8 @@ function openEdit(row: MaterialLedger) {
     version: row.version,
     owner: row.owner ?? '',
     document_id: row.document_id ?? '',
+    channel: row.channel ?? '',
+    publish_url: row.publish_url ?? '',
   }
   dialogVisible.value = true
 }
@@ -218,6 +302,8 @@ async function onSubmit() {
       owner: form.value.owner || undefined,
       document_id: form.value.document_id || undefined,
       version: form.value.version || 'v1',
+      channel: form.value.channel || undefined,
+      publish_url: form.value.publish_url || undefined,
     }
     if (editing.value) {
       await updateMaterial(editing.value.id, {
@@ -225,6 +311,8 @@ async function onSubmit() {
         version: body.version,
         owner: body.owner,
         document_id: body.document_id,
+        channel: body.channel,
+        publish_url: body.publish_url,
       })
     } else {
       await createMaterial(body)
@@ -236,6 +324,35 @@ async function onSubmit() {
     // 拦截器已提示
   } finally {
     submitting.value = false
+  }
+}
+
+/** 单材料巡检：抓取线上内容与批准版比对；changed 时后端已自动创建复审任务 */
+async function patrolOne(row: MaterialLedger) {
+  patrollingId.value = row.id
+  try {
+    const data = await patrolMaterials([row.id])
+    const outcome = data.outcomes[0]
+    if (!outcome) {
+      ElMessage.warning('巡检未执行（材料可能未登记发布地址）')
+      return
+    }
+    if (outcome.status === 'changed') {
+      ElMessage.warning(`线上内容已变更，已自动创建复审任务（${outcome.detail ?? ''}）`)
+    } else if (outcome.status === 'gone') {
+      ElMessage.error(`页面已失联：${outcome.detail ?? 'HTTP 404/410'}`)
+    } else if (outcome.status === 'error') {
+      ElMessage.error(`巡检异常：${outcome.detail ?? ''}`)
+    } else if (outcome.status === 'drift') {
+      ElMessage.warning('线上内容有轻微漂移，关键数字齐全，建议关注')
+    } else {
+      ElMessage.success('线上内容与批准版一致')
+    }
+    load()
+  } catch {
+    // 拦截器已提示
+  } finally {
+    patrollingId.value = null
   }
 }
 

@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="用户管理">
+    <PageHeader title="用户管理" description="账号、角色与权限管理：管理员 / 审查员 / 只读用户">
       <el-button type="primary" @click="openCreate">新增用户</el-button>
     </PageHeader>
 
@@ -27,7 +27,7 @@
         </el-select>
       </div>
 
-      <el-table :data="rows" border v-loading="loading">
+      <el-table :data="rows">
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="username" label="用户名" min-width="120" />
         <el-table-column label="角色" width="110">
@@ -153,6 +153,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'user-manage' })
 import { onMounted, reactive, ref } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { createUser, deleteUser, listUsers, resetPassword, updateUser } from '@/api/users'

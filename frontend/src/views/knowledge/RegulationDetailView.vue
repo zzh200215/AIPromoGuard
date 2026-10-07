@@ -1,11 +1,17 @@
 <template>
   <div>
     <PageHeader :title="regulation?.regulation_name || '法规详情'">
+      <el-button
+        v-if="regulation?.regulation_name"
+        @click="router.push(`/knowledge/graph?q=${encodeURIComponent(regulation.regulation_name)}`)"
+      >
+        在图谱中查看
+      </el-button>
       <el-button @click="router.push('/knowledge/regulations')">返回列表</el-button>
     </PageHeader>
 
     <el-card v-if="regulation" class="detail-card">
-      <el-descriptions :column="3" border size="small">
+      <el-descriptions :column="3">
         <el-descriptions-item label="法规名称">{{ regulation.regulation_name }}</el-descriptions-item>
         <el-descriptions-item label="领域">
           {{ (DOMAIN_LABELS as Record<string, string>)[regulation.domain] ?? regulation.domain }}
@@ -35,7 +41,7 @@
         </div>
       </template>
 
-      <el-table :data="articles" border v-loading="loading">
+      <el-table :data="articles">
         <el-table-column label="条款编号" width="130">
           <template #default="{ row }">{{ row.article_no || '—' }}</template>
         </el-table-column>
@@ -98,6 +104,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'regulation-detail' })
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { deleteArticle, getRegulation, listArticles } from '@/api/regulations'

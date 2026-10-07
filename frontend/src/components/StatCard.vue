@@ -1,7 +1,7 @@
 <template>
   <div class="stat-card">
     <div class="stat-label">{{ label }}</div>
-    <div class="stat-value" :class="{ muted: value == null }">{{ value ?? '—' }}</div>
+    <div class="stat-value num" :class="{ muted: value == null }">{{ value ?? '—' }}</div>
   </div>
 </template>
 
@@ -11,26 +11,25 @@ defineProps<{ label: string; value: number | string | null | undefined }>()
 
 <style scoped>
 .stat-card {
-  background: #fff;
-  border: 1px solid var(--app-border);
-  border-radius: 8px;
-  padding: 16px;
-  text-align: center;
+  background: var(--el-fill-color-lighter);
+  border-radius: 10px;
+  padding: 14px 16px;
 }
 
 .stat-label {
   font-size: 13px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 .stat-value {
   margin-top: 6px;
   font-size: 24px;
   font-weight: 700;
-  color: #303133;
+  line-height: 1.2;
+  color: var(--el-text-color-primary);
 }
 
 .stat-value.muted {
-  color: #c0c4cc;
+  color: var(--el-text-color-placeholder);
 }
 </style>

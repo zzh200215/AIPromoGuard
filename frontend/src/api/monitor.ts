@@ -15,6 +15,12 @@ export interface SystemMonitor {
   }
   vector_store: { legal_articles: number; legal_penalty_cases: number }
   graph: GraphStats
+  /** 未启用队列模式或 Redis 不可用时 available=false，queue_depth=-1 */
+  celery?: {
+    available: boolean
+    queue_depth: number
+    workers_alive: string[]
+  }
   audit: { last_24h: number; errors_last_24h: number }
 }
 

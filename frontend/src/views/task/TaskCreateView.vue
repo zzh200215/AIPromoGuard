@@ -1,6 +1,9 @@
 <template>
-  <div>
-    <PageHeader title="新建审查任务" />
+  <div class="app-page app-page--narrow">
+    <PageHeader
+      title="新建审查"
+      description="上传营销材料，系统自动完成领域识别 → 法规召回 → 规则 + LLM 双引擎审查 → 报告生成"
+    />
 
     <el-card>
       <el-steps :active="activeStep" finish-status="success" align-center class="create-steps">
@@ -11,20 +14,34 @@
 
       <div v-show="activeStep === 0" class="step-body">
         <el-radio-group v-model="form.compareMode" class="compare-mode">
-          <el-radio-button
-            v-for="m in COMPARE_MODES"
-            :key="m.value"
-            :value="m.value"
-          >
+          <el-radio-button v-for="m in COMPARE_MODES" :key="m.value" :value="m.value">
             {{ m.label }}
           </el-radio-button>
         </el-radio-group>
 
-        <AppUpload
-          v-if="form.compareMode === 'normal'"
-          @uploaded="onUploaded"
-          @reset="onUploadReset"
-        />
+        <template v-if="form.compareMode === 'normal'">
+          <el-radio-group v-model="form.sourceMode" size="small" class="source-mode">
+            <el-radio-button value="upload">上传文件</el-radio-button>
+            <el-radio-button value="paste">粘贴文本</el-radio-button>
+          </el-radio-group>
+          <AppUpload v-show="form.sourceMode === 'upload'" @uploaded="onUploaded" @reset="onUploadReset" />
+          <div v-show="form.sourceMode === 'paste'" class="paste-box">
+            <el-input
+              v-model="form.pasteTitle"
+              placeholder="文档名称（选填，默认「粘贴文本」）"
+              maxlength="100"
+              class="paste-title"
+            />
+            <el-input
+              v-model="form.pasteText"
+              type="textarea"
+              :rows="10"
+              maxlength="200000"
+              show-word-limit
+              placeholder="粘贴待审文本：网页片段、聊天记录、话术稿、产品说明段落等，粘贴后点击下一步即可送审"
+            />
+          </div>
+        </template>
         <div v-else class="compare-uploads">
           <div class="compare-item">
             <h4 class="compare-title">旧版文档</h4>
@@ -43,28 +60,18 @@
           :model="form"
           :rules="rules"
           label-width="100px"
+          label-position="left"
           class="create-form"
         >
           <el-form-item label="已选文档">
             <template v-if="form.compareMode === 'compare'">
-              <el-tag type="info" closable @close="goBackUpload">
-                旧版：{{ form.baseFileName }}
-              </el-tag>
-              <el-tag type="success" closable @close="goBackUpload">
-                新版：{{ form.fileName }}
-              </el-tag>
+              <el-tag type="info" closable @close="goBackUpload">旧版：{{ form.baseFileName }}</el-tag>
+              <el-tag type="success" closable @close="goBackUpload">新版：{{ form.fileName }}</el-tag>
             </template>
-            <el-tag v-else type="success" closable @close="goBackUpload">
-              {{ form.fileName }}
-            </el-tag>
+            <el-tag v-else type="success" closable @close="goBackUpload">{{ form.fileName }}</el-tag>
           </el-form-item>
           <el-form-item label="任务名称">
-            <el-input
-              v-model="form.taskName"
-              placeholder="默认取文件名"
-              maxlength="100"
-              clearable
-            />
+            <el-input v-model="form.taskName" placeholder="默认取文件名" maxlength="100" clearable />
           </el-form-item>
           <el-form-item label="文档类型">
             <el-select v-model="form.documentType" placeholder="选填" clearable>
@@ -73,22 +80,12 @@
           </el-form-item>
           <el-form-item label="产品领域">
             <el-select v-model="form.domain" placeholder="选填（系统可自动识别）" clearable>
-              <el-option
-                v-for="d in DOMAIN_OPTIONS"
-                :key="d.value"
-                :label="d.label"
-                :value="d.value"
-              />
+              <el-option v-for="d in DOMAIN_OPTIONS" :key="d.value" :label="d.label" :value="d.value" />
             </el-select>
           </el-form-item>
           <el-form-item label="审查策略">
             <el-select v-model="form.profile" placeholder="默认常规审查">
-              <el-option
-                v-for="p in PROFILE_OPTIONS"
-                :key="p.value"
-                :label="p.label"
-                :value="p.value"
-              />
+              <el-option v-for="p in PROFILE_OPTIONS" :key="p.value" :label="p.label" :value="p.value" />
             </el-select>
             <div class="profile-tip">{{ PROFILE_TIP[form.profile] }}</div>
           </el-form-item>
@@ -108,7 +105,8 @@
           :closable="false"
         />
         <p class="flow-tip">
-          提交后系统自动执行：领域分类 → 法规召回 → 规则扫描 + LLM 审查（并行）→ 冲突融合 → 风险评估 → 报告生成。
+          提交后系统自动执行：领域分类 → 法规召回 → 规则扫描 + LLM 审查（并行）→ 冲突融合 →
+          风险评估 → 报告生成。
         </p>
       </div>
 
@@ -118,6 +116,7 @@
           v-if="activeStep < 2"
           type="primary"
           :disabled="!canNext"
+          :loading="creatingDoc"
           @click="nextStep"
         >
           下一步
@@ -129,8 +128,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+defineOptions({ name: 'task-create' })
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { createTextDocument } from '@/api/documents'
 import { createTask } from '@/api/tasks'
 import { DOMAIN_OPTIONS, PROFILE_OPTIONS } from '@/constants/enums'
 import type { Domain } from '@/types/api'
@@ -151,25 +152,30 @@ const PROFILE_TIP: Record<string, string> = {
 }
 
 const router = useRouter()
+const route = useRoute()
 
 const activeStep = ref(0)
 const submitting = ref(false)
+const creatingDoc = ref(false)
 const form = reactive({
   documentId: '',
   baseDocumentId: '',
   fileName: '',
   baseFileName: '',
   compareMode: 'normal',
+  sourceMode: 'upload' as 'upload' | 'paste',
+  pasteText: '',
+  pasteTitle: '',
   taskName: '',
   documentType: '',
   domain: '' as Domain | '',
   profile: 'standard' as ReviewProfile | '',
 })
 
-/** 下一步是否可用：普通模式需新版文档；对比模式需旧版+新版 */
+/** 下一步是否可用：普通模式需文档（已上传，或粘贴模式有文本可生成）；对比模式需旧版+新版 */
 const canNext = computed(() => {
   if (form.compareMode === 'compare') return !!form.baseDocumentId && !!form.documentId
-  return !!form.documentId
+  return !!form.documentId || (form.sourceMode === 'paste' && !!form.pasteText.trim())
 })
 
 const rules = {
@@ -214,10 +220,36 @@ function nextStep() {
       return
     }
   } else if (!form.documentId) {
+    if (form.sourceMode === 'paste') {
+      void createDocFromPaste()
+      return
+    }
     ElMessage.warning('请先上传文档')
     return
   }
   activeStep.value++
+}
+
+/** 粘贴文本 → 落成 .txt 文档（走同一解析管线），成功后进配置步骤 */
+async function createDocFromPaste() {
+  const text = form.pasteText.trim()
+  if (!text) {
+    ElMessage.warning('请先粘贴待审文本')
+    return
+  }
+  if (creatingDoc.value) return
+  creatingDoc.value = true
+  try {
+    const res = await createTextDocument(text, form.pasteTitle || undefined)
+    form.documentId = res.document_id
+    form.fileName = res.file_name
+    if (!form.taskName) form.taskName = form.pasteTitle || '粘贴文本'
+    activeStep.value++
+  } catch {
+    // 拦截器已提示
+  } finally {
+    creatingDoc.value = false
+  }
 }
 
 async function submit() {
@@ -240,29 +272,57 @@ async function submit() {
     submitting.value = false
   }
 }
+
+// 材料台账「发起审查」直达：?document_id=doc_xx&material=名称 预填并跳过上传步骤
+onMounted(() => {
+  const docId = String(route.query.document_id || '')
+  if (!docId) return
+  form.compareMode = 'normal'
+  form.documentId = docId
+  form.fileName = String(route.query.material || docId)
+  if (!form.taskName) form.taskName = form.fileName
+  activeStep.value = 1
+})
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .create-steps {
-  max-width: 720px;
+  max-width: 680px;
   margin: 8px auto 24px;
 }
 
 .step-body {
-  min-height: 200px;
+  min-height: 240px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   padding: 16px 0;
 }
 
 .compare-mode {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
+}
+
+.source-mode {
+  margin-bottom: 18px;
+}
+
+.paste-box {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.paste-title {
+  width: 100%;
 }
 
 .compare-uploads {
   display: flex;
-  gap: 32px;
+  gap: 40px;
   justify-content: center;
   align-items: flex-start;
   flex-wrap: wrap;
@@ -275,14 +335,20 @@ async function submit() {
 }
 
 .compare-title {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 .step-body :deep(.el-upload-dragger) {
-  width: 420px;
+  width: 460px;
+  border-radius: 12px;
+  transition: border-color 0.15s;
+
+  &:hover {
+    border-color: var(--el-color-primary);
+  }
 }
 
 .create-form {
@@ -291,18 +357,20 @@ async function submit() {
 }
 
 .profile-tip {
-  color: #909399;
+  width: 100%;
+  color: var(--el-text-color-secondary);
   font-size: 12px;
   line-height: 1.5;
   margin-top: 4px;
 }
 
 .flow-tip {
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 13px;
-  margin-top: 12px;
-  max-width: 480px;
+  margin-top: 16px;
+  max-width: 520px;
   text-align: center;
+  line-height: 1.8;
 }
 
 .step-actions {
@@ -310,5 +378,7 @@ async function submit() {
   justify-content: center;
   gap: 12px;
   margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--app-border-light);
 }
 </style>

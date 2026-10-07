@@ -18,7 +18,7 @@ function parseFilename(disposition: string | null, fallback: string): string {
 /** 下载报告并触发浏览器保存。format: markdown | pdf */
 export async function downloadReport(
   taskId: number,
-  format: 'markdown' | 'pdf' = 'markdown',
+  format: 'markdown' | 'pdf' | 'docx' = 'markdown',
 ): Promise<void> {
   const res = await request<AxiosResponse<Blob>>({
     url: `/tasks/${taskId}/report/download`,
@@ -30,6 +30,29 @@ export async function downloadReport(
   const filename = parseFilename(
     res.headers['content-disposition'] as string | null,
     format === 'pdf' ? `report_${taskId}.pdf` : `report_${taskId}.md`,
+  )
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+/** 监管取证证据包（zip）：报告 + 结论生命周期 + 操作留痕 + manifest(SHA256)。 */
+export async function downloadEvidencePack(taskId: number): Promise<void> {
+  const res = await request<AxiosResponse<Blob>>({
+    url: `/tasks/${taskId}/evidence-pack`,
+    method: 'get',
+    responseType: 'blob',
+    timeout: 120_000,
+  })
+  const blob = res.data
+  const filename = parseFilename(
+    res.headers['content-disposition'] as string | null,
+    `取证包_任务${taskId}.zip`,
   )
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

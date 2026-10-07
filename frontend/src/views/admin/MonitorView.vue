@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="系统监控">
+    <PageHeader title="系统监控" description="数据库 / 向量库 / 知识图谱的健康状态与任务统计">
       <el-button :loading="loading" @click="load">刷新</el-button>
     </PageHeader>
 
@@ -52,6 +52,27 @@
         </el-row>
       </el-card>
 
+      <!-- 任务队列 -->
+      <el-card v-if="monitor?.celery" class="section-card">
+        <template #header>
+          <span>Celery 任务队列</span>
+          <el-tag v-if="!monitor.celery.available" size="small" type="info" style="margin-left: 8px">
+            未启用队列模式（线程池执行）
+          </el-tag>
+        </template>
+        <el-row :gutter="12">
+          <el-col :span="6">
+            <StatCard label="待处理任务" :value="monitor.celery.queue_depth" />
+          </el-col>
+          <el-col :span="6">
+            <StatCard label="Worker 存活" :value="monitor.celery.workers_alive.length" />
+          </el-col>
+          <el-col v-if="monitor.celery.workers_alive.length" :span="12">
+            <StatCard label="节点" :value="monitor.celery.workers_alive.join('、')" text />
+          </el-col>
+        </el-row>
+      </el-card>
+
       <!-- 图谱详情 -->
       <el-card v-if="monitor?.graph" class="section-card">
         <template #header>
@@ -86,6 +107,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'monitor' })
 import { computed, onMounted, ref } from 'vue'
 import { systemMonitor } from '@/api/monitor'
 import { TASK_STATUS_LABELS } from '@/constants/enums'

@@ -42,6 +42,25 @@ export const updateMaterial = (
   body: Partial<MaterialCreateBody> & { status?: string },
 ) => request<MaterialLedger>({ url: `/impact/materials/${id}`, method: 'patch', data: body })
 
+/** R3-1 发布后巡检：批量抓取已登记 publish_url 的在用材料，与批准版比对（mock fetcher 供测试注入在后端） */
+export const patrolMaterials = (materialIds?: number[]) =>
+  request<{
+    checked: number
+    counts: Record<string, number>
+    outcomes: Array<{
+      material_id: number
+      name: string
+      status: string
+      detail?: string
+      review_task_id?: number | null
+    }>
+  }>({
+    url: '/impact/materials/patrol',
+    method: 'post',
+    data: { material_ids: materialIds ?? null },
+    timeout: 180_000,
+  })
+
 export const listImpactPenaltyCases = (page = 1, pageSize = 10) =>
   request<{ total: number; items: ImpactPenaltyCase[] }>({
     url: '/impact/penalty-cases',

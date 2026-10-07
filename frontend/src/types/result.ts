@@ -4,7 +4,13 @@ export type ResultStatus = 'pending_confirm' | 'confirmed' | 'false_positive'
 
 export interface ReviewResult {
   result_id: number
-  violation_type: 'rule' | 'llm' | 'hybrid'
+  violation_type: 'rule' | 'llm' | 'hybrid' | 'vlm'
+  /**
+   * 内置维度身份（F1-2）：pii=敏感信息 / consistency=数字勾稽 / tamper=疑似篡改 /
+   * visual=视觉层其余发现；null=普通规则/LLM 命中（来源看 violation_type）。
+   * 后端由落库 description 头部的 [rule_name] 前缀派生。
+   */
+  finding_kind?: 'pii' | 'consistency' | 'tamper' | 'visual' | null
   risk_level: Severity
   original_text: string
   location_page?: number

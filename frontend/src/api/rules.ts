@@ -26,3 +26,13 @@ export const publishRule = (id: number) =>
     url: `/rules/${id}/publish`,
     method: 'post',
   })
+
+/** 规则重审：用当前生效规则集重跑历史上命中过该规则的任务 */
+export const rereviewRule = (id: number) =>
+  request<{
+    batch_id: number
+    batch_name: string
+    total_count: number
+    task_ids: number[]
+    skipped: Array<{ task_id: number; name: string; reason: string }>
+  }>({ url: `/rules/${id}/re-review`, method: 'post' })

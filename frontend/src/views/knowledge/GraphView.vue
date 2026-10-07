@@ -1,6 +1,9 @@
 <template>
   <div>
-    <PageHeader title="知识图谱" />
+    <PageHeader
+      title="知识图谱"
+      description="违规模式 → 法规条款 → 处罚案例的关联网络，输入违规点即可查证历史处罚与法规依据"
+    />
 
     <el-card v-if="stats" class="stats-card">
       <el-row :gutter="12">
@@ -63,7 +66,16 @@
             <template #header><span>关联法规（{{ result.regulations.length }}）</span></template>
             <el-empty v-if="!result.regulations.length" description="无匹配" :image-size="60" />
             <div v-for="r in result.regulations" :key="r.regulation_name" class="panel-item">
-              <div class="item-title">{{ r.regulation_name }}</div>
+              <div class="item-title">
+                <router-link
+                  v-if="r.regulation_id"
+                  class="reg-link"
+                  :to="`/knowledge/regulations/${r.regulation_id}`"
+                >
+                  {{ r.regulation_name }}
+                </router-link>
+                <template v-else>{{ r.regulation_name }}</template>
+              </div>
               <div class="item-meta">
                 <span class="item-sub">条款：{{ r.article_nos.join('、') || '—' }}</span>
               </div>
@@ -99,7 +111,7 @@
         <el-button type="primary" plain :loading="recommending" @click="recommend">推荐</el-button>
       </div>
       <el-empty v-if="recommended && !recommendList.length" description="未找到相似案例" :image-size="60" />
-      <el-table v-if="recommendList.length" :data="recommendList" border size="small">
+      <el-table v-if="recommendList.length" :data="recommendList">
         <el-table-column prop="case_name" label="案例名称" min-width="200" />
         <el-table-column prop="penalty_org" label="处罚机关" min-width="120" />
         <el-table-column prop="penalty_date" label="处罚日期" width="110" />
@@ -114,12 +126,15 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'graph' })
 import { onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { graphStats, queryGraph, recommendCases } from '@/api/graph'
-import { DOMAIN_OPTIONS } from '@/constants/enums'
+import { DOMAIN_LABELS, DOMAIN_OPTIONS } from '@/constants/enums'
 import type { Domain, Severity } from '@/types/api'
 import type { GraphCase, GraphQueryResult, GraphStats } from '@/types/graph'
 
+const route = useRoute()
 const stats = ref<GraphStats | null>(null)
 const query = ref('')
 const domain = ref<Domain | ''>('')
@@ -176,6 +191,12 @@ onMounted(async () => {
   } catch {
     // 拦截器已提示
   }
+  // 法规详情页「在图谱中查看」直达：?q=法规名称 自动查询
+  const q = String(route.query.q || '').trim()
+  if (q) {
+    query.value = q
+    void doQuery()
+  }
 })
 </script>
 
@@ -219,6 +240,15 @@ onMounted(async () => {
   font-size: 14px;
   color: #303133;
   margin-bottom: 4px;
+}
+
+.reg-link {
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+.reg-link:hover {
+  text-decoration: underline;
 }
 
 .item-meta {

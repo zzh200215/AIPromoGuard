@@ -4,14 +4,16 @@
       drag
       :auto-upload="false"
       :limit="1"
-      :accept="'.pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.bmp'"
+      :accept="'.pdf,.docx,.txt,.pptx,.xlsx,.png,.jpg,.jpeg,.bmp'"
       :on-change="onChange"
       :on-remove="onRemove"
     >
       <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
       <div class="el-upload__text">拖拽文件到此处，或<em>点击选择</em></div>
       <template #tip>
-        <div class="el-upload__tip">支持 pdf / doc / docx / txt / png / jpg / jpeg / bmp，不超过 50MB</div>
+        <div class="el-upload__tip">
+          支持 pdf / docx / txt / ppt / excel（xlsx）/ 图片，不超过 50MB；旧版 .doc/.xls 请先另存为新格式
+        </div>
       </template>
     </el-upload>
 

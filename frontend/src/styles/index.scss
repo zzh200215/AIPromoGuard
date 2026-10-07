@@ -1,5 +1,148 @@
 @use './variables.scss';
 
+// ============================================================
+// Element Plus 主题定制 + 全局基础样式 + 页面工具类
+// 覆写原则：白卡 + 发丝线边框 + 无阴影卡片；风险色只用于风险语义。
+// ============================================================
+
+:root {
+  // ---- Element Plus 主色系（纸墨金铜语言）----
+  // 设计决策（2026-10-07 全局视觉升级）：
+  //   亮色主题主色 = 「墨」#1d1913——主按钮呈现印刷墨黑，与登录页一致；
+  //   选中/hover 底 = 暖金浅调（light-8/9 手动设为金铜浅版，而非墨黑的灰版）
+  //   ——「金铜=品牌强调」在选中态落地；风险语义色（红/橙/绿/蓝）保持独立。
+  //   light-3/5/7 为墨黑向纸白混合的机械派生；按钮 hover 由下方组件级样式
+  //   单独覆写为金铜（不占用 light-3，避免影响边框类用法）。
+  --el-color-primary: #1d1913;
+  --el-color-primary-dark-2: #2f2721; /* 墨色的"更深"以微弱提亮表达（纯黑不可读） */
+  --el-color-primary-light-3: #615d58;
+  --el-color-primary-light-5: #8e8b86;
+  --el-color-primary-light-7: #bbb9b4;
+  --el-color-primary-light-8: #efe4cd; /* 暖金浅调（下表同） */
+  --el-color-primary-light-9: #f5ecdc;
+
+  --el-color-success: #16a34a;
+  --el-color-success-dark-2: #12803b;
+  --el-color-success-light-3: #55bc7e;
+  --el-color-success-light-5: #85cf9f;
+  --el-color-success-light-7: #b5e2c4;
+  --el-color-success-light-8: #ccecd6;
+  --el-color-success-light-9: #e6f6ec;
+
+  --el-color-warning: #d97706;
+  --el-color-warning-dark-2: #ae5f05;
+  --el-color-warning-light-3: #e39a4b;
+  --el-color-warning-light-5: #ecbb84;
+  --el-color-warning-light-7: #f4dcbd;
+  --el-color-warning-light-8: #f8ebd3;
+  --el-color-warning-light-9: #fbf4e8;
+
+  --el-color-danger: #e5484d;
+  --el-color-danger-dark-2: #b73a3e;
+  --el-color-danger-light-3: #eb7679;
+  --el-color-danger-light-5: #f1a0a2;
+  --el-color-danger-light-7: #f6c8ca;
+  --el-color-danger-light-8: #f9dbdc;
+  --el-color-danger-light-9: #fceef0;
+
+  --el-color-error: var(--el-color-danger);
+  --el-color-error-light-3: var(--el-color-danger-light-3);
+  --el-color-error-light-5: var(--el-color-danger-light-5);
+  --el-color-error-light-7: var(--el-color-danger-light-7);
+  --el-color-error-light-8: var(--el-color-danger-light-8);
+  --el-color-error-light-9: var(--el-color-danger-light-9);
+
+  --el-color-info: #64748b;
+  --el-color-info-dark-2: #505d70;
+  --el-color-info-light-3: #8a97aa;
+  --el-color-info-light-5: #adb6c3;
+  --el-color-info-light-7: #cfd5dd;
+  --el-color-info-light-8: #dfe3e8;
+  --el-color-info-light-9: #eff1f4;
+
+  // ---- 文本 / 边框 / 填充（暖调纸墨，对比度实测见交付记录）----
+  --el-text-color-primary: #1d1913; /* 对纸白 17.22 */
+  --el-text-color-regular: #3d362b; /* 11.74 */
+  --el-text-color-secondary: #6f6759; /* 5.50 */
+  --el-text-color-placeholder: #7d7466; /* 4.53（达标） */
+  --el-border-color: #e3ddd0;
+  --el-border-color-light: #e3ddd0;
+  --el-border-color-lighter: #ece6da;
+  --el-border-color-extra-light: #f1ece1;
+  --el-fill-color: #f1ece1;
+  --el-fill-color-light: #f5f1e8;
+  --el-fill-color-lighter: #f9f6f0;
+  --el-fill-color-blank: #fffdf9;
+  --el-bg-color: #fffdf9;
+  --el-bg-color-page: #f5f2ea;
+
+  // ---- 圆角（收紧：印刷品的方直感）----
+  --el-border-radius-base: 6px;
+  --el-border-radius-small: 4px;
+  --el-border-radius-round: 999px;
+
+  // ---- 业务自定义 token ----
+  --app-bg: #f5f2ea; /* 暖纸页面底 */
+  --app-border: #e3ddd0;
+  --app-border-light: #ece6da;
+  --app-surface: #fffdf9; /* 纸白卡片 */
+  --app-surface-2: #f1ece1;
+  --app-ink: #14110d; /* 侧栏暖墨黑（与登录页封面同色） */
+  --app-ink-soft: #221d16;
+  --app-accent: #c8963c; /* 金铜：品牌强调（激活指示/关键装饰） */
+  --app-accent-deep: #8a6410; /* 金铜深调：需达文本对比度的场景（链接等 5.29） */
+  --app-font-display:
+    'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', Georgia, serif;
+  --app-card-radius: 10px;
+  --app-em-color: #c73a3f;
+  --app-em-bg: #fceef0;
+  --app-shadow-card: 0 1px 2px rgba(29, 25, 19, 0.05);
+  --app-shadow-pop: 0 8px 28px rgba(29, 25, 19, 0.13);
+}
+
+// ---- 暗色模式 ----
+// 三层：① element-plus/theme-chalk/dark/css-vars.css（EP 官方，main.ts 先注入）
+//       ② 本块覆写：品牌色与自定义 token
+//       ③ 组件级微调（下方全局样式，均走 var() 自动跟随）
+// 覆写必须在 EP 之后注入才生效——见 main.ts 的顺序说明。
+// 侧栏 --app-ink 本就是深色，两种主题保持一致
+html.dark {
+  --app-bg: #14110d; /* 暖墨（与亮色主题同一套纸墨语言） */
+  --app-border: #332e26;
+  --app-border-light: #2a251e;
+  --app-surface: #1c1813;
+  --app-surface-2: #221d16;
+  --app-em-bg: rgba(229, 72, 77, 0.2);
+  --app-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --app-shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.5);
+  --app-accent-deep: #c8963c; /* 暗底上金铜即为可读色（7.07:1） */
+
+  // ---- 主色反转：亮色下主色是「墨」，暗色下主色是「金」----
+  // 亮色主色 #1d1913 在暗底不可见（对比度 ~1.1），故暗色取金铜 #c8963c——
+  // 同一套「纸墨金铜」语言的两个面：纸上的墨 / 暗处的光。
+  // 对比度实测：金铜 on 暖墨 7.07 ✓；light-N 按 EP 同款混合规则派生。
+  // 语义色（红/橙/绿）继续沿用 EP 官方暗色值，与金铜色相区分由明度承担。
+  --el-color-primary: #c8963c;
+  --el-color-primary-light-3: #926e2e;
+  --el-color-primary-light-5: #6e5424;
+  --el-color-primary-light-7: #4a391b;
+  --el-color-primary-light-8: #31301d;
+  --el-color-primary-light-9: #262418;
+  --el-color-primary-dark-2: #d1a85d;
+
+  // ---- 文本暖化（EP dark 默认是冷灰 #e5eaf3 系）----
+  --el-text-color-primary: #ece6da;
+  --el-text-color-regular: #cfc8bb;
+  --el-text-color-secondary: #a39b8d;
+  --el-text-color-placeholder: #857e70;
+
+  // 法规检索 <em> 高亮：浅色 #c73a3f 在暗底仅 3.61，提亮至 5.92（保留红色相）
+  --app-em-color: #d87579;
+
+  // 语义色沿用 EP 官方暗色值（对比度全面更优：danger 6.37 / warning 8.43 /
+  // success 8.22 / info 5.99，浅色版在暗底分别只有 4.72/5.79/5.60/3.88）
+}
+
 * {
   box-sizing: border-box;
 }
@@ -13,34 +156,365 @@ body,
 }
 
 body {
-  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'MiSans', 'HarmonyOS Sans SC', 'PingFang SC',
+    'Microsoft YaHei', 'Segoe UI', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   background-color: var(--app-bg);
-}
-
-// 法规检索 <em> 高亮（HighlightText 还原标签后命中项样式）
-em {
-  color: var(--em-color);
-  font-style: normal;
-  background: var(--em-bg);
-  padding: 0 2px;
-  border-radius: 2px;
-}
-
-// 表格行距
-.el-table .cell {
+  color: var(--el-text-color-primary);
+  font-size: 14px;
+  // 全局行高对齐 Ant Design 14/22（≈1.57）惯例；组件库自带行高的不受影响
   line-height: 1.6;
 }
 
-// 细滚动条
+// 数字统一等宽（统计卡 / 进度 / 表格数值列）
+.num,
+.el-statistic__number {
+  font-variant-numeric: tabular-nums;
+}
+
+// ---- 键盘可达性：自定义可点击元素（div 卡片/队列条目/快捷入口）必须有可见焦点环 ----
+// Element Plus 组件自带宽高样式，这里覆盖的是项目自绘的交互元素。
+:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
+}
+
+// 法规检索 <em> 高亮
+em {
+  color: var(--app-em-color);
+  font-style: normal;
+  background: var(--app-em-bg);
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+// ============================================================
+// Element Plus 组件微调（全局生效，视图无需逐个覆写）
+// ============================================================
+
+// ---- 主按钮：墨黑印刷底 → 金铜擦除式 hover（与登录页同一语言）----
+// EP 默认 hover 走 primary-light-3（墨黑提亮=灰），这里单独覆写为金铜，
+// 让「品牌强调色只留给关键动作」在按钮交互上落地。暗色主题下 primary 已是
+// 金铜，hover 用深调保持同一节奏。
+.el-button--primary:not(.is-disabled, .is-loading) {
+  transition:
+    background-color 180ms ease-out,
+    border-color 180ms ease-out,
+    color 180ms ease-out;
+
+  &:hover {
+    background-color: var(--app-accent);
+    border-color: var(--app-accent);
+    color: #16130f; /* 暖黑字：对金铜 6.95:1 */
+  }
+
+  &:active {
+    background-color: var(--app-accent-deep);
+    border-color: var(--app-accent-deep);
+    color: #fff;
+  }
+}
+
+html.dark .el-button--primary:not(.is-disabled, .is-loading):hover {
+  background-color: var(--el-color-primary-dark-2);
+  border-color: var(--el-color-primary-dark-2);
+  color: #16130f;
+}
+
+// ---- 链接与文本按钮：金铜深调（对纸白 5.29:1，达正文标准）----
+.el-link.el-link--primary {
+  color: var(--app-accent-deep);
+
+  &:hover {
+    color: var(--app-accent);
+  }
+}
+
+// ---- 卡片：白底 + 发丝线 + 极轻投影，标题栏加粗留白 ----
+.el-card {
+  border-radius: var(--app-card-radius);
+  border-color: var(--app-border);
+  box-shadow: var(--app-shadow-card) !important;
+
+  .el-card__header {
+    padding: 14px 20px;
+    border-bottom-color: var(--app-border-light);
+    // 卡片标题与正文拉开层级（Ant 卡片头 16px 惯例）
+    // 宋体系：Editorial 语言的关键笔触——「公报标题」的文书感
+    font-family: var(--app-font-display);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--el-text-color-primary);
+  }
+
+  .el-card__body {
+    padding: 20px 24px;
+  }
+}
+
+// ---- 表格：去掉竖向边框线，表头浅底，行悬浮淡蓝 ----
+.el-table {
+  --el-table-border-color: var(--app-border-light);
+  --el-table-header-bg-color: var(--app-surface-2);
+  --el-table-header-text-color: var(--el-text-color-secondary);
+  --el-table-row-hover-bg-color: var(--el-color-primary-light-9);
+  // 表格是核心阅读面：对齐 Ant/TDesign/Arco 的 14px 正文基准
+  font-size: 14px;
+
+  th.el-table__cell {
+    font-weight: 600;
+  }
+
+  .el-table__cell {
+    padding: 11px 0;
+  }
+
+  // 即便模板写了 border，也只保留横向分隔，观感更轻
+  &.el-table--border {
+    .el-table__cell {
+      border-right: none;
+    }
+
+    .el-table__inner-wrapper::after,
+    .el-table--border::after {
+      display: none;
+    }
+
+    .el-table__cell.is-first-column:not(.el-table__cell--selection),
+    .el-table__cell:first-child {
+      border-left: none;
+    }
+  }
+
+  .el-table__expanded-cell {
+    background: var(--app-surface-2);
+  }
+}
+
+// ---- 按钮：统一圆角，弱化 plain ----
+.el-button {
+  font-weight: 500;
+
+  &.is-round {
+    padding: 8px 16px;
+  }
+}
+
+// ---- 标签：胶囊感 + 去掉边框重色 ----
+.el-tag {
+  border-radius: 6px;
+  font-weight: 500;
+  border: none;
+  padding: 0 8px;
+}
+
+// ---- 描述列表 / 对话框 / 抽屉 ----
+.el-descriptions {
+  --el-descriptions-item-bordered-label-background: var(--app-surface-2);
+
+  .el-descriptions__label {
+    color: var(--el-text-color-secondary);
+  }
+}
+
+.el-dialog {
+  border-radius: 14px;
+  box-shadow: var(--app-shadow-pop);
+
+  .el-dialog__header {
+    padding: 18px 24px 12px;
+    margin-right: 0;
+
+    .el-dialog__title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+  }
+
+  .el-dialog__body {
+    padding: 8px 24px 12px;
+  }
+
+  .el-dialog__footer {
+    padding: 12px 24px 20px;
+  }
+}
+
+.el-drawer {
+  --el-drawer-padding-primary: 24px;
+
+  .el-drawer__header {
+    margin-bottom: 12px;
+    padding: 20px 24px 0;
+    color: var(--el-text-color-primary);
+
+    .el-drawer__title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+  }
+}
+
+.el-message-box {
+  border-radius: 14px;
+}
+
+// ---- 分页 ----
+.el-pagination {
+  --el-pagination-button-bg-color: transparent;
+
+  .el-pager li,
+  .btn-prev,
+  .btn-next {
+    background: transparent;
+    font-weight: 500;
+
+    &.is-active {
+      background: var(--el-color-primary);
+      color: #fff;
+      border-radius: 8px;
+    }
+  }
+}
+
+// ---- 步骤条 / 进度条 ----
+.el-step__title {
+  font-weight: 500;
+
+  &.is-process {
+    font-weight: 600;
+  }
+}
+
+// ---- 细滚动条 ----
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #d0d7de;
+  background: #cdd4df;
   border-radius: 4px;
+
+  &:hover {
+    background: #b3bccc;
+  }
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #b6bec6;
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+// ============================================================
+// 页面结构工具类：所有列表页共用同一节奏
+// ============================================================
+
+// 页面容器：统一留白节奏，宽度跟随内容区铺满（Fluid）
+.app-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+// 表单 / 向导 / 阅读类页面的窄栏变体：居中限宽，保证可读性
+.app-page--narrow {
+  max-width: 960px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+// 列表页顶部的筛选条
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+// 表格分页
+.pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+// 卡片头通用左右布局
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+// 区块小标题（卡片内的分组标题）
+.block-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 20px 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+// 路由切换不再使用过渡动画（MainLayout）：Transition 的完成信号依赖
+// requestAnimationFrame，webview 被遮挡/节流时 rAF 暂停会导致切换永久卡住。
+// .fade-slide-* 类保留给局部组件按需使用。
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+// 显式声明离开起点，避免过渡属性无变化时 transitionend 不触发导致路由卡住
+.fade-slide-leave-from {
+  opacity: 1;
+  transform: none;
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-slide-enter-active,
+  .fade-slide-leave-active {
+    transition: none;
+  }
+}
+
+// 批量判定的「撤销」按钮：内嵌在 ElMessage 的 VNode 里，挂载于 body，需全局样式
+.bulk-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bulk-toast-undo {
+  padding: 1px 10px;
+  border: 1px solid currentcolor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  cursor: pointer;
+
+  &:hover {
+    opacity: 0.75;
+  }
 }

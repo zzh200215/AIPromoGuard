@@ -1,5 +1,5 @@
 <template>
-  <el-table :data="results" border>
+  <el-table :data="results">
     <el-table-column label="原文" prop="original_text" min-width="240" show-overflow-tooltip />
     <el-table-column label="来源" width="100">
       <template #default="{ row }">{{ VIOLATION_SOURCE_LABELS[row.violation_type] }}</template>
@@ -34,7 +34,7 @@
           content="规则/双引擎高置信命中，系统自动确认，可翻案"
           placement="top"
         >
-          <el-tag size="small" type="success">自动确认</el-tag>
+          <el-tag size="small" type="success" effect="light">自动确认</el-tag>
         </el-tooltip>
         <el-tag
           v-else

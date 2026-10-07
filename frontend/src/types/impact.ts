@@ -114,6 +114,22 @@ export interface ImpactOverview {
   remediation_done: number
   rules_pending_publish: number
   active_rules: number
+  /** R3-2 时效性告警：规则停用/法规废止反向定位的在用材料 */
+  stale_materials: {
+    checked: number
+    stale_count: number
+    materials: Array<{
+      material_id: number
+      name: string
+      version: string
+      last_review_status?: string | null
+      reasons: string[]
+    }>
+  }
+  /** R3-1 巡检动态：线上内容被改/页面失联的在用材料计数 */
+  patrol_counts: Record<string, number>
+  patrol_changed: number
+  patrol_gone: number
 }
 
 export interface ImpactPenaltyCase {
@@ -136,6 +152,13 @@ export interface MaterialLedger {
   status: string
   last_review_status?: string | null
   last_reviewed_at?: string | null
+  /** R3-1 发布后巡检：已授权自有渠道的线上地址 */
+  publish_url?: string | null
+  /** 发布渠道：web / wechat / douyin 等 */
+  channel?: string | null
+  /** 巡检结论：ok / drift / changed / gone / error（null=未巡检） */
+  patrol_status?: string | null
+  patrol_checked_at?: string | null
   created_at: string
 }
 
@@ -146,4 +169,6 @@ export interface MaterialCreateBody {
   version?: string
   owner?: string
   document_id?: string
+  publish_url?: string
+  channel?: string
 }

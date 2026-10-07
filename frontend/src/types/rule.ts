@@ -45,7 +45,7 @@ export interface RuleCreate {
   rule_content: RuleContent
   severity?: Severity
   description?: string
-  is_active?: boolean
+  /** 创建一律落草稿，生效走 publish，不接受 is_active */
 }
 
-export type RuleUpdate = Partial<RuleCreate>
+export type RuleUpdate = Partial<RuleCreate> & { is_active?: boolean }

@@ -19,3 +19,11 @@ export const uploadDocument = (file: File) => {
     timeout: 120_000,
   })
 }
+
+/** 粘贴文本直接审查：落成 .txt 文档（无需先有文件） */
+export const createTextDocument = (text: string, title?: string) =>
+  request<UploadResult>({
+    url: '/documents/text',
+    method: 'post',
+    data: { text, title: title || undefined },
+  })

@@ -1,6 +1,9 @@
 <template>
   <div>
-    <PageHeader title="法规库">
+    <PageHeader
+      title="法规库"
+      description="审查依据的法规与条款库，规则引擎和 LLM 审查引用的法规依据都来自这里"
+    >
       <el-button
         v-if="auth.hasPermission('manage_regulations')"
         type="primary"
@@ -118,10 +121,11 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'regulation-list' })
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { deleteRegulation, listRegulations } from '@/api/regulations'
-import { DOMAIN_OPTIONS, REG_STATUS_LABELS } from '@/constants/enums'
+import { DOMAIN_LABELS, DOMAIN_OPTIONS, REG_STATUS_LABELS } from '@/constants/enums'
 import { useAuthStore } from '@/stores/auth'
 import type { Regulation } from '@/types/regulation'
 

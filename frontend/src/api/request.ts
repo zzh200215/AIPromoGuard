@@ -7,6 +7,11 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { useAuthStore } from '@/stores/auth'
 
+interface RequestConfig extends AxiosRequestConfig {
+  /** 静默模式：失败不弹全局提示（AI 自动预取等场景由调用方自行消化失败） */
+  silent?: boolean
+}
+
 const service = axios.create({
   baseURL: '/api/v1',
   timeout: 60_000,
@@ -31,7 +36,8 @@ service.interceptors.response.use(
       if (body.code === 0) {
         return body.data
       }
-      ElMessage.error(body.message || '请求失败')
+      const silent = (response.config as RequestConfig).silent
+      if (!silent) ElMessage.error(body.message || '请求失败')
       return Promise.reject(new Error(body.message || '请求失败'))
     }
     return body
@@ -39,6 +45,7 @@ service.interceptors.response.use(
   (error) => {
     const status: number | undefined = error.response?.status
     const data = error.response?.data
+    const silent: boolean = Boolean(error.config?.silent)
     if (status === 401) {
       useAuthStore().logout()
       // 动态 import 避免与 router 循环依赖
@@ -48,6 +55,8 @@ service.interceptors.response.use(
           query: { redirect: router.currentRoute.value.fullPath },
         })
       })
+    } else if (silent) {
+      // 静默模式：不弹提示，仅 reject
     } else if (status === 403) {
       ElMessage.error(data?.message || '无权限执行该操作')
       import('@/router').then(({ default: router }) => {
@@ -60,6 +69,6 @@ service.interceptors.response.use(
   },
 )
 
-export function request<T>(config: AxiosRequestConfig): Promise<T> {
+export function request<T>(config: RequestConfig): Promise<T> {
   return service.request(config) as Promise<T>
 }

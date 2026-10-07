@@ -1,6 +1,9 @@
 <template>
   <div>
-    <PageHeader title="反馈统计" />
+    <PageHeader
+      title="反馈统计"
+      description="人工复核结论回流：按检出来源统计确认率 / 误报率，并给出规则精调建议"
+    />
 
     <div v-loading="loading">
       <!-- 按来源聚合 -->
@@ -12,7 +15,7 @@
           v-if="!Object.keys(stats?.by_source ?? {}).length"
           description="暂无复核数据"
         />
-        <el-table v-else :data="sourceRows" border>
+        <el-table v-else :data="sourceRows">
           <el-table-column label="来源" width="120">
             <template #default="{ row }">
               <el-tag
@@ -38,7 +41,7 @@
           </el-table-column>
         </el-table>
 
-        <el-descriptions :column="4" border size="small" class="totals">
+        <el-descriptions :column="4" class="totals">
           <el-descriptions-item label="整体误报率">
             <b>{{ fmtRate(stats?.overall_false_positive_rate) }}</b>
           </el-descriptions-item>
@@ -52,7 +55,7 @@
       <el-card class="section-card">
         <template #header><span>规则质量（已复核规则，按误报率降序）</span></template>
         <el-empty v-if="!quality.items?.length" description="暂无已复核的规则命中" />
-        <el-table v-else :data="quality.items" border>
+        <el-table v-else :data="quality.items">
           <el-table-column prop="rule_name" label="规则名称" min-width="200" show-overflow-tooltip />
           <el-table-column prop="rule_id" label="ID" width="80" />
           <el-table-column prop="hits" label="命中" width="90" />
@@ -97,6 +100,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'feedback-stats' })
 import { computed, onMounted, ref } from 'vue'
 import {
   applyRuleSuggestion,

@@ -1,6 +1,9 @@
 <template>
   <div>
-    <PageHeader title="监管动态">
+    <PageHeader
+      title="监管动态"
+      description="轮询三家监管机构发布源发现的新法规，确认后写入法规库；确认前可在影响中心发起分析"
+    >
       <el-button
         v-if="auth.hasPermission('manage_regulations')"
         type="primary"
@@ -55,7 +58,7 @@
         <el-button type="primary" @click="load">查询</el-button>
       </div>
 
-      <el-table :data="rows" border v-loading="loading">
+      <el-table :data="rows">
         <el-table-column label="来源" width="110">
           <template #default="{ row }">
             {{ SOURCE_LABELS[row.source] ?? row.source }}
@@ -130,7 +133,7 @@
     <!-- 确认入库弹窗 -->
     <el-dialog v-model="confirmVisible" title="确认入库" width="560px">
       <template v-if="confirmRow">
-        <el-descriptions :column="1" border size="small" class="confirm-desc">
+        <el-descriptions :column="1" class="confirm-desc">
           <el-descriptions-item label="法规名称">{{ confirmRow.title }}</el-descriptions-item>
           <el-descriptions-item v-if="confirmRow.doc_no" label="文号">
             {{ confirmRow.doc_no }}
@@ -159,6 +162,11 @@
               placeholder="可选"
               style="width: 200px"
             />
+          </el-form-item>
+          <el-form-item label="后续动作">
+            <el-checkbox v-model="confirmForm.assess">
+              入库后立即发起影响评估（跳转影响中心自动分析）
+            </el-checkbox>
           </el-form-item>
         </el-form>
 
@@ -225,6 +233,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'regulation-trend' })
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -280,7 +289,9 @@ const fetching = ref(false)
 const confirmVisible = ref(false)
 const confirming = ref(false)
 const confirmRow = ref<RegulationUpdate | null>(null)
-const confirmForm = reactive<{ domain?: string; effective_date?: string }>({})
+const confirmForm = reactive<{ domain?: string; effective_date?: string; assess: boolean }>({
+  assess: true,
+})
 
 const manualVisible = ref(false)
 const savingManual = ref(false)
@@ -348,20 +359,29 @@ function openConfirm(row: RegulationUpdate) {
   confirmRow.value = row
   confirmForm.domain = row.domain || undefined
   confirmForm.effective_date = ''
+  confirmForm.assess = true
   confirmVisible.value = true
 }
 
 async function doConfirm() {
   if (!confirmRow.value) return
   confirming.value = true
+  const updateId = confirmRow.value.id
+  const goAssess = confirmForm.assess
   try {
-    await confirmRegulationTrend(confirmRow.value.id, {
+    await confirmRegulationTrend(updateId, {
       domain: confirmForm.domain,
       effective_date: confirmForm.effective_date || undefined,
     })
-    ElMessage.success('已确认入库')
     confirmVisible.value = false
-    load()
+    if (goAssess) {
+      // 打通「监管情报 → 影响评估」：影响中心读取 update_id 自动发起分析
+      ElMessage.success('已确认入库，正在跳转影响中心发起评估…')
+      router.push({ path: '/impact', query: { update_id: String(updateId), analyze: '1' } })
+    } else {
+      ElMessage.success('已确认入库')
+      load()
+    }
   } catch {
     // 拦截器已提示
   } finally {

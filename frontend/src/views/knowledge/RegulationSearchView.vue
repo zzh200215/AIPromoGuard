@@ -1,6 +1,9 @@
 <template>
   <div>
-    <PageHeader title="法规检索" />
+    <PageHeader
+      title="法规检索"
+      description="按关键词、语义或混合方式检索法规条款，支持查看命中高亮与法规效力状态"
+    />
 
     <el-card>
       <div class="search-bar">
@@ -58,6 +61,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'regulation-search' })
 import { ref } from 'vue'
 import { searchRegulations } from '@/api/regulations'
 import { DOMAIN_OPTIONS, REG_STATUS_LABELS } from '@/constants/enums'
@@ -116,7 +120,7 @@ async function doSearch() {
   border-radius: 8px;
   padding: 12px 16px;
   margin-bottom: 12px;
-  background: #fff;
+  background: var(--app-surface);
 }
 
 .hit-head {

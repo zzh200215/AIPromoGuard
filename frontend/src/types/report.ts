@@ -9,6 +9,9 @@ export interface ReportSummary {
   pending_verification?: number
 }
 
+/** 人工复核结论状态（与 review_results.status 对齐） */
+export type HumanStatus = 'pending_confirm' | 'confirmed' | 'false_positive'
+
 /** 相似处罚案例（图谱推荐，risk_assess 注入） */
 export interface RelatedCase {
   case_name: string
@@ -41,6 +44,14 @@ export interface ViolationItem {
   risk_level: Severity
   risk_reason?: string
   related_cases: RelatedCase[]
+  /** 人工复核结论（report_service 合并，与 results 表同序对齐） */
+  human_status?: HumanStatus
+  /** confirmed_by=0 表示系统自动确认 */
+  human_confirmed_by?: number | null
+  /** 关联审查结果 id（报告页批量判定用；未合并 results 时缺省） */
+  result_id?: number
+  regulation_id?: number | null
+  article_id?: number | null
 }
 
 /** LLM 用量与预估成本（成本归因，随报告落盘；无 LLM 调用时省略） */
@@ -66,6 +77,35 @@ export interface PendingVerificationItem {
   reasons: string[]
 }
 
+/** 人工复核汇总（剔除误报后的 final_* 为对外口径） */
+export interface HumanReviewSummary {
+  pending_confirm: number
+  confirmed: number
+  false_positive: number
+  auto_confirmed: number
+  manual_reviewed: number
+  final_total: number
+  final_high: number
+  final_medium: number
+  final_low: number
+  last_confirmed_at: string | null
+}
+
+/** 任务引用的法规（结构化，可点跳法规详情） */
+export interface RegulationRef {
+  id: number
+  regulation_name: string
+  regulation_no?: string | null
+}
+
+/** 审核签发：报告定稿后的正式放行/驳回结论（最新一次有效） */
+export interface SignOffInfo {
+  decision: 'released' | 'rejected'
+  username: string
+  note?: string | null
+  created_at: string
+}
+
 export interface ReportData {
   report_version: string
   task_id: number
@@ -76,6 +116,12 @@ export interface ReportData {
   violations: ViolationItem[]
   llm_usage?: LlmUsage
   pending_verification?: PendingVerificationItem[]
+  /** 人工复核结论汇总（报告已与最新判定同步） */
+  human_review?: HumanReviewSummary
+  /** 任务引用的法规（结构化，供前端可点跳转） */
+  regulations?: RegulationRef[]
+  /** 审核签发状态（实时合并；未签发为 null/缺省） */
+  sign_off?: SignOffInfo | null
   /** 未完成时存在：报告生成中占位 */
   message?: string
 }

@@ -10,11 +10,20 @@ import type {
 } from '@/types/result'
 import type { Rule } from '@/types/rule'
 
-export const listResults = (taskId: number, status?: ResultStatus) =>
+/**
+ * 任务复核结论列表。
+ * order='priority'：低置信×高风险优先（R4-3 复核路由——AI 最拿不准且危害最大的排前）；
+ * 缺省按检出顺序。
+ */
+export const listResults = (
+  taskId: number,
+  status?: ResultStatus,
+  order?: 'priority',
+) =>
   request<{ task_id: number; total: number; items: ReviewResult[] }>({
     url: `/tasks/${taskId}/results`,
     method: 'get',
-    params: status ? { status } : undefined,
+    params: { status, order },
   })
 
 export const confirmResult = (resultId: number, body: ConfirmRequest) =>
@@ -30,8 +39,42 @@ export const confirmResult = (resultId: number, body: ConfirmRequest) =>
     data: body,
   })
 
+/** 批量人工判定（确认 / 剔除误报）；无权访问的条目在 skipped 中逐条说明 */
+export const bulkConfirmResults = (body: {
+  result_ids: number[]
+  verdict: 'confirmed' | 'false_positive'
+  note?: string
+}) =>
+  request<{ updated: number; skipped: Array<{ result_id: number; reason: string }> }>({
+    url: '/results/bulk-confirm',
+    method: 'post',
+    data: body,
+  })
+
+/** 撤销人工判定：恢复为待复核（批量误操作的「撤销」用） */
+export const revertResults = (body: { result_ids: number[]; note?: string }) =>
+  request<{ updated: number; skipped: Array<{ result_id: number; reason: string }> }>({
+    url: '/results/revert',
+    method: 'post',
+    data: body,
+  })
+
 export const feedbackStats = () =>
   request<FeedbackStats>({ url: '/results/feedback-stats', method: 'get' })
+
+/** 结论生命周期时间线（F2-3）：检出 → 系统分流 → 人工判定/翻案 → 撤销 */
+export interface TrailEvent {
+  at: string
+  type: 'detected' | 'auto_confirmed' | 'confirm' | 'overturn' | 'revert'
+  actor: string
+  detail: string
+}
+
+export const getResultTrail = (resultId: number) =>
+  request<{ result_id: number; task_id: number; events: TrailEvent[] }>({
+    url: `/results/${resultId}/trail`,
+    method: 'get',
+  })
 
 export const rulesQuality = () =>
   request<{ total: number; items: RuleQualityItem[] }>({

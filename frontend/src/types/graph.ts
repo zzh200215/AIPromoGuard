@@ -8,6 +8,8 @@ export interface GraphPattern {
 }
 
 export interface GraphRegulation {
+  /** 与法规库同源（Neo4j Regulation.id = MySQL regulations.id），用于跳法规详情 */
+  regulation_id?: number | null
   regulation_name: string
   domain: string
   article_nos: string[]
