@@ -12,10 +12,15 @@ logger = get_logger(__name__)
 
 
 class DocumentService:
-    def parse(self, file_path: str | Path) -> ParsedDocument:
+    def parse(self, file_path: str | Path, *, mask: bool = True) -> ParsedDocument:
+        """解析文档。mask=False 时跳过脱敏（供巡检基线等"与线上原文比对"的场景）。
+
+        为什么需要 mask=False：解析阶段脱敏（PRD §13.2）会把金额抹成 `***元`，
+        若巡检基线用脱敏文本、而抓取的线上内容是原文，两侧口径不一致会对每个
+        材料产生"数字缺失"假阳性 → 巡检永远判 changed。10-07 修复。
+        """
         doc = self._parse_routed(file_path)
-        # 解析阶段脱敏（PRD §13.2）：系统处理的是脱敏后文本
-        if settings.app_config("parser").get("mask_sensitive", True):
+        if mask and settings.app_config("parser").get("mask_sensitive", True):
             for block in doc.blocks:
                 block.text, spans = mask_sensitive_with_spans(block.text)
                 # 方案 A：脱敏与检测共用一遍扫描——命中元数据留在文档上，

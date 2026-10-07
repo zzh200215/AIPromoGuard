@@ -148,7 +148,9 @@ def build_fingerprint_from_document(material: ProductMaterial) -> str | None:
     if not matches:
         return None
     try:
-        parsed = document_service.parse(matches[0])
+        # mask=False：巡检比对对象是"线上抓取的原文"，基线若用脱敏文本会
+        # 因口径不一致产生数字缺失假阳性（→ 永远判 changed）。10-07 修复。
+        parsed = document_service.parse(matches[0], mask=False)
     except Exception as exc:  # noqa: BLE001 — 解析失败返回 None，巡检报 skip
         logger.warning("批准版文档解析失败 %s: %s", material.document_id, exc)
         return None
@@ -219,19 +221,23 @@ def patrol_one(
         material.content_fingerprint = baseline  # 首巡建基线回写
 
     sim = containment(baseline, fetched_text or "")
-    if sim >= _OK_THRESHOLD:
+    # 双层判定（R2-3 互校模式的复用）：字符级 containment 对"只改关键数字"
+    # 不敏感（3.85→9.85 仅差 1 字符、相似度仍达 0.98）——因此数字缺失检查
+    # 必须先于相似度判定。原实现把 missing 放在 sim < OK 分支内，与该判定
+    # 意图不符："只改数字"的篡改会被判 ok 漏过（10-07 DB 用例跑通时暴露）。
+    missing = _missing_key_numbers(baseline, fetched_text or "")
+    if missing:
+        status = "changed"
+        task_id = _create_review_task(db, material, fetched_text or "")
+    elif sim >= _OK_THRESHOLD:
         status = "ok"
         task_id = None
+    elif sim < _DRIFT_THRESHOLD:
+        status = "changed"
+        task_id = _create_review_task(db, material, fetched_text or "")
     else:
-        # 双层判定（R2-3 互校模式的复用）：字符级 containment 对"只改关键
-        # 数字"不敏感（3.85→9.85 仅差 1 字符），数字缺失一票升级 changed
-        missing = _missing_key_numbers(baseline, fetched_text or "")
-        if missing or sim < _DRIFT_THRESHOLD:
-            status = "changed"
-            task_id = _create_review_task(db, material, fetched_text or "")
-        else:
-            status = "drift"
-            task_id = None
+        status = "drift"
+        task_id = None
     material.patrol_status = status
     material.patrol_checked_at = datetime.now()
     # 字段名是 review_task_id（dataclass 定义），曾误写 task_id= 导致正常比对
