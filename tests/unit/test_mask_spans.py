@@ -75,3 +75,31 @@ class TestScanPiiFromSpans:
     def test_unknown_kind_ignored(self):
         spans = [{"kind": "unknown_future_kind", "value": None}]
         assert scan_pii_from_spans(spans) == []
+
+
+class TestTableRowAmountExemption:
+    """表格行豁免金额脱敏（2026-10-07）：勾稽需原值；PII 在表格内仍脱敏。"""
+
+    def test_table_row_amount_kept(self):
+        text = "| 认购金额 | 预期收益 |\n| --- | --- |\n| 50000元 | 2100元 |"
+        masked, spans = mask_sensitive_with_spans(text)
+        assert "50000元" in masked and "2100元" in masked
+        assert "***元" not in masked
+        assert spans == []  # 未脱敏即无 amount span（amount 本就无消费方）
+
+    def test_prose_amount_still_masked(self):
+        masked, spans = mask_sensitive_with_spans("认购金额 50000元。")
+        assert masked == "认购金额 ***元。"
+        assert [s["kind"] for s in spans] == ["amount"]
+
+    def test_table_row_pii_still_masked_amount_kept(self):
+        text = "| 联系电话 | 金额 |\n| 13812345678 | 50000元 |"
+        masked, spans = mask_sensitive_with_spans(text)
+        assert "138****5678" in masked
+        assert "50000元" in masked
+        assert [s["kind"] for s in spans] == ["phone"]
+
+    def test_plain_mask_sensitive_same_behavior(self):
+        """mask_sensitive 与 with_spans 行为一致（同一行级实现）。"""
+        assert mask_sensitive("| 50000元 | 2100元 |") == "| 50000元 | 2100元 |"
+        assert mask_sensitive("本金 50000元。") == "本金 ***元。"

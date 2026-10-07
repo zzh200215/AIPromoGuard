@@ -261,6 +261,7 @@ def test_confirm_writes_audit_trail():
         )
         assert row is not None
         detail = _json.loads(row.detail)
+        assert isinstance(detail.get("task_id"), int)  # 结论删除后可归属回任务
         assert detail["before_status"] == "confirmed"
         assert detail["before_auto_confirmed"] is True
         assert detail["verdict"] == "false_positive"

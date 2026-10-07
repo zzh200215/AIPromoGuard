@@ -191,3 +191,36 @@ def test_mineru_table_block_end_to_end():
     assert len(hits) == 1
     assert hits[0].page is None
     assert "999,999" in hits[0].matched_text
+
+
+# ---------- 金额单位解析（2026-10-07 实证修复：元后缀曾让整行静默跳过） ----------
+
+def test_yuan_suffix_cells_parsed_and_flagged():
+    """带"元"单位的单元格可解析——此前 _to_number→None 整行被跳过、勾稽静默失效。"""
+    block = _table_block(["| 50000元 | 90天 | 1.20% | 2100元 | 53000元 |"])
+    hits = scan_consistency([block])
+    assert len(hits) == 1
+    assert "期末金额" in hits[0].description
+
+
+def test_yuan_suffix_consistent_row_no_hit():
+    block = _table_block(["| 50000元 | 90天 | 1.20% | 2100元 | 52100元 |"])
+    assert scan_consistency([block]) == []
+
+
+def test_cross_unit_row_reconciles():
+    """跨单位行归一化到元后一致（5万元 + 2100元 = 52100元），不误报。"""
+    block = _table_block(["| 5万元 | 90天 | 1.20% | 2100元 | 52100元 |"])
+    assert scan_consistency([block]) == []
+
+
+def test_amount_unit_normalization():
+    from decimal import Decimal
+
+    from src.core.rule_engine.consistency import _to_number
+
+    assert _to_number("50000元") == Decimal("50000")
+    assert _to_number("5万元") == Decimal("50000")
+    assert _to_number("1.5亿元") == Decimal("150000000")
+    assert _to_number("100,000万元") == Decimal("1000000000")
+    assert _to_number("5000美元") is None  # 外币不参与人民币口径勾稽

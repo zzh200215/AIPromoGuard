@@ -233,6 +233,8 @@ def confirm_result(
             resource_id=str(result.id),
             detail=json.dumps(
                 {
+                    # task_id 用于结论删除（任务重跑清空旧结论）后仍可归属回任务
+                    "task_id": result.task_id,
                     "before_status": before_status,
                     "before_auto_confirmed": before_auto_confirmed,
                     "verdict": body.verdict,
@@ -299,6 +301,8 @@ def bulk_confirm_results(
                 resource_id=str(result.id),
                 detail=json.dumps(
                     {
+                        # task_id：结论删除后仍可归属回任务（见单条 confirm 同字段说明）
+                        "task_id": result.task_id,
                         "before_status": before_status,
                         "before_auto_confirmed": before_auto_confirmed,
                         "verdict": body.verdict,
@@ -366,7 +370,12 @@ def revert_results(
                 resource_type="review_result",
                 resource_id=str(result.id),
                 detail=json.dumps(
-                    {"before_status": before_status, "bulk": True},
+                    {
+                        # task_id：结论删除后仍可归属回任务（见单条 confirm 同字段说明）
+                        "task_id": result.task_id,
+                        "before_status": before_status,
+                        "bulk": True,
+                    },
                     ensure_ascii=False,
                 ),
             )

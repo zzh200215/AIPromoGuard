@@ -66,6 +66,10 @@ _MD_TABLE_ROW = re.compile(r"^\s*\|.*\|\s*$")
 _MD_SEP_ROW = re.compile(r"^\s*\|[\s:|-]+\|\s*$")
 _MD_CELLS = re.compile(r"(?<!\\)\|")
 _PCT_RE = re.compile(r"(-?\d+(?:\.\d+)?)\s*%")
+# 金额单位（归一化到元：万元 ×1e4 / 亿元 ×1e8）——单元格常见"50000元/1.5亿元"，
+# 不识别单位会让整行被跳过（勾稽静默失效，2026-10-07 实证发现）
+_AMOUNT_UNIT_RE = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*(万|亿)?\s*元")
+_UNIT_SCALE = {"万": Decimal(10000), "亿": Decimal(100000000)}
 _RANGE_CELL_RE = re.compile(r"\d+(?:\.\d+)?\s*%?\s*[-~]\s*\d+(?:\.\d+)?")
 
 
@@ -105,13 +109,25 @@ def map_fields(header: list[str]) -> dict[str, int] | None:
 
 
 def _to_number(cell: str) -> Decimal | None:
-    """单元格 → Decimal；含 % 的取数值本体（3.85% → 3.85）；失败返回 None。"""
+    """单元格 → Decimal；含 % 的取数值本体（3.85% → 3.85）；失败返回 None。
+
+    金额单位（元/万元/亿元）归一化到「元」——跨单位的行内勾稽（本金 5万元 +
+    收益 2100元 = 期末 5.21万元）因此能正确比较。
+    """
     s = (cell or "").strip()
     if not s:
         return None
     m = _PCT_RE.search(s)
     if m:
         return Decimal(m.group(1))
+    m = _AMOUNT_UNIT_RE.search(s)
+    if m:
+        try:
+            val = Decimal(norm_number(m.group(1)))
+        except InvalidOperation:
+            return None
+        scale = _UNIT_SCALE.get(m.group(2))
+        return val * scale if scale else val
     cleaned = norm_number(s)
     try:
         return Decimal(cleaned)
