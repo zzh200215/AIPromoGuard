@@ -26,6 +26,12 @@ Thumbs.db
 
 # pytest basetemp（默认 Temp 目录权限受限时使用）
 .pytest-tmp/
+.pytest-tmp-db*/
+.pytest-tmp*/
+
+# AI 工作记忆不入库（每日日志/项目笔记属本地过程数据）；
+# .workbuddy/skills/ 保留入库——项目 skill（如 frontend-visual-verify）需团队共享
+.workbuddy/memory/
 
 # 个人文档不入库（面试准备材料 / 截图）
 面试说明稿.md
@@ -44,3 +50,5 @@ tasks/
 # 根目录 PRD 原件（正式版在 docs/PRD.md）
 /金融产品合规智能审查系统*.md
 .ci_sim/
+
+ptmp_run/
