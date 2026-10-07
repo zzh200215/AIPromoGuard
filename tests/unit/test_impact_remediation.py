@@ -196,7 +196,15 @@ def test_rule_version_publish_flow():
         )
         assert created.status_code == 201, created.text
         v1 = created.json()["data"]
-        assert v1["status"] == "active"
+        # 规则发布门禁（R4-2）：新建规则默认 draft（is_active=0），
+        # 需显式发布才生效——原断言 status == "active" 写于门禁功能之前，已过时
+        assert v1["status"] == "draft" and v1["is_active"] == 0
+
+        # 发布门禁流程：v1 先发布生效——否则"取代"语义不成立（draft 版本从未
+        # 生效，发布新版本时它不在 superseded 列表里，这是正确实现语义）
+        v1_pub = client.post(f"/api/v1/rules/{v1['id']}/publish", headers=h)
+        assert v1_pub.status_code == 200, v1_pub.text
+        assert v1_pub.json()["data"]["rule"]["status"] == "active"
 
         draft = client.post(f"/api/v1/rules/{v1['id']}/versions", headers=h).json()["data"]
         assert draft["status"] == "draft" and draft["version"] == v1["version"] + 1

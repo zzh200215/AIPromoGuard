@@ -44,6 +44,11 @@ logger = get_logger(__name__)
 
 _OK_THRESHOLD = 0.98
 _DRIFT_THRESHOLD = 0.90
+# 线上超出批准版的容忍比例（10-07 决策：追加内容 → drift）：
+# 反向 containment 低于 1-此值 说明线上有多出批准版的内容。设阈值是为了
+# 保留原有的"抗噪声"设计——页脚/导航等少量差异不触发，大段追加（如新增
+# 话术、版权声明）才判 drift（记待观察，不创建复审任务）。
+_EXTRA_THRESHOLD = 0.10
 
 _SCRIPT_STYLE_RE = re.compile(
     r"<(script|style|noscript)[^>]*>.*?</\1>", re.I | re.S
@@ -221,6 +226,10 @@ def patrol_one(
         material.content_fingerprint = baseline  # 首巡建基线回写
 
     sim = containment(baseline, fetched_text or "")
+    # 线上超出批准版的比例（反向 containment）：用于"追加内容 → drift"判定
+    # （10-07 决策）。原设计只做单向 containment（忽略线上多余内容）以抗
+    # 页脚/导航噪声，此处用 10% 阈值保留抗噪性：少量差异不触发，大段追加才判。
+    extra = max(0.0, 1.0 - containment(fetched_text or "", baseline))
     # 双层判定（R2-3 互校模式的复用）：字符级 containment 对"只改关键数字"
     # 不敏感（3.85→9.85 仅差 1 字符、相似度仍达 0.98）——因此数字缺失检查
     # 必须先于相似度判定。原实现把 missing 放在 sim < OK 分支内，与该判定
@@ -229,14 +238,14 @@ def patrol_one(
     if missing:
         status = "changed"
         task_id = _create_review_task(db, material, fetched_text or "")
-    elif sim >= _OK_THRESHOLD:
-        status = "ok"
-        task_id = None
     elif sim < _DRIFT_THRESHOLD:
         status = "changed"
         task_id = _create_review_task(db, material, fetched_text or "")
-    else:
+    elif sim < _OK_THRESHOLD or extra > _EXTRA_THRESHOLD:
         status = "drift"
+        task_id = None
+    else:
+        status = "ok"
         task_id = None
     material.patrol_status = status
     material.patrol_checked_at = datetime.now()
