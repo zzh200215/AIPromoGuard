@@ -29,7 +29,7 @@ class _FakeLLM:
         self.calls = 0
         self.fail_at = fail_at or set()
 
-    async def achat_json(self, messages, temperature=None):
+    async def achat_json(self, messages, temperature=None, **kwargs):
         self.calls += 1
         if self.calls in self.fail_at:
             raise RuntimeError("LLM 调用失败")

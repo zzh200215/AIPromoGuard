@@ -50,6 +50,9 @@ class ReviewState(TypedDict, total=False):
     rule_hits: list[dict[str, Any]]
     llm_findings: list[dict[str, Any]]
     vlm_findings: list[dict[str, Any]]  # 视觉层审查 findings（VLM，图片文档专用，仅初始态写入）
+    # 方案 A：解析脱敏时采集的敏感命中元数据（PII 检测的数据源——
+    # 脱敏后文本正则扫不出敏感信息；仅初始态写入）
+    mask_spans: list[dict[str, Any]]
     # LLM token 用量/调用统计（成本观测，随报告落盘）；reducer 累加多节点用量
     llm_usage: Annotated[dict[str, Any], _merge_llm_usage]
     merged_findings: list[dict[str, Any]]

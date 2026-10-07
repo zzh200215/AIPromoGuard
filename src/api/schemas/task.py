@@ -35,6 +35,15 @@ class HumanReviewDecision(BaseModel):
     rejected_indexes: list[int] = Field(default_factory=list, description="否决的结论 index 列表")
 
 
+class SignOffRequest(BaseModel):
+    """审核签发：报告定稿后的正式放行/驳回动作。"""
+
+    decision: str = Field(
+        ..., pattern="^(released|rejected)$", description="released=放行, rejected=驳回整改"
+    )
+    note: str | None = Field(None, max_length=500, description="签发意见（选填）")
+
+
 class TaskOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

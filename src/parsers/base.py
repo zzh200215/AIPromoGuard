@@ -24,6 +24,9 @@ class ParsedDocument:
     title: str = ""
     domain: str | None = None    # 由 DocClassifier 填充（W2）
     doc_type: str | None = None  # 说明书/协议/宣传材料
+    # 方案 A：解析脱敏时采集的敏感命中元数据（[{"kind":..., "value":...}]），
+    # 供下游检测层使用——脱敏后文本已无法用正则扫出 PII
+    mask_spans: list[dict] = field(default_factory=list)
 
     @property
     def text(self) -> str:

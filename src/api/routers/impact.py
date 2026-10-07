@@ -18,6 +18,7 @@ from src.api.schemas.impact import (
     MaterialCreate,
     MaterialOut,
     MaterialUpdate,
+    PatrolRequest,
     RemediationDecision,
 )
 from src.api.schemas.rule import RuleOut
@@ -36,6 +37,7 @@ from src.models import (
     RuleRegulationLink,
     User,
 )
+from src.services import content_patrol
 from src.services.impact_service import decide_remediation, start_retest
 from src.services.review_service import start_review
 from src.utils.config import settings
@@ -121,6 +123,22 @@ def impact_overview(
     )
     active_rules = db.query(Rule).filter(Rule.is_active == 1).count()
 
+    # R3-1 巡检动态计数：驾驶舱"线上内容变更/页面失联"告警卡的数据源
+    patrol_rows = (
+        db.query(ProductMaterial.patrol_status, func.count(ProductMaterial.id))
+        .filter(ProductMaterial.status == "active")
+        .group_by(ProductMaterial.patrol_status)
+        .all()
+    )
+    patrol_counts = {s: c for s, c in patrol_rows}
+    patrol_changed = patrol_counts.get("changed", 0)
+    patrol_gone = patrol_counts.get("gone", 0)
+
+    # R3-2 时效性告警：规则停用/法规废止 反向定位的在用材料（只读，不写状态）
+    from src.services.impact_service import stale_materials_check
+
+    stale = stale_materials_check(db)
+
     return ok(
         {
             "pending_updates": pending_updates,
@@ -134,6 +152,10 @@ def impact_overview(
             "remediation_done": remediation_done,
             "rules_pending_publish": rules_pending_publish,
             "active_rules": active_rules,
+            "stale_materials": stale,
+            "patrol_counts": patrol_counts,
+            "patrol_changed": patrol_changed,
+            "patrol_gone": patrol_gone,
         }
     )
 
@@ -249,6 +271,23 @@ def update_material(
     db.commit()
     db.refresh(material)
     return ok(MaterialOut.model_validate(material).model_dump())
+
+
+
+
+@router.post("/materials/patrol")
+def patrol_published_materials(
+    body: PatrolRequest | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("manage_rules")),
+) -> dict:
+    """发布后内容巡检（R3-1）：抓取台账登记的已发布渠道，与批准版指纹比对。
+
+    三档判定：ok（≥0.98）/ drift（0.9~0.98 漂移观察）/ changed（<0.9 自动
+    创建复审任务）；404/下线报 gone 进驾驶舱告警。只抓已授权的自有渠道。
+    """
+    material_ids = body.material_ids if body else None
+    return ok(content_patrol.patrol_materials(db, material_ids))
 
 
 @router.post("/materials/{material_id}/retest", status_code=201)

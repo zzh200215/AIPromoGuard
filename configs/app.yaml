@@ -12,6 +12,12 @@ llm:
   max_tokens: 4096
   timeout_seconds: 120
   fallback_models: [qwen-turbo]  # 主模型失败时的降级模型
+  # 真 function calling：LLM 审查时主动调法规检索工具查证再判定（ReAct 式自我查证）
+  tool_calling:
+    enabled: true            # 总开关；false 时 achat_json 走原纯 json_object 路径
+    tool_choice: auto        # auto | none | required 或 {"function": {...}}
+    max_tool_rounds: 2       # 最大工具循环回合数（成本护栏）
+    max_tool_calls_total: 4  # 单块审查累计工具调用上限（成本护栏）
 
 # 向量检索
 vectorstore:
@@ -30,9 +36,13 @@ vectorstore:
 parser:
   chunk_size: 500            # 字符数
   chunk_overlap: 50
+  chunk_respect_headings: true   # 方向④语义切块：按标题边界优先断开，减"一条违规被切缝劈两半"
   max_file_size_mb: 50
   allowed_exts: [pdf, doc, docx, txt, png, jpg, jpeg, bmp]
   mask_sensitive: true       # 解析阶段脱敏（身份证/手机号/银行卡/金额）
+  mineru_enabled: false      # R2-1 MinerU 深解析通道（扫描件全文+表格补充）；需 pip install mineru，CPU ~0.2 页/s
+  mineru_always: false       # true = 文字版 PDF 也走混合解析补表格块（成本高，默认关）
+  mineru_tier: standard      # MinerU 解析档位（spike：advanced 对漏块无改善，用 standard）
 
 # 规则引擎
 rule_engine:

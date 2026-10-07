@@ -22,6 +22,7 @@ import importlib.util
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -224,6 +225,130 @@ def judge_case(llm, ev, case: dict, engine: str) -> dict:
     }
 
 
+def export_golden_cases(out_path: str) -> dict:
+    """R4-2：从人工复核结论沉淀金标准集（脱敏已内建——ReviewResult 存的
+    original_text 本身是解析阶段脱敏后的文本，数据卫生自动满足）。
+
+    口径（数据卫生约定）：只取 confirmed_by > 0 的**真实人工复核**结论，
+    系统自动确认（confirmed_by=0）不入集——否则 judge 校准的是自己的
+    自动确认输出，循环论证。
+    expected_verdict 映射：confirmed → true_violation；
+    false_positive → false_positive。人工无 wrong_basis 口径（judge 特有），
+    校准时判 wrong_basis 计为分歧并单独标注。
+    """
+    from src.infrastructure.database.mysql import SessionLocal
+    from src.models import ReviewResult
+
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(ReviewResult)
+            .filter(
+                ReviewResult.confirmed_by.isnot(None),
+                ReviewResult.confirmed_by > 0,
+                ReviewResult.status.in_(["confirmed", "false_positive"]),
+                ReviewResult.original_text.isnot(None),
+                ReviewResult.original_text != "",
+            )
+            .order_by(ReviewResult.id)
+            .all()
+        )
+        cases = []
+        for r in rows:
+            cases.append(
+                {
+                    "id": f"golden_{r.id}",
+                    "task_id": r.task_id,
+                    "text": r.original_text,
+                    "original_text": r.original_text,
+                    "description": r.description or "",
+                    "risk_level": r.risk_level or "",
+                    "violation_type": r.violation_type or "",
+                    "expected_verdict": (
+                        "true_violation" if r.status == "confirmed" else "false_positive"
+                    ),
+                    "source": "human_review",
+                }
+            )
+        payload = {
+            "exported_at": datetime.now().isoformat(timespec="seconds"),
+            "source": "human_review (confirmed_by > 0 only)",
+            "count": len(cases),
+            "cases": cases,
+        }
+        Path(out_path).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(f"金标准集已导出：{len(cases)} 条 → {out_path}")
+        return payload
+    finally:
+        db.close()
+
+
+def run_calibration(llm, golden_path: str, limit: int = 0, threshold: float = 0.85) -> int:
+    """R4-2 校准：judge 与人工金标准逐条比对，一致率 <threshold 退出码 1（可接 CI）。
+
+    一致 = judge.verdict == expected_verdict；judge 判 wrong_basis（人工
+    无此口径）计为分歧并单独标注，供校准 judge 提示词时归因。
+    """
+    payload = json.loads(Path(golden_path).read_text(encoding="utf-8"))
+    cases = payload.get("cases", [])
+    if limit > 0:
+        cases = cases[:limit]
+    if not cases:
+        print("金标准集为空——先 --export-golden 导出（需人工复核数据积累）")
+        return 2
+
+    agreements: list[dict] = []
+    disagreements: list[dict] = []
+    skipped = 0
+    for i, case in enumerate(cases, start=1):
+        print(f"[{i}/{len(cases)}] {case['id']} ...", flush=True)
+        finding = {
+            "type": case.get("violation_type", ""),
+            "issue": (case.get("description") or "")[:80],
+            "original_text": case.get("original_text", ""),
+            "regulation": "",
+            "reason": (case.get("description") or ""),
+            "severity": case.get("risk_level", ""),
+        }
+        verdict, _ = judge_finding(llm, case.get("text", ""), finding)
+        if verdict is None:
+            skipped += 1
+            continue
+        entry = {
+            "id": case["id"],
+            "expected": case["expected_verdict"],
+            "judge": verdict["verdict"],
+            "judge_reason": verdict.get("reason", ""),
+        }
+        if verdict["verdict"] == case["expected_verdict"]:
+            agreements.append(entry)
+        else:
+            entry["note"] = (
+                "judge 特有口径 wrong_basis（人工复核无此判定）"
+                if verdict["verdict"] == "wrong_basis"
+                else ""
+            )
+            disagreements.append(entry)
+
+    judged = len(agreements) + len(disagreements)
+    agreement_rate = round(len(agreements) / judged, 3) if judged else None
+    ok = agreement_rate is not None and agreement_rate >= threshold
+    print(
+        f"\n== Judge × 金标准校准 ==\n"
+        f"人工金标准 {len(cases)} 条（判分成功 {judged}，跳过 {skipped}）\n"
+        f"一致率 {agreement_rate}（一致 {len(agreements)} / 分歧 {len(disagreements)}）\n"
+        f"门槛 {threshold} → {'PASS' if ok else 'FAIL'}"
+    )
+    if disagreements:
+        print("分歧明细（前 10 条）：")
+        for d in disagreements[:10]:
+            note = f" [{d['note']}]" if d.get("note") else ""
+            print(f"  {d['id']}: 人工={d['expected']} judge={d['judge']}{note}")
+    return 0 if ok else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="LLM-as-a-Judge 评估（本地工具，observe-only）")
     parser.add_argument("--engine", choices=["full", "rule"], default="full")
@@ -232,7 +357,26 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=0, help="只评估前 N 例（0=全部）")
     parser.add_argument("--domain", default=None, help="只评估指定领域")
     parser.add_argument("--out", default=None, help="结果 JSON 输出路径（缺省只打印）")
+    parser.add_argument(
+        "--export-golden", metavar="PATH", default=None,
+        help="R4-2：导出人工复核金标准集（confirmed_by>0 的结论）为 JSON",
+    )
+    parser.add_argument(
+        "--calibrate", metavar="GOLDEN_JSON", default=None,
+        help="R4-2：judge 与金标准集比对，一致率 <threshold 退出码 1（可接 CI）",
+    )
+    parser.add_argument("--threshold", type=float, default=0.85, help="校准一致率门槛")
     args = parser.parse_args()
+
+    if args.export_golden:
+        export_golden_cases(args.export_golden)
+        return 0
+    if args.calibrate:
+        llm = recording_llm(get_llm())
+        if llm is None:
+            print("未配置 DASHSCOPE_API_KEY，校准需要 LLM")
+            return 2
+        return run_calibration(llm, args.calibrate, limit=args.limit, threshold=args.threshold)
 
     llm = recording_llm(get_llm())
     if llm is None:

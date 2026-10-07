@@ -20,6 +20,15 @@
     误报率 fpr   = 未命中任何标注点的系统检出数 / 系统检出总数
     精确率 precision = 1 - fpr
 匹配规则: 任一系统检出的原文片段与标注片段互为子串即算命中（与 conflict_resolve._overlaps 一致）。
+
+负面标注 negative_ground_truth（方向③真实复核回流）:
+    样本可带 negative_ground_truth: [{text, rule_name?}] —— 人工判定为“误报”的片段。
+    系统检出只要与其任一互为子串即计为误报（不进命中、不进召回），
+    使“人工标记误报的 case 自动进回归基准集”可直接由规则门禁守住，
+    也允许同一文档同时含 confirmed 与 FP（混合任务，不再整份跳过）。
+每规则阈值（调阈值杠杆）:
+    rule_content.min_confidence 存在时覆盖全局 rule_engine.min_confidence ——
+    规则误报率高可只抬该规则阈值而不动全局，避免误伤其他规则。
 """
 
 import argparse
@@ -75,6 +84,15 @@ def _load_active_rules() -> list:
         db.close()
 
 
+def _rule_threshold_map(rules: list, default: float) -> dict:
+    """每规则有效阈值：rule_content.min_confidence 覆盖全局默认（调阈值杠杆）。"""
+    return {
+        r.id: float(r.rule_content.get("min_confidence"))
+        for r in rules
+        if (r.rule_content or {}).get("min_confidence") is not None
+    }
+
+
 def _scan_rule_engine(case: dict) -> list[dict]:
     """仅规则引擎：按样本 domain 过滤，隔离规则检测质量。
 
@@ -83,6 +101,8 @@ def _scan_rule_engine(case: dict) -> list[dict]:
     """
     rules = _load_active_rules()
     min_conf = settings.app_config("rule_engine").get("min_confidence", 0.5)
+    # 调阈值杠杆：rule_content.min_confidence 覆盖全局（重算/校准时写入规则 DSL）
+    per_rule = _rule_threshold_map(rules, min_conf)
 
     findings = []
     for line in case["text"].splitlines() or [case["text"]]:
@@ -91,9 +111,10 @@ def _scan_rule_engine(case: dict) -> list[dict]:
             continue
         block = TextBlock(text=line, page=1, paragraph=1, heading=False)
         hits: list[RuleHit] = rule_scanner.scan([block], rules, domain=case.get("domain"))
-        if min_conf > 0:
-            hits = [h for h in hits if h.confidence >= min_conf]
         for h in hits:
+            eff = per_rule.get(h.rule_id, min_conf)  # 每规则有效阈值
+            if eff > 0 and h.confidence < eff:
+                continue
             findings.append(
                 {
                     "source": "rule",
@@ -126,6 +147,7 @@ def _scan_full(case: dict) -> list[dict]:
 
 def _evaluate_case(case: dict, engine: str) -> dict:
     gt = case.get("ground_truth", [])
+    negatives = case.get("negative_ground_truth") or []  # 人工判定误报片段（不得命中）
     findings = _scan_rule_engine(case) if engine == "rule" else _scan_full(case)
 
     matched_gt = set()
@@ -133,6 +155,10 @@ def _evaluate_case(case: dict, engine: str) -> dict:
     hit_details = []
     for _i, f in enumerate(findings):
         text = f.get("original_text") or ""
+        # 命中负面标注 → 直接计误报，不再计命中/召回
+        if any(_overlaps(text, n.get("text", "")) for n in negatives):
+            fp += 1
+            continue
         matched = [g for j, g in enumerate(gt) if _overlaps(text, g.get("text", ""))]
         if matched:
             matched_gt.update(id(g) for g in matched)
@@ -147,6 +173,7 @@ def _evaluate_case(case: dict, engine: str) -> dict:
         "id": case["id"],
         "domain": case.get("domain"),
         "ground_truth": gt,
+        "negative_gt_count": len(negatives),
         "gt_count": len(gt),
         "found_count": len(findings),
         "tp_gt": len(matched_gt),

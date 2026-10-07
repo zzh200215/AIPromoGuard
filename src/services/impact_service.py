@@ -225,3 +225,92 @@ def start_retest(
         material.version,
     )
     return {"batch_id": batch.id, "task_id": task.id, "version": material.version}
+
+
+def stale_materials_check(db: Session, limit: int = 50) -> dict:
+    """时效性告警（R3-2）：规则停用 / 法规废止 反向定位受影响的在用材料.
+
+    关联链（全为既有数据，不新增表）：material.document_id → 审查任务
+    （document_name = doc_id.ext）→ results.rule_id → 规则停用状态；
+    规则 → rule_regulation_link → 法规 status（effective 之外的视为失效）。
+
+    只读查询，不写任何状态——产出"待更新"清单挂驾驶舱，人工据此走
+    影响分析/整改流程（与 R3-1 的 changed 自动复审互补：那边抓线上内容
+    被改，这边抓依据失效）。
+    """
+    from src.models import Regulation, Rule, RuleRegulationLink
+
+    inactive_rules = {
+        r.id: f"规则已停用：{r.rule_name}"
+        for r in db.query(Rule).filter(Rule.is_active == 0).all()
+    }
+    inactive_regs = {
+        r.id: f"法规已废止/失效：{r.regulation_name}"
+        for r in db.query(Regulation).filter(Regulation.status != "effective").all()
+    }
+    rule_to_reg = {
+        link.rule_id: link.regulation_id
+        for link in db.query(RuleRegulationLink).all()
+        if link.regulation_id
+    }
+
+    materials = (
+        db.query(ProductMaterial)
+        .filter(ProductMaterial.status == "active")
+        .order_by(ProductMaterial.id)
+        .all()
+    )
+    stale = []
+    for m in materials:
+        # rule_ids 收集：material.document_id → 审查任务 → results
+        rule_ids: set[int] = set()
+        if m.document_id:
+            tasks = (
+                db.query(ReviewTask)
+                .filter(ReviewTask.document_name.like(f"{m.document_id}.%"))
+                .all()
+            )
+            for t in tasks:
+                rows = (
+                    db.query(ReviewResult)
+                    .filter(
+                        ReviewResult.task_id == t.id,
+                        ReviewResult.rule_id.isnot(None),
+                    )
+                    .all()
+                )
+                rule_ids.update(r.rule_id for r in rows if r.rule_id)
+        reasons = material_stale_reasons(rule_ids, inactive_rules, inactive_regs, rule_to_reg)
+        if reasons:
+            stale.append(
+                {
+                    "material_id": m.id,
+                    "name": m.name,
+                    "version": m.version,
+                    "last_review_status": m.last_review_status,
+                    "reasons": reasons,
+                }
+            )
+            if len(stale) >= limit:
+                break
+    return {
+        "checked": len(materials),
+        "stale_count": len(stale),
+        "materials": stale,
+    }
+
+
+def material_stale_reasons(
+    rule_ids: set[int],
+    inactive_rules: dict[int, str],
+    inactive_regs: dict[int, str],
+    rule_to_reg: dict[int, int],
+) -> list[str]:
+    """时效判定纯函数：命中的规则里，停用规则或其关联法规失效即为待更新。"""
+    reasons: list[str] = []
+    for rid in sorted(rule_ids):
+        if rid in inactive_rules:
+            reasons.append(inactive_rules[rid])
+        elif rid in rule_to_reg and rule_to_reg[rid] in inactive_regs:
+            reasons.append(inactive_regs[rule_to_reg[rid]])
+    return reasons

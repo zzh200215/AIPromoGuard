@@ -23,7 +23,11 @@ cd "$REPO_ROOT"
 
 # 默认走 rule 引擎（快、无 LLM key 依赖）；用户命令行参数追加在后，
 # argparse 取最后一次出现，可显式覆盖 engine / 阈值（如 --engine full 或 --min-recall 0.91）。
+# 评估集：存在增量的 gate_cases.json（真实复核回流产物）则优先，否则回退合成基准 eval_cases.json。
 declare -a EXTRA=(--engine rule --min-recall 0.98 --max-fpr 0.02)
+if [[ -f scripts/evaluate/gate_cases.json ]]; then
+  EXTRA+=(--cases scripts/evaluate/gate_cases.json)
+fi
 while [[ $# -gt 0 ]]; do
   EXTRA+=("$1")
   shift

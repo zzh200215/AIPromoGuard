@@ -3,15 +3,16 @@
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from src.api.middleware.auth import ensure_task_access, require_permission
 from src.api.schemas.rule import RuleOut
 from src.infrastructure.database.mysql import get_db
 from src.models import Article, AuditLog, Regulation, ReviewResult, ReviewTask, Rule, User
+from src.services.result_trail import build_trail
 from src.services.rule_tuning import apply_suggestion, build_rule_suggestions
 from src.utils.errors import AppError, ErrorCode
 from src.utils.response import ok
@@ -25,6 +26,7 @@ _STATUSES = {"pending_confirm", "confirmed", "false_positive"}
 def list_results(
     task_id: int,
     status: str | None = None,
+    order: str = Query("id", pattern="^(id|priority)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("view_report")),
 ) -> dict:
@@ -35,7 +37,21 @@ def list_results(
     query = db.query(ReviewResult).filter(ReviewResult.task_id == task_id)
     if status:
         query = query.filter(ReviewResult.status == status)
-    items = query.order_by(ReviewResult.id.asc()).all()
+    if order == "priority":
+        # R4-3 低置信优先复核路由：排序键 = (1 - 置信度) × 风险权重 降序。
+        # 业界共识"人工只看最难案例"：低置信 = 系统最拿不准（AI 判断力的
+        # 边界），高风险 = 危害最大——复核人从"最可疑且最危险"的看起。
+        weight = case(
+            (ReviewResult.risk_level == "high", 3),
+            (ReviewResult.risk_level == "medium", 2),
+            else_=1,
+        )
+        query = query.order_by(
+            ((1 - ReviewResult.confidence_score) * weight).desc()
+        )
+    else:
+        query = query.order_by(ReviewResult.id.asc())
+    items = query.all()
 
     # 法规溯源展示：regulation/article 表都不大，直接建查找字典（无关联时字段为 None）
     reg_ids = {r.regulation_id for r in items if r.regulation_id}
@@ -75,6 +91,26 @@ def list_results(
             "article_excerpt": article.content[:80] if article else None,
         }
 
+    # 内置维度身份（F1-2）：review_service 落库时把 rule_name 并入 description 头部
+    # （"[敏感信息：手机号] …"），此处据此派生 finding_kind 供前端渲染专属标签。
+    # 前缀常量从检测器单点 import——文案改动会被测试拦截，不会静默失效。
+    from src.core.rule_engine.consistency import CONSISTENCY_KIND_PREFIX
+    from src.core.rule_engine.pii_scan import PII_KIND_PREFIX
+    from src.services.tamper_check import TAMPER_KIND_PREFIX
+
+    _KIND_PREFIXES = (
+        (PII_KIND_PREFIX, "pii"),
+        (CONSISTENCY_KIND_PREFIX, "consistency"),
+        (TAMPER_KIND_PREFIX, "tamper"),
+    )
+
+    def _finding_kind(r: ReviewResult) -> str | None:
+        desc = r.description or ""
+        for prefix, kind in _KIND_PREFIXES:
+            if desc.startswith(f"[{prefix}"):
+                return kind
+        return "visual" if r.violation_type == "vlm" else None
+
     return ok(
         {
             "task_id": task_id,
@@ -83,6 +119,7 @@ def list_results(
                 {
                     "result_id": r.id,
                     "violation_type": r.violation_type,
+                    "finding_kind": _finding_kind(r),
                     "risk_level": r.risk_level,
                     "original_text": r.original_text,
                     "location_page": r.location_page,
@@ -110,6 +147,52 @@ class ConfirmRequest(BaseModel):
         pattern="^(confirmed|false_positive)$",
     )
     note: str | None = None
+
+class BulkConfirmRequest(BaseModel):
+    result_ids: list[int] = Field(..., min_length=1, max_length=200)
+    verdict: str = Field(
+        ...,
+        description="confirmed | false_positive",
+        pattern="^(confirmed|false_positive)$",
+    )
+    note: str | None = None
+
+
+@router.get("/results/{result_id}/trail")
+def result_trail(
+    result_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("view_report")),
+) -> dict:
+    """结论生命周期时间线（F2-3）：检出 → 系统分流 → 人工判定/翻案 → 撤销。
+
+    数据源全是既有留痕（ReviewResult + AuditLog），供工作台详情面板回放
+    判定轨迹——审计员四问中"能否事后追溯"的页面侧答案（导出侧见证据包）。
+    """
+    result = db.get(ReviewResult, result_id)
+    if result is None:
+        raise AppError(ErrorCode.RESULT_NOT_FOUND)
+    task = db.get(ReviewTask, result.task_id)
+    if task is None:
+        raise AppError(ErrorCode.TASK_NOT_FOUND)
+    ensure_task_access(db, task, current_user)
+
+    ops = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.resource_type == "review_result",
+            AuditLog.resource_id == str(result_id),
+        )
+        .order_by(AuditLog.id)
+        .all()
+    )
+    return ok(
+        {
+            "result_id": result_id,
+            "task_id": result.task_id,
+            "events": build_trail(result, ops),
+        }
+    )
 
 
 @router.post("/results/{result_id}/confirm")
@@ -169,6 +252,128 @@ def confirm_result(
             "auto_confirmed": result.confirmed_by == 0,
         }
     )
+
+
+@router.post("/results/bulk-confirm")
+def bulk_confirm_results(
+    body: BulkConfirmRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("confirm")),
+) -> dict:
+    """批量人工判定（确认 / 剔除误报）。
+
+    逐条复用单条确认的鉴权与留痕逻辑：无权访问的任务条目跳过并在
+    skipped 中说明原因，不作整体失败；每条判定各落一条审计（含 bulk 标记）。
+    """
+    unique_ids = list(dict.fromkeys(body.result_ids))
+    skipped: list[dict] = []
+    updated = 0
+    now = datetime.now()
+    for rid in unique_ids:
+        result = db.get(ReviewResult, rid)
+        if result is None:
+            skipped.append({"result_id": rid, "reason": "not_found"})
+            continue
+        task = db.get(ReviewTask, result.task_id)
+        if task is None:
+            skipped.append({"result_id": rid, "reason": "task_missing"})
+            continue
+        try:
+            ensure_task_access(db, task, current_user)
+        except AppError:
+            skipped.append({"result_id": rid, "reason": "forbidden"})
+            continue
+        before_status = result.status
+        before_auto_confirmed = result.confirmed_by == 0
+        result.status = body.verdict
+        result.confirmed_at = now
+        result.confirmed_by = current_user.id
+        if body.note:
+            result.description = (result.description or "") + f"\n[批量复核] {body.note}"
+        db.add(
+            AuditLog(
+                user_id=current_user.id,
+                username=current_user.username,
+                action="result.confirm",
+                resource_type="review_result",
+                resource_id=str(result.id),
+                detail=json.dumps(
+                    {
+                        "before_status": before_status,
+                        "before_auto_confirmed": before_auto_confirmed,
+                        "verdict": body.verdict,
+                        "bulk": True,
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+        )
+        updated += 1
+    db.commit()
+    return ok({"updated": updated, "skipped": skipped})
+
+
+class RevertRequest(BaseModel):
+    """撤销人工判定的入参：恢复为待复核，用于误操作回退。"""
+
+    result_ids: list[int] = Field(..., min_length=1, max_length=200)
+    note: str | None = None
+
+
+@router.post("/results/revert")
+def revert_results(
+    body: RevertRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("confirm")),
+) -> dict:
+    """撤销人工判定：confirmed / false_positive 恢复为 pending_confirm。
+
+    供前端批量判定后的「撤销」使用：把每条恢复到操作前状态。已是待复核的
+    条目幂等跳过（already_pending）；confirmed_by/confirmed_at 一并清空，
+    翻案率等统计口径依赖审计日志的 before_status，不受撤销覆盖影响。
+    """
+    unique_ids = list(dict.fromkeys(body.result_ids))
+    skipped: list[dict] = []
+    updated = 0
+    for rid in unique_ids:
+        result = db.get(ReviewResult, rid)
+        if result is None:
+            skipped.append({"result_id": rid, "reason": "not_found"})
+            continue
+        task = db.get(ReviewTask, result.task_id)
+        if task is None:
+            skipped.append({"result_id": rid, "reason": "task_missing"})
+            continue
+        try:
+            ensure_task_access(db, task, current_user)
+        except AppError:
+            skipped.append({"result_id": rid, "reason": "forbidden"})
+            continue
+        if result.status == "pending_confirm":
+            skipped.append({"result_id": rid, "reason": "already_pending"})
+            continue
+        before_status = result.status
+        result.status = "pending_confirm"
+        result.confirmed_at = None
+        result.confirmed_by = None
+        if body.note:
+            result.description = (result.description or "") + f"\n[撤销复核] {body.note}"
+        db.add(
+            AuditLog(
+                user_id=current_user.id,
+                username=current_user.username,
+                action="result.revert",
+                resource_type="review_result",
+                resource_id=str(result.id),
+                detail=json.dumps(
+                    {"before_status": before_status, "bulk": True},
+                    ensure_ascii=False,
+                ),
+            )
+        )
+        updated += 1
+    db.commit()
+    return ok({"updated": updated, "skipped": skipped})
 
 
 @router.get("/results/feedback-stats")

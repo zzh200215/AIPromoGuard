@@ -4,7 +4,9 @@ from src.parsers.base import DocumentParser, ParsedDocument, TextBlock
 from src.parsers.docx_parser import DocxParser
 from src.parsers.ocr_parser import OcrParser
 from src.parsers.pdf_parser import PdfParser
+from src.parsers.pptx_parser import PptxParser
 from src.parsers.txt_parser import TxtParser
+from src.parsers.xlsx_parser import XlsxParser
 from src.utils.errors import AppError, ErrorCode
 
 _PARSERS: dict[str, DocumentParser] = {
@@ -13,6 +15,8 @@ _PARSERS: dict[str, DocumentParser] = {
     # （PackageNotFoundError），不如在上传端明确拒绝并提示转换
     "docx": DocxParser(),
     "txt": TxtParser(),
+    "pptx": PptxParser(),
+    "xlsx": XlsxParser(),
     "png": OcrParser(),
     "jpg": OcrParser(),
     "jpeg": OcrParser(),
@@ -28,6 +32,11 @@ def get_parser(filename: str) -> DocumentParser:
             raise AppError(
                 ErrorCode.FILE_TYPE_NOT_SUPPORTED,
                 "旧版 .doc 不支持，请用 Word 另存为 .docx（或导出 txt）后上传",
+            )
+        if ext == "xls":
+            raise AppError(
+                ErrorCode.FILE_TYPE_NOT_SUPPORTED,
+                "旧版 .xls 不支持，请用 Excel 另存为 .xlsx（或导出 csv 改后缀 txt）后上传",
             )
         raise AppError(ErrorCode.FILE_TYPE_NOT_SUPPORTED, f"不支持的格式: .{ext}")
     return parser

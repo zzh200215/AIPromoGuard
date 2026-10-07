@@ -103,14 +103,16 @@ def _locate_rules(
     if linked_rule_ids:
         rules = (
             db.query(Rule)
-            .filter(Rule.id.in_(linked_rule_ids), Rule.is_active == 1)
+            .filter(Rule.id.in_(linked_rule_ids), Rule.is_active == 1, Rule.status == "active")
             .all()
         )
         matched_by = {rule.id: "link" for rule in rules}
 
     event_grams = _text_bigrams(event_text)
     if event_grams:
-        candidate_q = db.query(Rule).filter(Rule.is_active == 1)
+        candidate_q = db.query(Rule).filter(
+            Rule.is_active == 1, Rule.status == "active"
+        )
         if domain:
             candidate_q = candidate_q.filter(Rule.domain == domain)
         for rule in candidate_q.all():

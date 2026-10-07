@@ -65,6 +65,38 @@ def render_pdf(report: dict, font_path: str | None = None) -> bytes:
         f"低风险 {summary.get('low_risk', 0)} 处。"
     )
     mc(6, summary_line, size=10)
+    if not report.get("llm_usage"):
+        # 降级透明：导出文件必须如实反映引擎覆盖范围
+        mc(
+            6,
+            "⚠️ 本次审查未调用 LLM 语义引擎（未配置 API Key 或已降级），结果仅来自规则引擎。",
+            size=10,
+        )
+
+    # AI 风险综述（review_copilot 生成后随报告落盘；结论变化后标记过期）
+    ai = report.get("ai_summary")
+    if isinstance(ai, dict) and ai.get("text"):
+        stale_note = "（已过期，仅供参考）" if ai.get("stale") else ""
+        heading("AI 风险综述")
+        mc(6, f"{_s(ai['text'])}{stale_note}", size=10)
+        mc(
+            5,
+            f"（AI 生成，仅供参考 · 模型 {_s(ai.get('model'))} · {_s(ai.get('generated_at'))}）",
+            size=9,
+        )
+        pdf.ln(2)
+
+    so = report.get("sign_off")
+    if so:
+        # PDF 内嵌 CJK 字体缺 emoji 字形，用方括号标记代替 ✅/⛔
+        verdict = "[同意放行]" if so.get("decision") == "released" else "[驳回整改]"
+        sign_line = (
+            f"审核签发：{verdict} — 签发人 {_s(so.get('username'))}"
+            f" · {_s(so.get('created_at'))}"
+        )
+        if so.get("note"):
+            sign_line += f" · 意见：{_s(so.get('note'))}"
+        mc(6, sign_line, size=10)
     pdf.ln(3)
     heading("二、违规明细")
     violations = report.get("violations", [])

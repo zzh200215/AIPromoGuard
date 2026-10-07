@@ -48,6 +48,18 @@ def test_txt_gbk_encoding(tmp_path):
     assert doc.blocks[0].text == "中文测试"
 
 
+def test_txt_markdown_heading(tmp_path):
+    """方向④：TXT 文档里 Markdown 行首 `#` 识别为标题，供语义切块当章节边界。"""
+    p = tmp_path / "产品.md.txt"  # txt 解析器；内容为 Markdown 标题
+    p.write_text("## 风险提示\n正文第一行\n# 产品亮点\n正文第二行", encoding="utf-8")
+    doc = parse_document(str(p))
+    assert doc.blocks[0].heading is True
+    assert doc.blocks[0].text == "风险提示"          # 去掉 `## ` 标记
+    assert doc.blocks[1].heading is False
+    assert doc.blocks[2].heading is True
+    assert doc.blocks[2].text == "产品亮点"          # 单 `#` 也能识别
+
+
 def test_docx_parser(tmp_path):
     from docx import Document
 

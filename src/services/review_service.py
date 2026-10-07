@@ -12,7 +12,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-from sqlalchemy import update
+from sqlalchemy import func, update
 
 from src.core.agents.graph import run_review
 from src.core.agents.runtime import (
@@ -26,11 +26,13 @@ from src.core.profiles import effective_auto_confirm, resolve_human_review, safe
 from src.infrastructure.database.mysql import SessionLocal
 from src.models import (
     Article,
+    ProductMaterial,
     ReviewBatch,
     ReviewResult,
     ReviewTask,
     RuleRegulationLink,
 )
+from src.services import tamper_check
 from src.services.diff_service import build_review_blocks, diff_documents
 from src.services.document_service import document_service
 from src.services.visual_scan import scan_image_visual
@@ -174,12 +176,74 @@ def start_review(task_id: int) -> None:
     _executor.submit(execute_review, task_id)
 
 
+def reset_failed_task_for_retry(db, task: ReviewTask) -> None:
+    """失败任务重试前的状态复位：清终态痕迹 + 批次 failed_count 回退。
+
+    结果落库（_persist_results）本身先删后插，重跑天然幂等；
+    这里只负责任务行与批次计数回到可重跑状态。批次回到 running：
+    重试完成后 _update_batch_counts 会重新判定终态，计数保持守恒
+    （failed_count-1，完成后 completed_count+1）。
+    """
+    task.status = "pending"
+    task.progress = 0
+    task.stages = None
+    task.llm_usage = None
+    task.report_path = None
+    task.started_at = None
+    task.completed_at = None
+    if task.batch_id and db.get(ReviewBatch, task.batch_id) is not None:
+        db.execute(
+            update(ReviewBatch)
+            .where(ReviewBatch.id == task.batch_id)
+            .values(failed_count=func.greatest(ReviewBatch.failed_count - 1, 0))
+        )
+        batch = db.get(ReviewBatch, task.batch_id)
+        batch.status = "running"
+        batch.completed_at = None
+    db.flush()
+
+
+def sync_material_review_status(db, task: ReviewTask) -> None:
+    """任务终态后回写材料台账最近审查状态（document_path → document_id 匹配）。
+
+    此前只有影响批次的回写（sync_batch_to_assessment），普通任务完成后台账
+    "最近审查结果"失真；现在所有终态任务统一回写，口径一致
+    （completed+有违规=violation / completed 零违规=clean / failed=failed）。
+    影响批次的整改清单闭环仍由 sync_batch_to_assessment 负责。
+    """
+    from src.services.impact_service import _doc_id_from_path
+
+    doc_id = _doc_id_from_path(task.document_path)
+    if not doc_id:
+        return
+    violations = (
+        db.query(func.count(ReviewResult.id)).filter(ReviewResult.task_id == task.id).scalar()
+        or 0
+    )
+    if task.status == "completed":
+        review_status = "violation" if violations else "clean"
+    else:
+        review_status = "failed"
+    materials = (
+        db.query(ProductMaterial)
+        .filter(ProductMaterial.document_id == doc_id, ProductMaterial.status == "active")
+        .all()
+    )
+    for material in materials:
+        material.last_review_status = review_status
+        material.last_reviewed_at = datetime.now()
+    if materials:
+        db.commit()
+        logger.info("task %s 已回写 %s 条台账材料状态=%s", task.id, len(materials), review_status)
+
+
 def _update_batch_counts(db, task: ReviewTask) -> None:
-    """任务到达终态后同步批次计数；无批次归属时直接返回。
+    """任务到达终态后同步材料台账与批次计数；无批次归属时跳过计数。
 
     计数用原子 UPDATE 累加（多线程并发时读-改-写会丢失更新），
     提交后再读最新计数判断批次是否全部终态，置终态为幂等操作。
     """
+    sync_material_review_status(db, task)
     if not task.batch_id:
         return
     if db.get(ReviewBatch, task.batch_id) is None:
@@ -213,6 +277,13 @@ def _update_batch_counts(db, task: ReviewTask) -> None:
                 sync_batch_to_assessment(db, batch.id)
             except Exception:
                 logger.exception("影响评估回写失败 batch=%s", batch.id)
+        # 站内通知：批次终态触达创建人（尽力而为）
+        try:
+            from src.services.notification_service import notify_batch_terminal
+
+            notify_batch_terminal(db, batch)
+        except Exception:
+            logger.exception("批次终态通知失败 batch=%s", batch.id)
 
 
 def _block_to_dict(block) -> dict:
@@ -261,8 +332,13 @@ def execute_review(task_id: int) -> None:
         vlm_usage = None
         doc_ext = (task.document_path or "").rsplit(".", 1)[-1].lower()
         if doc_ext in {"png", "jpg", "jpeg", "bmp"}:
-            vlm_findings, vlm_usage = scan_image_visual(
+            vlm_findings, vlm_usage, visible_numbers = scan_image_visual(
                 task.document_path, parsed.text, task.domain
+            )
+            # R2-3 交叉篡改检测：VLM 关键数字 vs 全文数字集（含 OCR 图文与配套文档），
+            # 不一致 = 图片被局部修改或图文不同步（人工核验，不自动确认）
+            vlm_findings = vlm_findings + tamper_check.check_tamper(
+                visible_numbers, blocks, page=1
             )
 
         initial_state = {
@@ -275,6 +351,9 @@ def execute_review(task_id: int) -> None:
             "diff_changes": diff_changes,
             "profile": profile,
             "vlm_findings": vlm_findings,
+            # 方案 A：解析脱敏时采集的敏感命中元数据（PII 检测的数据源——
+            # 脱敏后文本已无法用正则扫出敏感信息）
+            "mask_spans": getattr(parsed, "mask_spans", []) or [],
             # 预置视觉模型用量：reducer 与 llm_scan 的文本扫描用量相加（成本归因覆盖视觉层）
             "llm_usage": vlm_usage,
         }
@@ -307,6 +386,12 @@ def execute_review(task_id: int) -> None:
             task.progress = 100
             db.commit()
             _update_batch_counts(db, task)
+            try:
+                from src.services.notification_service import notify_task_failed
+
+                notify_task_failed(db, task)
+            except Exception:
+                logger.exception("任务失败通知失败 task=%s", task_id)
         cleanup_task_checkpoints(task_id)
         logger.exception("task %s 审查失败", task_id)
     finally:
@@ -458,10 +543,19 @@ def _persist_results(db, task_id: int, findings: list[dict], profile: str | None
     )
     for item in findings:
         status, confirmed_at, confirmed_by = _auto_confirm(item, auto_cfg)
+        # 内置维度（PII/勾稽/篡改）与视觉层的 rule_name 不落库（ReviewResult 无该列），
+        # 并入 description 头部成 "[rule_name] 原文"——前端据此渲染维度标签（finding_kind）。
+        # 范围：rule 路内置（rule_id=None）+ vlm 路；普通 DSL 命中与 LLM 命中不动（存量兼容）。
+        desc = item.get("description") or ""
+        rule_name = item.get("rule_name")
+        is_builtin_rule = item.get("violation_type") == "rule" and item.get("rule_id") is None
+        is_vlm = item.get("violation_type") == "vlm"
+        if rule_name and (is_builtin_rule or is_vlm) and not desc.startswith(f"[{rule_name}]"):
+            desc = f"[{rule_name}] {desc}"
         reg_id, art_id = _citation_for_rule(
             db,
             item.get("rule_id"),
-            (item.get("description") or "") + (item.get("original_text") or ""),
+            desc + (item.get("original_text") or ""),
         )
         db.add(
             ReviewResult(
@@ -475,7 +569,7 @@ def _persist_results(db, task_id: int, findings: list[dict], profile: str | None
                 regulation_id=reg_id,
                 article_id=art_id,
                 confidence_score=item.get("confidence", 0),
-                description=(item.get("description") or "")[:1000],
+                description=desc[:1000],
                 suggestion=(item.get("suggestion") or "")[:1000],
                 status=status,
                 confirmed_at=confirmed_at,

@@ -85,7 +85,7 @@ def _scan(tmp_path, client, ext="png", text="text"):
 
 def test_scan_success_normalizes_and_returns_usage(tmp_path):
     client = _FakeClient(_FakeResp())
-    findings, usage = _scan(tmp_path, client, text="预期年化收益率 5.8%")
+    findings, usage, _numbers = _scan(tmp_path, client, text="预期年化收益率 5.8%")
     assert len(findings) == 2  # 缺 issue 的条目被丢弃
     first = findings[0]
     assert first["issue"] == "收益数字放大"
@@ -104,21 +104,41 @@ def test_scan_success_normalizes_and_returns_usage(tmp_path):
 
 def test_scan_no_key_degrades(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "dashscope_api_key", "")
-    assert _scan(tmp_path, _FakeClient(_FakeResp())) == ([], None)
+    assert _scan(tmp_path, _FakeClient(_FakeResp())) == ([], None, [])
 
 
 def test_scan_disabled_degrades(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "vlm_enabled", False)
-    assert _scan(tmp_path, _FakeClient(_FakeResp())) == ([], None)
+    assert _scan(tmp_path, _FakeClient(_FakeResp())) == ([], None, [])
 
 
 def test_scan_client_error_degrades(tmp_path):
-    assert _scan(tmp_path, _FakeClient(RuntimeError("boom"))) == ([], None)
+    assert _scan(tmp_path, _FakeClient(RuntimeError("boom"))) == ([], None, [])
 
 
 def test_scan_unsupported_ext_skips_client(tmp_path):
     client = _FakeClient(RuntimeError("不应被调用"))
-    assert _scan(tmp_path, client, ext="gif") == ([], None)
+    assert _scan(tmp_path, client, ext="gif") == ([], None, [])
+
+
+def test_parse_extracts_visible_numbers(tmp_path):
+    """R2-3：VLM 输出含 visible_numbers 时完整解析（findings 与数字分离）。"""
+    content = (
+        '{"findings": [{"issue": "收益数字放大", "reason": "红字", '
+        '"original_text": "9.85%", "severity": "high", "confidence": 0.9}], '
+        '"visible_numbers": [{"value": "9.85", "context": "年化收益率"}, '
+        '{"value": "366", "context": "持有期限"}]}'
+    )
+    findings, numbers = visual_scan._parse_vlm_output(content)
+    assert len(findings) == 1
+    assert [n["value"] for n in numbers] == ["9.85", "366"]
+
+
+def test_parse_legacy_findings_only_shape(tmp_path):
+    """旧形态（裸 findings 数组/代码围栏）数字降级为空，不炸。"""
+    findings, numbers = visual_scan._parse_vlm_output(_VLM_JSON)
+    assert len(findings) == 3  # 归一（缺 issue 丢弃）由 _normalize 处理，此处透传
+    assert numbers == []
 
 
 # ---------- conflict_resolve 合入 ----------

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from src.api.middleware.audit import AuditMiddleware
 from src.api.routers import (
+    ai,
     auth,
     batches,
     documents,
@@ -17,6 +18,7 @@ from src.api.routers import (
     health,
     impact,
     monitor,
+    notifications,
     regulations,
     reports,
     results,
@@ -82,6 +84,8 @@ def create_app() -> FastAPI:
     app.include_router(graph.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")
     app.include_router(monitor.router, prefix="/api/v1")
+    app.include_router(ai.router, prefix="/api/v1")
+    app.include_router(notifications.router, prefix="/api/v1")
     app.include_router(trends.router, prefix="/api/v1")
     app.include_router(impact.router, prefix="/api/v1")
 

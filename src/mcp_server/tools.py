@@ -71,6 +71,40 @@ def search_regulations(query: str, domain: str | None = None, top_k: int = 5) ->
     }
 
 
+def search_regulations_schema() -> dict:
+    """由 search_regulations 生成 OpenAI function-calling 工具 schema。
+
+    供 LLM 客户端（src/core/llm/client.py）在工具循环模式('真 function calling')
+    下注册检索工具。仅生成描述，不访问 DB。
+    """
+    return {
+        "type": "function",
+        "function": {
+            "name": "search_regulations",
+            "description": (
+                "混合检索金融法规条款（向量语义 + 关键词 RRF 融合，生效法规优先）。"
+                "当需要核实某营销表述是否违反监管规定、查找准确的法规条款佐证时调用。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "检索问题或营销表述描述"},
+                    "domain": {
+                        "type": "string",
+                        "enum": ["banking", "fund", "insurance"],
+                        "description": "领域过滤，为空则全领域检索",
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": "返回条款数，默认 5，最大 20",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
+
 def review_text(text: str, domain: str | None = None, use_llm: bool = True) -> dict:
     """双引擎完整审查：规则扫描 + 法规召回 + LLM 语义审查 + 结果融合。
 

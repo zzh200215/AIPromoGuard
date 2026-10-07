@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Index, String, func
+from sqlalchemy import BigInteger, DateTime, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database.mysql import Base
@@ -26,6 +26,12 @@ class ProductMaterial(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     last_review_status: Mapped[str | None] = mapped_column(String(16))  # clean/violation/failed
     last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # R3 发布后监控：已发布渠道与内容指纹（巡检基线 = 批准版规范化文本）
+    publish_url: Mapped[str | None] = mapped_column(String(512))
+    channel: Mapped[str | None] = mapped_column(String(32))  # web/wechat/douyin
+    content_fingerprint: Mapped[str | None] = mapped_column(Text)  # 批准版规范化文本（相似度比对基线）
+    patrol_status: Mapped[str | None] = mapped_column(String(16))  # ok/drift/changed/gone/error
+    patrol_checked_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

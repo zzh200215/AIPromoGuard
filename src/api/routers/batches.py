@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from src.api.middleware.auth import (
@@ -20,8 +21,8 @@ from src.api.middleware.auth import (
 from src.api.schemas.batch import BatchOut
 from src.api.schemas.task import TaskOut
 from src.infrastructure.database.mysql import get_db
-from src.models import ReviewBatch, ReviewTask, User
-from src.services.review_service import start_review
+from src.models import ReviewBatch, ReviewResult, ReviewTask, User
+from src.services.review_service import reset_failed_task_for_retry, start_review
 from src.utils.config import settings
 from src.utils.errors import AppError, ErrorCode
 from src.utils.response import ok
@@ -152,6 +153,37 @@ def get_batch(
     )
 
 
+@router.post("/{batch_id}/retry-failed")
+def retry_batch_failed(
+    batch_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("create_task")),
+) -> dict:
+    """一键重试批内全部失败任务；文档文件已被清理的任务跳过并计数返回。"""
+    batch = db.get(ReviewBatch, batch_id)
+    if batch is None:
+        raise AppError(ErrorCode.PARAM_ERROR, "批次不存在", http_status=404)
+    ensure_batch_access(db, batch, current_user)
+
+    failed = (
+        db.query(ReviewTask)
+        .filter(ReviewTask.batch_id == batch_id, ReviewTask.status == "failed")
+        .all()
+    )
+    retried: list[int] = []
+    skipped = 0
+    for task in failed:
+        if not task.document_path or not Path(task.document_path).exists():
+            skipped += 1
+            continue
+        reset_failed_task_for_retry(db, task)
+        retried.append(task.id)
+    db.commit()
+    for task_id in retried:
+        start_review(task_id)
+    return ok({"batch_id": batch_id, "retried": retried, "skipped": skipped})
+
+
 def _safe_zip_name(name: str | None, task_id: int) -> str:
     """把任务名压成安全的 zip 条目名：去路径分隔符、控制字符与 ..，空名回退 task_id。"""
     cleaned = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", name or "").replace("..", "_").strip(" .")
@@ -194,4 +226,88 @@ def export_batch(
         headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{quote(batch.batch_name)}.zip"
         },
+    )
+
+
+@router.get("/{batch_id}/export-summary")
+def export_batch_summary(
+    batch_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("view_report")),
+):
+    """批次汇总表（xlsx）：逐任务违规统计，未完成任务也在列（状态标明）。
+
+    公司场景的汇报/归档口径：一份表看清整批判定结果，不必逐个开报告。
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+
+    batch = db.get(ReviewBatch, batch_id)
+    if batch is None:
+        raise AppError(ErrorCode.PARAM_ERROR, "批次不存在", http_status=404)
+    ensure_batch_access(db, batch, current_user)
+    tasks = db.query(ReviewTask).filter(ReviewTask.batch_id == batch_id).all()
+    if not tasks:
+        raise AppError(ErrorCode.PARAM_ERROR, "批次为空", http_status=400)
+
+    # 一次查询取整批结果，按任务聚合风险与人工判定
+    task_ids = [t.id for t in tasks]
+    rows = (
+        db.query(
+            ReviewResult.task_id,
+            ReviewResult.risk_level,
+            ReviewResult.status,
+            func.count(ReviewResult.id),
+        )
+        .filter(ReviewResult.task_id.in_(task_ids))
+        .group_by(ReviewResult.task_id, ReviewResult.risk_level, ReviewResult.status)
+        .all()
+    )
+    agg: dict[int, dict[str, int]] = {
+        tid: {"total": 0, "high": 0, "medium": 0, "low": 0, "confirmed": 0,
+              "false_positive": 0, "pending_confirm": 0}
+        for tid in task_ids
+    }
+    for tid, risk, status, count in rows:
+        a = agg[tid]
+        a["total"] += count
+        if risk in ("high", "medium", "low"):
+            a[risk] += count
+        if status in ("confirmed", "false_positive", "pending_confirm"):
+            a[status] += count
+
+    STATUS_TEXT = {"completed": "已完成", "failed": "失败", "running": "进行中",
+                   "pending": "排队中", "awaiting_review": "待人工复核", "cancelled": "已取消"}
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "批次汇总"
+    headers = ["任务ID", "任务名", "文档", "领域", "状态", "违规总数",
+               "高风险", "中风险", "低风险", "已确认", "误报", "待复核", "完成时间"]
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for t in tasks:
+        a = agg[t.id]
+        ws.append([
+            t.id,
+            t.task_name,
+            t.document_name,
+            t.domain or "",
+            STATUS_TEXT.get(t.status, t.status),
+            a["total"], a["high"], a["medium"], a["low"],
+            a["confirmed"], a["false_positive"], a["pending_confirm"],
+            t.completed_at.strftime("%Y-%m-%d %H:%M:%S") if t.completed_at else "",
+        ])
+    widths = [8, 30, 26, 10, 10, 9, 8, 8, 8, 8, 8, 8, 20]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[chr(64 + i)].width = w
+    ws.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    filename = quote(f"批次汇总_{batch.batch_name}.xlsx")
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
     )

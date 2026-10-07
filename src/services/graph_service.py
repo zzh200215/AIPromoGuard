@@ -121,8 +121,11 @@ def query_graph(query: str, domain: str | None = None, top_k: int = 10) -> dict:
             if key in seen_regs:
                 continue
             seen_regs.add(key)
+            # regulation_id 与法规库同源（Neo4j Regulation.id = MySQL regulations.id），
+            # 前端据此跳转法规详情页
             result["regulations"].append(
                 {
+                    "regulation_id": reg.get("regulation_id"),
                     "regulation_name": reg.get("regulation_name"),
                     "domain": reg.get("domain"),
                     "article_nos": reg.get("article_nos", [])[:20],
@@ -341,7 +344,9 @@ def _fired_pattern_ids(text: str, domain: str | None) -> list[tuple[float, int]]
         return []
     db = SessionLocal()
     try:
-        rules = db.query(Rule).filter(Rule.is_active == 1).all()
+        rules = (
+            db.query(Rule).filter(Rule.is_active == 1, Rule.status == "active").all()
+        )
         min_conf = float(settings.app_config("rule_engine").get("min_confidence", 0.5))
         block = TextBlock(text=text[:2000], page=1, paragraph=1, heading=False)
         hits = rule_scanner.scan([block], rules, domain=domain)

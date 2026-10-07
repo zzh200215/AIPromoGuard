@@ -34,13 +34,23 @@ def _db_ready() -> bool:
 
 @pytest.mark.skipif(not _db_ready(), reason="数据库不可用")
 def test_rule_engine_eval_gate():
-    """规则引擎干跑评估必须通过门禁（当前基线 100%/0%，阈值 0.98/0.02）。"""
+    """规则引擎干跑评估必须通过门禁（当前基线 100%/0%，阈值 0.98/0.02）。
+
+    评估集优先用 gate_cases.json（真实人工复核回流产物，只增不减），
+    不存在时回退合成基准 eval_cases.json——CI 必须守住增量后的回归基准。
+    """
+    gate_cases = REPO_ROOT / "scripts" / "evaluate" / "gate_cases.json"
+    cases_file = (
+        ["--cases", str(gate_cases)] if gate_cases.exists()
+        else ["--cases", str(REPO_ROOT / "scripts" / "evaluate" / "eval_cases.json")]
+    )
     result = subprocess.run(
         [
             sys.executable,
             str(REPO_ROOT / "scripts" / "evaluate" / "evaluate.py"),
             "--engine",
             "rule",
+            *cases_file,
             "--min-recall",
             str(MIN_RECALL),
             "--max-fpr",

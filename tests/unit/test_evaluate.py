@@ -108,6 +108,69 @@ def test_evaluate_case_clean_doc_no_gt(monkeypatch):
     assert r["fpr"] == 1.0 and r["precision"] == 0.0
 
 
+def test_evaluate_negative_ground_truth(monkeypatch):
+    """负面标注（人工判定的误报片段）：检出命中即计误报，不进召回。"""
+    case = {
+        "id": "t4",
+        "domain": "banking",
+        "ground_truth": [{"text": "保本保收益", "risk_level": "high"}],
+        "negative_ground_truth": [{"text": "本产品不承诺保本", "rule_name": "禁止承诺保本保收益"}],
+    }
+    monkeypatch.setattr(
+        ev,
+        "_scan_rule_engine",
+        lambda c: [
+            {"source": "rule", "rule_name": "禁止承诺保本保收益",
+             "original_text": "承诺保本", "confidence": 0.85},  # 误报：命中负面标注
+            {"source": "rule", "rule_name": "禁止承诺保本保收益",
+             "original_text": "保本保收益", "confidence": 0.85},  # 命中正面标注
+        ],
+    )
+    r = ev._evaluate_case(case, "rule")
+    assert r["negative_gt_count"] == 1
+    assert r["tp_gt"] == 1
+    assert r["fp"] == 1
+    assert r["recall"] == 1.0
+    assert r["fpr"] == pytest.approx(0.5)
+
+
+def test_evaluate_negative_ground_truth_all_fp(monkeypatch):
+    """混合任务 + 检出恰好全部命中负面 → 误报 100%（不漏检、不误判为命中）。"""
+    case = {
+        "id": "t5",
+        "domain": "fund",
+        "ground_truth": [{"text": "定投稳赚", "risk_level": "high"}],
+        "negative_ground_truth": [{"text": "过往业绩不代表未来表现"}],
+    }
+    monkeypatch.setattr(ev, "_scan_rule_engine", lambda c: [
+        {"source": "rule", "rule_name": "业绩披露免责", "original_text": "过往业绩不代表未来表现",
+         "confidence": 0.85},
+    ])
+    r = ev._evaluate_case(case, "rule")
+    assert r["tp_gt"] == 0
+    assert r["fp"] == 1
+    assert r["fpr"] == 1.0
+    assert r["recall"] == 0.0
+
+
+def test_rule_threshold_map():
+    """调阈值杠杆：rule_content.min_confidence 覆盖全局默认。"""
+    class _FakeRule:
+        def __init__(self, rid, content):
+            self.id = rid
+            self.rule_content = content
+
+    rules = [
+        _FakeRule(1, {"conditions": [], "min_confidence": 0.95}),  # 显式抬阈值
+        _FakeRule(2, {"conditions": []}),  # 未配置 → 走全局
+        _FakeRule(3, None),  # 空 content → 走全局
+    ]
+    m = ev._rule_threshold_map(rules, default=0.5)
+    assert m == {1: 0.95}
+    assert m.get(2, 0.5) == 0.5
+    assert m.get(3, 0.5) == 0.5
+
+
 def test_seed_set_structure():
     """种子基准集结构合法：每条样本有 id/domain/text/ground_truth，标注文本非空。"""
     path = Path(ev.__file__).resolve().parent / "eval_cases.json"

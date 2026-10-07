@@ -34,12 +34,33 @@ def _vector_counts() -> dict:
         return {"legal_articles": -1, "legal_penalty_cases": -1}
 
 
+def _celery_status() -> dict:
+    """Celery 队列状态（尽力而为）：待处理任务数 + worker 存活列表。
+
+    失败一律返回 available=false，不影响监控主接口；Redis 不可用时队列深度为 -1。
+    """
+    result: dict = {"available": False, "queue_depth": -1, "workers_alive": []}
+    try:
+        import redis as redis_lib
+
+        from src.infrastructure.queue.celery_app import QUEUE_REVIEW, celery_app
+
+        client = redis_lib.Redis.from_url(settings.celery_broker_url or settings.redis_url)
+        result["queue_depth"] = client.llen(QUEUE_REVIEW)
+        ping = celery_app.control.inspect(timeout=1.0).ping()
+        result["workers_alive"] = sorted(ping.keys()) if ping else []
+        result["available"] = True
+    except Exception:
+        return result
+    return result
+
+
 @router.get("/monitor")
 def system_monitor(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("monitor")),
 ) -> dict:
-    """系统监控：任务/数据库/向量库/图谱/审计五类指标。"""
+    """系统监控：任务/数据库/向量库/图谱/队列/审计六类指标。"""
     # 1. 任务统计
     status_rows = (
         db.query(ReviewTask.status, func.count(ReviewTask.id))
@@ -77,7 +98,10 @@ def system_monitor(
     # 4. 知识图谱（Neo4j）
     graph = graph_service.graph_stats()
 
-    # 5. 审计
+    # 5. Celery 队列（worker 未启用时 available=false）
+    celery = _celery_status()
+
+    # 6. 审计
     audit_24h = db.query(AuditLog).filter(AuditLog.created_at >= day_ago).count()
     recent_errors = (
         db.query(AuditLog)
@@ -96,6 +120,7 @@ def system_monitor(
             "database": {"ok": db_ok, "knowledge_base": kb},
             "vector_store": vectors,
             "graph": graph,
+            "celery": celery,
             "audit": {"last_24h": audit_24h, "errors_last_24h": recent_errors},
         }
     )

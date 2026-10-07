@@ -7,7 +7,11 @@ import pytest
 from sqlalchemy import text
 from src.infrastructure.database.mysql import SessionLocal
 from src.models import ReviewResult, Rule
-from src.services.rule_tuning import apply_suggestion, build_rule_suggestions
+from src.services.rule_tuning import (
+    apply_suggestion,
+    build_rule_suggestions,
+    compute_threshold_suggestion,
+)
 from src.utils.errors import AppError
 
 _TASK = 9877000  # 测试专用 task_id，finally 按此清理
@@ -48,7 +52,7 @@ def _mk_rule(db, keywords: list[str], is_active: int = 1) -> Rule:
     return rule
 
 
-def _mk_result(db, rule_id: int, status: str, text: str) -> None:
+def _mk_result(db, rule_id: int, status: str, text: str, confidence: float = 0.85) -> None:
     db.add(
         ReviewResult(
             task_id=_TASK,
@@ -58,7 +62,7 @@ def _mk_result(db, rule_id: int, status: str, text: str) -> None:
             rule_id=rule_id,
             status=status,
             confirmed_by=1,  # 人工复核（>0 才计入统计）
-            confidence_score=0.85,
+            confidence_score=confidence,
         )
     )
     db.commit()
@@ -171,6 +175,23 @@ def test_inactive_rule_skipped():
         db.close()
 
 
+# ---------- compute_threshold_suggestion（纯函数） ----------
+
+def test_threshold_suggestion_clean_split():
+    """确认≥0.95 / 误报≤0.85 → 可分离阈值 0.90（全保确认、全滤误报）。"""
+    assert compute_threshold_suggestion([0.95], [0.85]) == (0.90, True)
+    assert compute_threshold_suggestion([0.95, 0.95], [0.85]) == (0.90, True)
+    assert compute_threshold_suggestion([0.93], [0.87]) == (0.90, True)
+
+
+def test_threshold_suggestion_no_split():
+    """分布重叠/无误报 → 不给出阈值建议（避免盲目抬阈值）。"""
+    assert compute_threshold_suggestion([0.85], [0.95]) is None  # FP 置信度更高
+    assert compute_threshold_suggestion([0.85], [0.85]) is None  # 完全重叠
+    assert compute_threshold_suggestion([0.95], []) is None      # 无误报可滤
+    assert compute_threshold_suggestion([], [0.85]) is None      # 无确认样本可比
+
+
 # ---------- apply_suggestion ----------
 
 @pytest.mark.skipif(not _db_ready(), reason="数据库不可用")
@@ -215,6 +236,64 @@ def test_apply_errors():
             apply_suggestion(db, rule.id, "remove_keyword")  # 缺 keyword
         with pytest.raises(AppError):
             apply_suggestion(db, rule.id, "remove_keyword", condition_index=0, keyword="不存在的词")
+        with pytest.raises(AppError):
+            apply_suggestion(db, rule.id, "set_threshold")  # 缺 threshold
+        with pytest.raises(AppError):
+            apply_suggestion(db, rule.id, "set_threshold", threshold=0.1)  # 阈值越界
+    finally:
+        _cleanup(db)
+        db.close()
+
+
+# ---------- set_threshold（调阈值杠杆） ----------
+
+@pytest.mark.skipif(not _db_ready(), reason="数据库不可用")
+def test_set_threshold_suggestion():
+    """确认(≥0.95) 与误报(≤0.85) 置信度可分 → 建议抬该规则阈值到 0.90。"""
+    db = SessionLocal()
+    rule = _mk_rule(db, ["保本"])
+    try:
+        _mk_result(db, rule.id, "confirmed", "违规承诺保本", confidence=0.95)
+        _mk_result(db, rule.id, "confirmed", "保本承诺是违法的", confidence=0.95)
+        _mk_result(db, rule.id, "false_positive", "本产品不保本", confidence=0.85)
+        _mk_result(db, rule.id, "false_positive", "保本宣传违规了吗", confidence=0.85)
+        sugs = [s for s in build_rule_suggestions(db) if s["rule_id"] == rule.id]
+        assert len(sugs) == 1
+        sug = sugs[0]
+        assert sug["action"] == "set_threshold"
+        assert sug["threshold"] == 0.90
+        assert "调阈值" in sug["reason"] or "min_confidence" in sug["reason"]
+    finally:
+        _cleanup(db)
+        db.close()
+
+
+@pytest.mark.skipif(not _db_ready(), reason="数据库不可用")
+def test_no_set_threshold_when_no_split():
+    """确认/误报置信度重叠（同为 0.85）→ 无阈值建议，交由其他 heuristics。"""
+    db = SessionLocal()
+    rule = _mk_rule(db, ["保本"])
+    try:
+        _mk_result(db, rule.id, "confirmed", "违规承诺保本", confidence=0.85)
+        _mk_result(db, rule.id, "confirmed", "保本承诺违法", confidence=0.85)
+        _mk_result(db, rule.id, "false_positive", "本产品不保本", confidence=0.85)
+        _mk_result(db, rule.id, "false_positive", "保本辩论", confidence=0.85)
+        sugs = [s for s in build_rule_suggestions(db) if s["rule_id"] == rule.id]
+        assert all(s["action"] != "set_threshold" for s in sugs)
+    finally:
+        _cleanup(db)
+        db.close()
+
+
+@pytest.mark.skipif(not _db_ready(), reason="数据库不可用")
+def test_apply_set_threshold():
+    db = SessionLocal()
+    rule = _mk_rule(db, ["保本"])
+    v0 = rule.version
+    try:
+        updated = apply_suggestion(db, rule.id, "set_threshold", threshold=0.90)
+        assert updated.rule_content["min_confidence"] == 0.90
+        assert updated.version == v0 + 1
     finally:
         _cleanup(db)
         db.close()

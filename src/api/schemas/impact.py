@@ -53,6 +53,8 @@ class MaterialCreate(BaseModel):
     version: str = Field(default="v1", max_length=32)
     owner: str | None = Field(default=None, max_length=64)
     document_id: str | None = Field(default=None, pattern=r"^doc_[0-9a-f]{8}$")
+    publish_url: str | None = Field(default=None, max_length=512)
+    channel: str | None = Field(default=None, max_length=32)
 
 
 class MaterialUpdate(BaseModel):
@@ -61,6 +63,8 @@ class MaterialUpdate(BaseModel):
     owner: str | None = Field(default=None, max_length=64)
     status: Literal["active", "archived"] | None = None
     document_id: str | None = Field(default=None, pattern=r"^doc_[0-9a-f]{8}$")
+    publish_url: str | None = Field(default=None, max_length=512)
+    channel: str | None = Field(default=None, max_length=32)
 
 
 class MaterialOut(BaseModel):
@@ -76,4 +80,14 @@ class MaterialOut(BaseModel):
     status: str
     last_review_status: str | None = None
     last_reviewed_at: datetime | None = None
+    publish_url: str | None = None
+    channel: str | None = None
+    patrol_status: str | None = None
+    patrol_checked_at: datetime | None = None
     created_at: datetime
+
+
+class PatrolRequest(BaseModel):
+    """批量巡检请求：material_ids 为空 = 巡检全部登记了 publish_url 的在用材料。"""
+
+    material_ids: list[int] | None = Field(default=None)

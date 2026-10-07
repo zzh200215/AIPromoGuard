@@ -11,7 +11,7 @@ class RuleCreate(BaseModel):
     rule_content: dict[str, Any] = Field(..., description="规则 DSL")
     severity: str = "medium"  # high/medium/low
     description: str | None = None
-    is_active: bool = True
+    # 创建一律落草稿，生效走 POST /rules/{id}/publish，接口不接受 is_active
 
 
 class RuleUpdate(BaseModel):

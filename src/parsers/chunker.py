@@ -46,8 +46,17 @@ def chunk_blocks(
     blocks: list[TextBlock],
     chunk_size: int = 500,
     overlap: int = 50,
+    respect_headings: bool = True,
 ) -> list[Chunk]:
-    """按字符数合并段落为 chunk；单段超长时独立成 chunk 不截断，保证段落完整。"""
+    """按字符数合并段落为 chunk，优先在标题/段落边界断开；单段超长独立成 chunk。
+
+    方向④语义切块（respect_headings=True）：
+    - 标题（TextBlock.heading）是章节边界——标题一定从一个新 chunk 开头，
+      不被埋在 chunk 中间、也不被 overlap 吞掉；
+    - 标题处是干净语义边界，跨标题不携带 overlap（不同章节内容不混拼）；
+    - 同章节内仍按溢出 + overlap 拼接，防「一条违规恰好被切缝劈两半」；
+    - 段落永不截断（超长单段独立成 chunk，保证段落完整）。
+    """
     chunks: list[Chunk] = []
     current: list[TextBlock] = []
     current_len = 0
@@ -59,6 +68,10 @@ def chunk_blocks(
                 current, current_len = [], 0
             chunks.append(_make_chunk([block]))
             continue
+        if respect_headings and block.heading and current:
+            # 标题处断开：之前内容直接成块、不带 overlap（干净章节边界）
+            chunks.append(_make_chunk(current))
+            current, current_len = [], 0
         if current_len + len(block.text) > chunk_size and current:
             chunks.append(_make_chunk(current))
             current = _tail_blocks(current, overlap)

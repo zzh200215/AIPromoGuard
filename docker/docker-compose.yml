@@ -111,7 +111,7 @@ services:
       start_period: 15s
 
   # 异步任务 worker（B2：压测后由线程池升级为 Celery/Redis 队列）
-  # 启动: docker compose --profile queue up -d worker
+  # 启动: docker compose --profile queue up -d worker beat
   # 与 api 同镜像；审查由 worker 独占执行，api 仅入队，避免多进程并发访问 ChromaDB。
   worker:
     build:
@@ -143,6 +143,31 @@ services:
     volumes:
       - ../configs:/app/configs:ro
       - ../data:/app/data
+
+  # 定时调度器（beat）：触发监管动态每日抓取等周期任务（见 celery_app.beat_schedule）
+  beat:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+      args:
+        BASE_IMAGE: ${BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
+        PIP_MIRROR: ${PIP_MIRROR:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
+    container_name: fcr-beat
+    restart: unless-stopped
+    profiles: ["queue"]
+    command: ["celery", "-A", "src.infrastructure.queue.celery_app", "beat", "-l", "info"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file: ../.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+    volumes:
+      - ../configs:/app/configs:ro
 
   neo4j:
     image: neo4j:5-community

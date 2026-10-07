@@ -23,6 +23,7 @@ from src.core.agents.nodes.risk_assess import risk_assess
 from src.core.agents.nodes.rule_scan import rule_scan
 from src.core.agents.state import ReviewState
 from src.core.llm.observability import get_llm_observer
+from src.utils.config import settings
 
 _GRAPH = None
 
@@ -69,7 +70,13 @@ def _wrap(node, name: str):
 
 
 def build_graph(checkpointer=None):
-    """构建编译后的图。rule_scan 与 llm_scan 并行，conflict_resolve 作为汇合点。
+    """构建编译后的图。领域条件路由 + 领域子图 + 共享汇合链。
+
+    classify 之后按 domain 用 add_conditional_edges 路由到独立领域子图
+    （真·多 Agent 分工），每个子图内含 regulation_match → (rule_scan ∥ llm_scan)
+    → conflict_resolve；领域无关的 human_review/risk_assess/report 作为共享
+    汇合链保持线性（保证 HIL interrupt/resume 可达）。classify 识别失败
+    （domain=None）或未知领域走 domain_general 兜底子图。
 
     checkpointer 用于 human_review 的 interrupt/resume（人工复核）：
     不传时图无暂停能力，human_review 未启用时行为等价（默认路径走缓存实例）。
@@ -78,17 +85,43 @@ def build_graph(checkpointer=None):
     if checkpointer is None and _GRAPH is not None:
         return _GRAPH
 
+    node_map = dict(_NODES)
+    domain_names = _domain_names()
+
+    def _build_domain_subgraph():
+        sub = StateGraph(ReviewState)
+        sub.add_node("regulation_match", _wrap(regulation_match, "regulation_match"))
+        sub.add_node("rule_scan", _wrap(rule_scan, "rule_scan"))
+        sub.add_node("llm_scan", _wrap(llm_scan, "llm_scan"))
+        sub.add_node("conflict_resolve", _wrap(conflict_resolve, "conflict_resolve"))
+        sub.add_edge(START, "regulation_match")
+        sub.add_edge("regulation_match", "rule_scan")
+        sub.add_edge("regulation_match", "llm_scan")
+        sub.add_edge("rule_scan", "conflict_resolve")
+        sub.add_edge("llm_scan", "conflict_resolve")
+        sub.add_edge("conflict_resolve", END)
+        return sub.compile()
+
     builder = StateGraph(ReviewState)
-    for name, node in _NODES:
-        builder.add_node(name, _wrap(node, name))
+    # 领域无关的共享节点注册在主图最外层（只一次，避免子图/主图重名冲突）
+    for name in ("classify", "human_review", "risk_assess", "report"):
+        builder.add_node(name, _wrap(node_map[name], name))
+    # 兜底 + 各领域子图
+    builder.add_node("domain_general", _build_domain_subgraph())
+    for d in domain_names:
+        builder.add_node(f"domain_{d}", _build_domain_subgraph())
 
     builder.add_edge(START, "classify")
-    builder.add_edge("classify", "regulation_match")
-    builder.add_edge("regulation_match", "rule_scan")
-    builder.add_edge("regulation_match", "llm_scan")
-    builder.add_edge("rule_scan", "conflict_resolve")
-    builder.add_edge("llm_scan", "conflict_resolve")
-    builder.add_edge("conflict_resolve", "human_review")
+    builder.add_conditional_edges(
+        "classify",
+        _route_by_domain,
+        {"domain_general": "domain_general",
+         **{f"domain_{d}": f"domain_{d}" for d in domain_names}},
+    )
+    # 共享汇合链：所有领域子图 → human_review → risk_assess → report → END（严格线性）
+    builder.add_edge("domain_general", "human_review")
+    for d in domain_names:
+        builder.add_edge(f"domain_{d}", "human_review")
     builder.add_edge("human_review", "risk_assess")
     builder.add_edge("risk_assess", "report")
     builder.add_edge("report", END)
@@ -97,6 +130,20 @@ def build_graph(checkpointer=None):
     if checkpointer is None:
         _GRAPH = compiled
     return compiled
+
+
+def _domain_names() -> tuple[str, ...]:
+    """从 app.yaml domains 读领域清单；缺省回退内置三领域。"""
+    cfg = settings.app_config("domains") or {}
+    return tuple(cfg.keys()) if cfg else ("banking", "fund", "insurance")
+
+
+def _route_by_domain(state) -> str:
+    """classify 之后按 domain 分派到独立领域子图；None/未知 → general 兜底。"""
+    domain = state.get("domain")
+    if domain in _domain_names():
+        return f"domain_{domain}"
+    return "domain_general"
 
 
 def run_review(initial_state: dict) -> dict:

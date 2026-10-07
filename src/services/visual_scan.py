@@ -12,6 +12,8 @@ VLM 失败/未配置时优雅降级为空（图片仍走 OCR 文本管线），�
 """
 
 import base64
+import json
+import re
 from pathlib import Path
 
 from src.core.llm.client import extract_findings
@@ -30,10 +32,13 @@ _VLM_SYSTEM = (
     "3) 图形符号暗示（盾牌=保障、上升箭头=收益承诺、钱袋金币=保本兜底）；\n"
     "4) 风险提示的视觉弱化（字号远小于收益宣传、置于角落、浅色低对比度）或缺失；\n"
     "5) 名人/专家/权威机构形象的收益背书暗示。\n"
+    "同时逐字读出图中出现的**关键数字**（利率/收益率/金额/期限/日期类，"
+    "不含产品编号与嵌在名称里的序号），用于与文字材料交叉校验是否被篡改。\n"
     '只输出 JSON 对象：{"findings": [{"issue": "问题短标题", "reason": "判定依据", '
     '"original_text": "对应的OCR文字片段或视觉元素描述", "severity": "high|medium|low", '
-    '"confidence": 0到1的小数, "suggestion": "整改建议"}]}。'
-    '没有视觉层问题时输出 {"findings": []}。'
+    '"confidence": 0到1的小数, "suggestion": "整改建议"}], '
+    '"visible_numbers": [{"value": "数字本身不带单位", "context": "紧邻标签(10字内)"}]}。'
+    '没有视觉层问题时 findings 输出 []；严格只报图中真实可见的数字，禁止推测。'
 )
 
 
@@ -84,17 +89,20 @@ def scan_image_visual(
     ocr_text: str,
     domain: str | None,
     client=None,
-) -> tuple[list[dict], dict | None]:
-    """视觉层合规分析。返回 (findings, usage)；未启用/失败降级为 ([], None)。
+) -> tuple[list[dict], dict | None, list[dict]]:
+    """视觉层合规分析。返回 (findings, usage, visible_numbers)。
 
+    visible_numbers 是 VLM 逐字读出的图中关键数字清单（R2-3 交叉篡改检测
+    的输入），未启用/失败/模型未输出时降级为 []。findings 的未启用/失败
+    降级为 []，不阻断审查（图片仍走 OCR 文本管线）。
     client 供测试注入（需提供 chat.completions.create 接口）；缺省按
     settings 现场构造 OpenAI 兼容客户端（与 QwenClient 同端点，模型独立）。
     """
     if not settings.vlm_enabled or not settings.dashscope_api_key:
-        return [], None
+        return [], None, []
     data_url = _data_url(image_path)
     if data_url is None:
-        return [], None
+        return [], None, []
 
     user_text = (
         f"领域：{domain or '未识别'}\n图片 OCR 文字：\n{ocr_text[:1500]}\n\n"
@@ -126,7 +134,7 @@ def scan_image_visual(
         )
     except Exception as exc:
         logger.warning("视觉层审查调用失败（降级跳过）: %s", exc)
-        return [], None
+        return [], None, []
 
     usage = getattr(resp, "usage", None)
     usage_dict = {
@@ -138,12 +146,35 @@ def scan_image_visual(
     choices = getattr(resp, "choices", None)
     if choices:
         content = choices[0].message.content or ""
-    data = extract_findings(content)
-    findings = _normalize(data if isinstance(data, list) else [])
+    findings, visible_numbers = _parse_vlm_output(content)
+    findings = _normalize(findings if isinstance(findings, list) else [])
     logger.info(
-        "视觉层审查：%s 处视觉风险（%s tokens，%s）",
+        "视觉层审查：%s 处视觉风险，%s 个关键数字（%s tokens，%s）",
         len(findings),
+        len(visible_numbers),
         usage_dict["total_tokens"],
         settings.vlm_model,
     )
-    return findings, usage_dict
+    return findings, usage_dict, visible_numbers
+
+
+def _parse_vlm_output(content: str) -> tuple[list, list]:
+    """宽容解析 VLM 输出 → (findings, visible_numbers)。
+
+    与 client.extract_findings 的差异：这里需要完整 JSON 对象（两个键），
+    不能复用只剥 findings 数组的共享解析；坏形态各自降级为空列表。
+    """
+    text = (content or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        data = extract_findings(content)  # 兼容模型只给 findings 的旧形态
+        return (data or []), []
+    if isinstance(data, dict):
+        return data.get("findings") or [], data.get("visible_numbers") or []
+    if isinstance(data, list):
+        return data, []
+    return [], []

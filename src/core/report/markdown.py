@@ -6,6 +6,31 @@ from src.core.profiles import PROFILE_LABELS
 
 _RISK_LABEL = {"high": "高", "medium": "中", "low": "低"}
 _SOURCE_LABEL = {"rule": "规则引擎", "llm": "LLM 语义", "hybrid": "规则+LLM", "vlm": "视觉模型"}
+_HUMAN_LABEL = {
+    "pending_confirm": "待复核",
+    "confirmed": "已确认",
+    "false_positive": "误报剔除",
+}
+
+
+def _human_label(v: dict) -> str:
+    """人工结论列：自动确认（confirmed_by=0）单独标注，无人工数据时为 —。"""
+    status = v.get("human_status")
+    if not status:
+        return "—"
+    if status == "confirmed" and v.get("human_confirmed_by") == 0:
+        return "已确认（自动）"
+    return _HUMAN_LABEL.get(status, status)
+
+
+def _reg_label(reg: dict) -> str | None:
+    name = reg.get("regulation_name") or ""
+    if not name:
+        return None
+    label = name if "《" in name else f"《{name}》"
+    if reg.get("regulation_no"):
+        label += f"（{reg['regulation_no']}）"
+    return label
 
 
 def _escape(text: Any) -> str:
@@ -48,6 +73,54 @@ def render_markdown(report: dict) -> str:
         if usage.get("failed_blocks"):
             usage_line += f"（{usage.get('failed_blocks', 0)} 块降级）"
         lines += [usage_line, ""]
+    else:
+        # 降级透明：个人/新部署常没配 LLM Key，必须让人一眼看出引擎覆盖范围
+        lines += [
+            "⚠️ 本次审查未调用 LLM 语义引擎（未配置 API Key 或已降级），结果仅来自规则引擎。",
+            "",
+        ]
+
+    # 人工复核结论（report_service 合并）：报告结论与人工判定保持一致
+    hr = report.get("human_review")
+    if hr:
+        lines += [
+            f"人工复核：已确认 **{hr.get('confirmed', 0)}** 处、剔除误报 "
+            f"**{hr.get('false_positive', 0)}** 处、待复核 **{hr.get('pending_confirm', 0)}** 处"
+            f"（含系统自动确认 {hr.get('auto_confirmed', 0)} 处）。",
+            f"剔除误报后，最终确认违规 **{hr.get('final_total', 0)}** 处"
+            f"（高 {hr.get('final_high', 0)} / 中 {hr.get('final_medium', 0)} / "
+            f"低 {hr.get('final_low', 0)}）。",
+        ]
+        if hr.get("last_confirmed_at"):
+            lines.append(f"结论截至：{hr['last_confirmed_at']}。本报告已与最新人工复核结论同步。")
+        lines.append("")
+
+    # AI 风险综述（review_copilot 生成后随报告落盘；结论变化后标记过期）
+    ai = report.get("ai_summary")
+    if isinstance(ai, dict) and ai.get("text"):
+        stale_note = "（已过期，仅供参考）" if ai.get("stale") else ""
+        meta = (
+            f"（AI 生成，仅供参考 · 模型 {_escape(ai.get('model'))}"
+            f" · {_escape(ai.get('generated_at'))}）"
+        )
+        lines += [
+            f"> **AI 风险综述**{stale_note}：{_escape(ai['text'])}",
+            "",
+            meta,
+            "",
+        ]
+
+    # 审核签发（report_service 实时合并）：报告的正式放行/驳回结论
+    so = report.get("sign_off")
+    if so:
+        verdict = "✅ 同意放行" if so.get("decision") == "released" else "⛔ 驳回整改"
+        sign_line = (
+            f"审核签发：**{verdict}** — 签发人 {so.get('username', '—')}"
+            f" · {so.get('created_at', '—')}"
+        )
+        if so.get("note"):
+            sign_line += f" · 意见：{so['note']}"
+        lines += [sign_line, ""]
 
     lines += [
         "## 二、违规明细",
@@ -58,8 +131,8 @@ def render_markdown(report: dict) -> str:
     if not violations:
         lines.append("未发现明显违规表述。")
     else:
-        lines.append("| 风险 | 来源 | 类型 | 置信度 | 问题 | 位置 | 违规原文 | 修改建议 |")
-        lines.append("| :-- | :-- | :-- | :-- | :-- | :-- | :-- | :-- |")
+        lines.append("| 风险 | 人工 | 来源 | 类型 | 置信度 | 问题 | 位置 | 违规原文 | 修改建议 |")
+        lines.append("| :-- | :-- | :-- | :-- | :-- | :-- | :-- | :-- | :-- |")
         for v in violations:
             # page/paragraph 值可能为 None（txt/docx 块无页码），get 默认值对 None 不生效
             location = f"第{v.get('page') or '-'}页/第{v.get('paragraph') or '-'}段"
@@ -69,6 +142,7 @@ def render_markdown(report: dict) -> str:
                 source = f"{source} ⚠️证据待核"
             lines.append(
                 f"| {_RISK_LABEL.get(v.get('risk_level'), v.get('risk_level'))} "
+                f"| {_human_label(v)} "
                 f"| {source} "
                 f"| {_escape(v.get('type')) or '—'} "
                 f"| {v.get('confidence', '—')} "
@@ -78,7 +152,11 @@ def render_markdown(report: dict) -> str:
                 f"| {_escape(v.get('suggestion')) or '—'} |"
             )
 
-    related = _collect_regulations(violations)
+    # 结构化法规引用优先（带文号、可点跳转）；旧报告无该字段时退回名称字符串
+    structured = [
+        label for label in (_reg_label(r) for r in report.get("regulations") or []) if label
+    ]
+    related = structured or _collect_regulations(violations)
     lines += ["", "## 三、相关法规", ""]
     if related:
         for reg in related:

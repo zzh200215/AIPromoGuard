@@ -78,7 +78,9 @@ def test_review_confirm_and_download_flow():
         assert created.status_code == 201
         task_id = created.json()["data"]["task_id"]
 
-        for _ in range(40):
+        # 等待窗口 120s：真实审查流程含 LLM 节点（实测 regulation_match+llm_scan+
+        # risk_assess 合计可达 60s 量级），原 40s 窗口会先于流程结束而误判 running
+        for _ in range(120):
             time.sleep(1)
             st = client.get(f"/api/v1/tasks/{task_id}", headers=headers).json()["data"]["status"]
             if st in ("completed", "failed"):
