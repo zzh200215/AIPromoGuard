@@ -208,12 +208,11 @@ frontend/                # Vue3 前端（任务/知识库/图谱/影响中心/�
 - 视觉层交叉篡改检测（R2-3）依赖 VLM 关键数字读出（spike：关键数字 100%/零幻觉）与 OCR/文档数字集比对，OCR 漏读小字数字是残余误报源，产出"疑似篡改"进人工核验而非自动确认
 - 勾稽规则引擎（R2-2）v1 覆盖边界：只消费 markdown 表格块（MinerU 通道产物），未开启 MinerU 的文字版 PDF 其表格为乱序碎片、勾稽不生效；表头语义映射为模板层（10 类典型演示表样本 10/10 识别，含货基/保险表正确跳过），LLM 辅助映射为后续增强；转置表（情景矩阵）仅支持跨位置收益率检查，不支持算术勾稽
 - 发布后监控（R3-1）v1：巡检对象为台账登记 `publish_url` 的**已授权自有渠道**（不做第三方爬取，微信公众号无官方 API 需人工粘贴兜底）；判定为双层——containment（批准版内容保留率，对网页导航/页脚噪声免疫）+ 关键数字缺失校验（R2-3 互校模式复用，数字被改一票判 changed）；changed 自动创建复审任务（created_by=None 系统发起，批准版文档为 diff 基线）
-- 时效性告警（R3-2）：驾驶舱 overview 返回 `stale_materials`（规则停用/法规废止 → rule_regulation_link → 审查结果反向定位的在用材料清单），只读不写整改状态；写入"待更新"整改项为后续增强
+- 时效性告警（R3-2）：驾驶舱 overview 返回 `stale_materials`（规则停用/法规废止 → rule_regulation_link → 审查结果反向定位的在用材料清单）；`POST /impact/materials/stale/sync` 可将待更新材料写入系统整改清单（复用整改决策/复测/自动关闭链路），依据恢复时条目自动关闭
 - 飞轮闭环（R4）已接线：①复核队列支持 `order=priority` 低置信×高风险优先排序（results API）；②judge 新增 `--export-golden`（人工复核结论沉淀金标准集，只取 confirmed_by>0 的真实人工判定）与 `--calibrate`（一致率 <85% 退出码 1 可接 CI）——偿还"judge 未经人工金标准校准"的债，但**依赖真实人工复核数据积累**，演示种子不冒充金标准；③`scripts/evaluate/overturn_review.py` 月度翻案归因（LLM 辅助四分类：规则缺失/检索未召回/提示词误导/解析错误，工单式产出不自动修改，LLM 未配置降级为纯统计）
 
 ## 文档
 
-- [docs/PRD.md](docs/PRD.md) — 产品需求文档（业务背景 / 功能 / API 规范 / 迭代计划）
 - [docs/evaluation.md](docs/evaluation.md) — 评估方法论、指标口径、门禁与数据卫生记录
 - [docs/agents.md](docs/agents.md) — Agent 与组件合约（职责边界 / 输入输出 Schema / 交接与降级 / 指标）
 - [docs/benchmark.md](docs/benchmark.md) — 效果基准报告（引擎对照实验 / 复核漏斗 / 复现命令）
