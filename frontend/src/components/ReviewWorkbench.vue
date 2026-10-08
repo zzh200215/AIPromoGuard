@@ -32,7 +32,7 @@
           v-for="item in filtered"
           :key="item.result_id"
           class="queue-item"
-          :class="{ active: item.result_id === selectedId }"
+          :class="{ active: item.result_id === selectedId, 'queue-item--urgent': isUrgent(item) }"
           role="option"
           :aria-selected="item.result_id === selectedId"
           :tabindex="item.result_id === selectedId ? 0 : -1"
@@ -342,7 +342,11 @@ const RISK_WEIGHT: Record<string, number> = { high: 3, medium: 2, low: 1 }
 
 const filtered = computed(() => {
   const list = props.results.filter((r) => r.status === statusFilter.value)
-  if (!priorityFirst.value) return list
+  if (!priorityFirst.value) {
+    // 检出顺序 = result_id 升序显式重建：接口自 PR-2 起默认按 priority 返回，
+    // 不能依赖返回顺序，否则关掉开关看到的仍是风险序
+    return [...list].sort((a, b) => a.result_id - b.result_id)
+  }
   // 与后端 R4-3 同口径：不确定度×风险权重 降序（低置信高风险最前）
   return [...list].sort(
     (a, b) =>
@@ -350,6 +354,11 @@ const filtered = computed(() => {
       (1 - a.confidence_score) * (RISK_WEIGHT[a.risk_level] ?? 1),
   )
 })
+
+/** 低置信 × 高风险：复核路由的最高优先级组合（行级高亮引导注意力，PR-2） */
+function isUrgent(item: ReviewResult): boolean {
+  return item.confidence_score < LOW_CONFIDENCE && item.risk_level === 'high'
+}
 
 /** 置信度三段色：低置信红（AI 拿不准，优先看）/ 中黄 / 高绿 */
 function confClass(item: ReviewResult): string {
@@ -423,8 +432,14 @@ watch(
   (list) => {
     if (!list.some((r) => r.result_id === selectedId.value)) {
       const firstPending = list.find((r) => r.status === 'pending_confirm')
-      selectedId.value = (firstPending ?? list[0])?.result_id ?? null
-      if (firstPending) statusFilter.value = 'pending_confirm'
+      if (firstPending) {
+        statusFilter.value = 'pending_confirm'
+        // PR-2：选中"效果队列（排序后）的首条"而非数据原始序首条——风险优先
+        // 开启时即最该先看的那条（低置信×高风险），与左侧队列视觉首条一致
+        selectedId.value = filtered.value[0]?.result_id ?? firstPending.result_id
+      } else {
+        selectedId.value = list[0]?.result_id ?? null
+      }
     }
   },
   { immediate: true },
@@ -592,6 +607,13 @@ watch(selectedId, async (vid) => {
 
   &:hover {
     background: var(--el-fill-color-light);
+  }
+
+  // PR-2：低置信×高风险（复核路由最高优先级）行级引导——淡红渐变底 + 左缘警示；
+  // 选中态（active）语义更强，沿用主色边
+  &.queue-item--urgent:not(.active) {
+    background: linear-gradient(90deg, var(--el-color-danger-light-9) 0%, transparent 72%);
+    border-left-color: var(--el-color-danger);
   }
 
   &.active {

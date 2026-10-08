@@ -93,11 +93,13 @@ function mockApplyVerdict(ids, verdict) {
 
 const RESULTS = {
   task_id: 1,
-  total: 3,
+  total: 4,
   items: [
     { result_id: 1, violation_type: 'rule', risk_level: 'high', original_text: '本金安全无忧，稳赚不赔的稳健之选', location_page: 1, location_paragraph: 2, rule_id: 1, confidence_score: 0.99, status: 'pending_confirm', regulation_name: '公开募集证券投资基金销售机构监督管理办法', article_no: '第二十四条', article_excerpt: '基金销售机构不得预测基金投资业绩...' },
     { result_id: 2, violation_type: 'llm', risk_level: 'high', original_text: '历史年化收益均超 8%，未来可期', location_page: 1, location_paragraph: 3, confidence_score: 0.72, status: 'pending_confirm', regulation_name: null, article_no: null },
     { result_id: 3, violation_type: 'hybrid', risk_level: 'medium', original_text: '立即申购，享受限时费率优惠', location_page: 2, location_paragraph: 1, rule_id: 7, confidence_score: 0.95, status: 'confirmed', auto_confirmed: true, confirmed_at: '2026-09-11 10:26:40', regulation_name: '证券投资基金销售管理办法', article_no: '第十八条' },
+    // PR-2 演示样本：低置信×高风险（复核路由最优先 + 队列行级引导高亮）
+    { result_id: 4, violation_type: 'llm', risk_level: 'high', original_text: '预计年化收益可达 12%，把握黄金配置窗口', location_page: 2, location_paragraph: 3, confidence_score: 0.35, status: 'pending_confirm', regulation_name: null, article_no: null },
   ],
 }
 

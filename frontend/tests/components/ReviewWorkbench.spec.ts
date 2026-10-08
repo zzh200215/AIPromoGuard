@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { nextTick } from 'vue'
 import ReviewWorkbench from '@/components/ReviewWorkbench.vue'
 import type { ReviewResult } from '@/types/result'
 
@@ -11,13 +12,14 @@ function resultOf(
   id: number,
   status: ReviewResult['status'],
   risk_level: ReviewResult['risk_level'] = 'high',
+  confidence = 0.9,
 ): ReviewResult {
   return {
     result_id: id,
     violation_type: 'rule',
     risk_level,
     original_text: `违规片段${id}`,
-    confidence_score: 0.9,
+    confidence_score: confidence,
     status,
   }
 }
@@ -98,5 +100,45 @@ describe('ReviewWorkbench · a11y（F3-2）', () => {
   it('状态筛选组有可访问名称', () => {
     const wrapper = mount(ReviewWorkbench, { props: { results, canConfirm: true } })
     expect(wrapper.find('[role="group"]').attributes('aria-label')).toBe('按复核状态筛选')
+  })
+})
+
+describe('ReviewWorkbench · 复核路由（PR-2）', () => {
+  // 排序键 (1-c)×weight：id1=0.05 / id2=2.1 / id3=0.3 / id4=1.2
+  // → 风险序 2 > 4 > 3 > 1；检出序（id 升序）1 > 2 > 3 > 4
+  const results = [
+    resultOf(1, 'pending_confirm', 'low', 0.95),
+    resultOf(2, 'pending_confirm', 'high', 0.3),
+    resultOf(3, 'pending_confirm', 'high', 0.9),
+    resultOf(4, 'pending_confirm', 'medium', 0.4),
+  ]
+
+  it('默认风险优先：低置信×高风险（id=2）排首位且带 urgent 高亮', () => {
+    const wrapper = mount(ReviewWorkbench, { props: { results, canConfirm: true } })
+    const first = wrapper.findAll('.queue-item')[0]
+    expect(first.text()).toContain('违规片段2')
+    expect(first.classes()).toContain('queue-item--urgent')
+  })
+
+  it('默认选中与视觉队列首条一致（风险序，非数据原始序）', () => {
+    const wrapper = mount(ReviewWorkbench, { props: { results, canConfirm: true } })
+    // 详情区（current）展示排序首条 id=2；数据原始序首条 id=1 不应被选中
+    expect(wrapper.find('.detail').text()).toContain('违规片段2')
+  })
+
+  it('切到检出顺序：按 result_id 升序（不依赖接口返回顺序）', async () => {
+    const wrapper = mount(ReviewWorkbench, { props: { results, canConfirm: true } })
+    const sw = wrapper.findComponent({ name: 'ElSwitch' })
+    expect(sw.exists()).toBe(true)
+    await sw.vm.$emit('update:modelValue', false)
+    await nextTick()
+    expect(wrapper.findAll('.queue-item')[0].text()).toContain('违规片段1')
+  })
+
+  it('低置信×高风险行带 urgent 高亮，其余行不标', () => {
+    const wrapper = mount(ReviewWorkbench, { props: { results, canConfirm: true } })
+    const urgent = wrapper.findAll('.queue-item--urgent')
+    expect(urgent.length).toBe(1)
+    expect(urgent[0].text()).toContain('违规片段2')
   })
 })

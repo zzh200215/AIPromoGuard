@@ -21,12 +21,12 @@ beforeEach(() => {
 })
 
 describe('api/results · 参数拼装', () => {
-  it('listResults 无 status/order 时参数为空对象（axios 忽略 undefined 字段）', async () => {
+  it('listResults 默认风险优先（PR-2：order=priority，status 缺省）', async () => {
     await listResults(7)
     expect(mockedRequest).toHaveBeenCalledWith({
       url: '/tasks/7/results',
       method: 'get',
-      params: { status: undefined, order: undefined },
+      params: { status: undefined, order: 'priority' },
     })
   })
 
@@ -39,12 +39,21 @@ describe('api/results · 参数拼装', () => {
     })
   })
 
-  it('listResults 带 status 时进 params', async () => {
+  it('listResults 带 status 时进 params，order 默认 priority', async () => {
     await listResults(7, 'pending_confirm')
     expect(mockedRequest).toHaveBeenCalledWith({
       url: '/tasks/7/results',
       method: 'get',
-      params: { status: 'pending_confirm' },
+      params: { status: 'pending_confirm', order: 'priority' },
+    })
+  })
+
+  it('listResults 显式 order=id 恢复检出顺序（PR-2 开关关闭态）', async () => {
+    await listResults(7, undefined, 'id')
+    expect(mockedRequest).toHaveBeenCalledWith({
+      url: '/tasks/7/results',
+      method: 'get',
+      params: { status: undefined, order: 'id' },
     })
   })
 

@@ -12,13 +12,14 @@ import type { Rule } from '@/types/rule'
 
 /**
  * 任务复核结论列表。
- * order='priority'：低置信×高风险优先（R4-3 复核路由——AI 最拿不准且危害最大的排前）；
- * 缺省按检出顺序。
+ * order='priority'（PR-2 起的默认）：低置信×高风险优先（R4-3 复核路由——AI 最拿不准
+ * 且危害最大的排前）；order='id' 为检出顺序（自然序）。后端两种排序均受支持，
+ * 组件内仍各自显式排序一次——开关切"检出顺序"时不依赖返回顺序，语义稳定。
  */
 export const listResults = (
   taskId: number,
   status?: ResultStatus,
-  order?: 'priority',
+  order: 'id' | 'priority' = 'priority',
 ) =>
   request<{ task_id: number; total: number; items: ReviewResult[] }>({
     url: `/tasks/${taskId}/results`,
