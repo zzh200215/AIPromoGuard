@@ -57,3 +57,6 @@ ptmp_run/
 models_cache/*
 !models_cache/README.md
 !models_cache/.gitkeep
+
+# staging 环境数据目录（独立于演示数据，运行时产物）
+data_staging/
