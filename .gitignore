@@ -52,3 +52,8 @@ tasks/
 .ci_sim/
 
 ptmp_run/
+
+# 离线模型缓存注入点（模型文件勿提交；说明与占位保留）
+models_cache/*
+!models_cache/README.md
+!models_cache/.gitkeep

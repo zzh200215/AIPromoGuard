@@ -160,6 +160,17 @@ cd frontend && node dev-mock.mjs            # 另开终端 npm run dev
 - LLM 缓存管理：`python scripts/llm_cache.py --stats`
 - 影响中心一键演示：`python scripts/demo/run_impact_demo.py`（八步全链路，需 MySQL/向量库就绪，`--reindex` 可自动重建向量索引）
 
+### staging 环境（PR 验证用）
+
+与演示栈同机隔离部署——端口错开（mysql 3308 / api 8001 / web 8081）、容器名 `staging-` 前缀、独立数据卷与 `data_staging/` 数据目录。用途：**PR 合入后先在此冒烟，演示环境只在演示前定点同步**（只跑验证过的版本）。
+
+```bash
+python scripts/deploy/init_staging.py    # 幂等初始化：镜像检查 + chroma 快照 + 起栈 + 种子
+python scripts/demo/smoke_staging.py     # 四断言冒烟：健康 / 登录 / 任务列表 / 前端+API 反代
+```
+
+镜像构建（含前端生产镜像）见 `scripts/deploy/init_staging.py` 输出的构建指引（ASCII 路径 workaround）；离线模型缓存注入见 `models_cache/README.md`。
+
 ## 目录结构
 
 ```

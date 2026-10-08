@@ -1,0 +1,33 @@
+# 前端生产托管（staging / 演示通用）
+# - 静态产物 + SPA 回落（vue-router history 模式）
+# - /api/v1 反代到后端；API_UPSTREAM 由容器环境变量经 envsubst 注入
+#   （如 staging-api:8000 / api:8000），替换范围由 NGINX_ENVSUBST_FILTER 限定
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # 审查接口含 LLM 长耗时；上传含文档正文，放宽上限
+    proxy_read_timeout 300s;
+    client_max_body_size 50m;
+
+    gzip on;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+
+    # SPA 路由回落：非静态资源一律交给 index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API 反代：proxy_pass 不带路径 → 保留原始 URI（/api/v1/** 原样转发，
+    # 与 Vite dev proxy 口径一致，不做路径重写）
+    location /api/v1 {
+        proxy_pass http://${API_UPSTREAM};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

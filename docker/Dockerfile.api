@@ -25,11 +25,16 @@ RUN if [ -n "$PIP_MIRROR" ]; then \
     fi
 
 # 预下载 embedding 模型到镜像层（/app/.modelcache），运行时容器无需联网下载
-# 国内网络可用 --build-arg HF_ENDPOINT=https://hf-mirror.com 覆盖；
+#
+# 离线优先（推荐，在线通道不稳定时可靠）：构建前把本机缓存放到构建上下文
+# models_cache/（见根目录 models_cache/README.md 的复制命令）——fastembed
+# 命中缓存直接加载，下列 RUN 不产生网络请求；目录为空时行为与历史一致（在线下载）。
+# 在线通道可用 --build-arg HF_ENDPOINT=https://hf-mirror.com 覆盖；
 # HF_HUB_DISABLE_XET=1 关闭 XetHub（hf-mirror 不代理其 CAS，会 401）
 ARG HF_ENDPOINT=https://huggingface.co
 ENV HF_ENDPOINT=${HF_ENDPOINT} \
     HF_HUB_DISABLE_XET=1
+COPY models_cache/ /app/.modelcache/
 RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-zh-v1.5', cache_dir='/app/.modelcache')"
 
 COPY src/ ./src/

@@ -17,3 +17,6 @@
   - 生成迁移：`python -m alembic revision --autogenerate -m "描述"`（对开发库）
   - 漂移校验（模型改了忘写迁移会红）：`python scripts/maintenance/schema_drift_check.py`
   - 历史 `docker/init-scripts/init_mysql.sql` 与 `scripts/migrate/*.py` 均已废弃，勿再使用。
+- staging 环境（PR 合入后先冒烟，演示环境只在演示前定点同步）：
+  - 初始化：`python scripts/deploy/init_staging.py`（幂等；端口 3308/8001/8081）
+  - 冒烟：`python scripts/demo/smoke_staging.py`（四断言，失败退出码 1）

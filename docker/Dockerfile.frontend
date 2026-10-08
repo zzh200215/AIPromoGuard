@@ -1,0 +1,37 @@
+# 前端生产镜像：多阶段构建（node 构建 → nginx 托管静态产物 + 反代 /api/v1）
+#
+# 构建（注意：仓库路径含中文时需先复制到 ASCII 路径，见 docker-compose.yml 顶部注释）：
+#   docker build -f docker/Dockerfile.frontend \
+#     --build-arg NODE_IMAGE=${NODE_IMAGE:-docker.m.daocloud.io/library/node:20-alpine} \
+#     --build-arg NGINX_IMAGE=${NGINX_IMAGE:-docker.m.daocloud.io/library/nginx:alpine} \
+#     --build-arg NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmmirror.com} \
+#     -t financial-compliance-review-web .
+#
+# 运行时环境变量（compose 注入）：
+#   API_UPSTREAM  后端地址，如 staging-api:8000（nginx 模板 envsubst 渲染）
+
+ARG NODE_IMAGE=docker.m.daocloud.io/library/node:20-alpine
+ARG NGINX_IMAGE=docker.m.daocloud.io/library/nginx:alpine
+
+FROM ${NODE_IMAGE} AS build
+WORKDIR /app
+
+# 依赖层独立缓存：package*.json 不变则 npm ci 结果复用
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm config set registry "$NPM_REGISTRY" && npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
+FROM ${NGINX_IMAGE}
+
+# 官方 entrypoint 会把 /etc/nginx/templates/*.template 经 envsubst 渲染到
+# /etc/nginx/conf.d/；NGINX_ENVSUBST_FILTER 限定只替换 API_UPSTREAM，
+# 避免误伤 nginx 自身的 $uri/$host 等变量。
+COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
+ENV NGINX_ENVSUBST_FILTER=API_UPSTREAM
+
+COPY --from=build /app/dist /usr/share/nginx/html
+
+EXPOSE 80

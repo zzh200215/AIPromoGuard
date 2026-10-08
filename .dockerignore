@@ -25,3 +25,7 @@ __pycache__/
 # 文档
 docs/
 *.md
+
+# 前端依赖与构建产物（镜像内由 npm ci + vite build 重建，勿进上下文）
+frontend/node_modules/
+frontend/dist/
