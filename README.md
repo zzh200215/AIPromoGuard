@@ -128,7 +128,7 @@ cp .env.example .env
 docker compose -f docker/docker-compose.yml up -d
 
 # 3. 初始化数据（法规 / 规则 / 真实处罚案例 / 管理员，然后条款向量化入 ChromaDB）
-python scripts/init_data/init_admin.py            # admin / admin123
+python scripts/init_data/init_admin.py            # 默认 admin / admin123（RBAC 角色权限 + 管理员，幂等）
 python scripts/init_data/import_regulations.py
 python scripts/init_data/import_rules.py
 python scripts/init_data/import_penalty_cases.py  # 真实罚单（库内累计 68 条，快照 38 条）
