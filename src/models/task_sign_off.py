@@ -6,7 +6,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, String, Text, func
+from sqlalchemy import BigInteger, DateTime, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database.mysql import Base
@@ -14,9 +14,10 @@ from src.infrastructure.database.mysql import Base
 
 class TaskSignOff(Base):
     __tablename__ = "task_sign_offs"
+    __table_args__ = (Index("idx_task_sign_offs_task", "task_id"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    task_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
+    task_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     username: Mapped[str] = mapped_column(String(64), nullable=False)
     # released = 同意放行；rejected = 驳回整改

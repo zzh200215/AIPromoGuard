@@ -24,7 +24,11 @@ class RuleRegulationLink(Base):
     regulation_id: Mapped[int | None] = mapped_column(BigInteger)
     article_id: Mapped[int | None] = mapped_column(BigInteger)
     citation: Mapped[str | None] = mapped_column(String(255))  # 引用文本
-    link_type: Mapped[str] = mapped_column(String(16), nullable=False, default="support")
-    source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")
+    link_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="support", server_default="support"
+    )
+    source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="manual", server_default="manual"
+    )
     created_by: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

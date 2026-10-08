@@ -22,7 +22,9 @@ class RegulationUpdate(Base):
     doc_type: Mapped[str | None] = mapped_column(String(32))  # 规章/规范性文件/办法/公告
     llm_summary: Mapped[str | None] = mapped_column(String(512))
     matched_regulations: Mapped[dict | None] = mapped_column(JSON)  # 匹配的库内法规
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )
     match_type: Mapped[str | None] = mapped_column(String(16))  # fetch/confirm/manual/in_db
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(

@@ -20,10 +20,14 @@ class ProductMaterial(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     product_type: Mapped[str] = mapped_column(String(32), nullable=False)  # fund/insurance/wealth
     material_type: Mapped[str] = mapped_column(String(32), nullable=False)  # 单页/海报/推文/话术稿
-    version: Mapped[str] = mapped_column(String(32), nullable=False, default="v1")
+    version: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="v1", server_default="v1"
+    )
     owner: Mapped[str | None] = mapped_column(String(64))
     document_id: Mapped[str | None] = mapped_column(String(64))  # doc_xxxxxxxx
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="active", server_default="active"
+    )
     last_review_status: Mapped[str | None] = mapped_column(String(16))  # clean/violation/failed
     last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
     # R3 发布后监控：已发布渠道与内容指纹（巡检基线 = 批准版规范化文本）

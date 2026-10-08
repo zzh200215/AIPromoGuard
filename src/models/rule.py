@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, BigInteger, DateTime, Integer, String, func
+from sqlalchemy import JSON, BigInteger, DateTime, Index, Integer, String, func
+from sqlalchemy.dialects.mysql import TINYINT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database.mysql import Base
@@ -8,6 +9,7 @@ from src.infrastructure.database.mysql import Base
 
 class Rule(Base):
     __tablename__ = "rules"
+    __table_args__ = (Index("idx_domain_active", "domain", "is_active"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     domain: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -15,12 +17,16 @@ class Rule(Base):
     # regex/keyword/condition/composite
     rule_type: Mapped[str] = mapped_column(String(16), nullable=False)
     rule_content: Mapped[dict] = mapped_column(JSON, nullable=False)  # 规则 DSL
-    severity: Mapped[str] = mapped_column(String(8), nullable=False, default="medium")
+    severity: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="medium", server_default="medium"
+    )
     description: Mapped[str | None] = mapped_column(String(512))
-    is_active: Mapped[int] = mapped_column(default=1, nullable=False)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    is_active: Mapped[int] = mapped_column(TINYINT, default=1, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     # 生效生命周期 draft/pending_review/active；is_active 仍是运行期启停开关
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="active", server_default="active"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

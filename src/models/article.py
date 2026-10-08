@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, String, Text
+from sqlalchemy import BigInteger, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database.mysql import Base
@@ -6,6 +6,10 @@ from src.infrastructure.database.mysql import Base
 
 class Article(Base):
     __tablename__ = "articles"
+    __table_args__ = (
+        Index("idx_article_no", "regulation_id", "article_no"),
+        Index("idx_regulation_id", "regulation_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     regulation_id: Mapped[int] = mapped_column(BigInteger, nullable=False)

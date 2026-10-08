@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, BigInteger, DateTime, Integer, String, func
+from sqlalchemy import JSON, BigInteger, DateTime, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database.mysql import Base
@@ -17,6 +17,10 @@ class ImpactAssessment(Base):
     """
 
     __tablename__ = "impact_assessments"
+    __table_args__ = (
+        Index("idx_assessment_status", "status"),
+        Index("idx_assessment_update", "regulation_update_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     regulation_update_id: Mapped[int | None] = mapped_column(BigInteger)  # 触发源：监管动态
@@ -24,12 +28,14 @@ class ImpactAssessment(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     summary: Mapped[str | None] = mapped_column(String(1024))
     status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="draft"
+        String(16), nullable=False, default="draft", server_default="draft"
     )  # draft/pending_review/confirmed/dismissed
     items: Mapped[dict | None] = mapped_column(JSON)
-    high_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    medium_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    low_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    high_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    medium_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    low_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     created_by: Mapped[int | None] = mapped_column(BigInteger)
     confirmed_by: Mapped[int | None] = mapped_column(BigInteger)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime)

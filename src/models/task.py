@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, BigInteger, DateTime, String, func
+from sqlalchemy import JSON, BigInteger, DateTime, Index, String, func
+from sqlalchemy.dialects.mysql import TINYINT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database.mysql import Base
@@ -8,6 +9,11 @@ from src.infrastructure.database.mysql import Base
 
 class ReviewTask(Base):
     __tablename__ = "review_tasks"
+    __table_args__ = (
+        Index("idx_batch_id", "batch_id"),
+        Index("idx_created_by", "created_by"),
+        Index("idx_status", "status"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     task_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -17,8 +23,10 @@ class ReviewTask(Base):
     domain: Mapped[str | None] = mapped_column(String(32))
     # 审查策略 strict/standard/loose（NULL=standard）
     profile: Mapped[str | None] = mapped_column(String(16))
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
-    progress: Mapped[int] = mapped_column(default=0, nullable=False)  # 0-100
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )
+    progress: Mapped[int] = mapped_column(TINYINT, default=0, server_default="0", nullable=False)
     stages: Mapped[dict | None] = mapped_column(JSON)  # 各 Agent 节点状态/耗时（PRD §11.3）
     llm_usage: Mapped[dict | None] = mapped_column(JSON)  # LLM token 用量/预估成本（成本归因）
     created_by: Mapped[int | None] = mapped_column(BigInteger)
@@ -26,7 +34,7 @@ class ReviewTask(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
     report_path: Mapped[str | None] = mapped_column(String(512))
-    batch_id: Mapped[int | None] = mapped_column(BigInteger, index=True)
+    batch_id: Mapped[int | None] = mapped_column(BigInteger)
     base_document_name: Mapped[str | None] = mapped_column(String(255))
     base_document_path: Mapped[str | None] = mapped_column(String(512))
     diff_changes: Mapped[dict | None] = mapped_column(JSON)  # 对比审查变更片段
