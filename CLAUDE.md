@@ -11,4 +11,9 @@
 ## 其它要点
 
 - 前端目录 `frontend/`；mock API：`node dev-mock.mjs`（默认 8000，本机被占时 `MOCK_PORT=8001` + `VITE_API_TARGET=http://127.0.0.1:8001 npm run dev`）。
-- 本项目无 git 仓库，删除文件不可恢复，重构时优先编辑而非整文件重写。
+- 项目有 git 仓库（`main` 分支，2026-10-08 实测确认且持续提交中）——删除文件仍优先用 git 找回，但重构时依旧优先编辑而非整文件重写。
+- **数据库 schema 变更一律走 Alembic**（权威入口 `migrations/`，2026-10-08 PR-0a 起）：
+  - 新库/升级：`python -m alembic upgrade head`（docker api 容器启动时自动执行）
+  - 生成迁移：`python -m alembic revision --autogenerate -m "描述"`（对开发库）
+  - 漂移校验（模型改了忘写迁移会红）：`python scripts/maintenance/schema_drift_check.py`
+  - 历史 `docker/init-scripts/init_mysql.sql` 与 `scripts/migrate/*.py` 均已废弃，勿再使用。

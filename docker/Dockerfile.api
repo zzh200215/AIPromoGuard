@@ -35,6 +35,9 @@ RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-smal
 COPY src/ ./src/
 COPY configs/ ./configs/
 COPY scripts/ ./scripts/
+# 迁移链（api 容器启动时执行 `alembic upgrade head` 建表/升级，见 docker-compose.yml）
+COPY alembic.ini ./
+COPY migrations/ ./migrations/
 
 EXPOSE 8000
 

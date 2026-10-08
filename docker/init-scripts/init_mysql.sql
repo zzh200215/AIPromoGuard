@@ -1,3 +1,10 @@
+-- ⚠️ 已废弃（2026-10-08，PR-0a）：schema 唯一权威已迁移到仓库根 `migrations/`（Alembic）。
+--   本文件保留仅作历史参考：
+--   - docker compose 不再挂载它（见 docker/docker-compose.yml mysql.volumes 注释）
+--   - CI 不再使用它（改为 `python -m alembic upgrade head`）
+--   - 本文件落后于 ORM 模型（缺 notifications / llm_cache / task_sign_off 等表），
+--     勿据此建库；如需全新库请执行 `python -m alembic upgrade head`。
+--
 -- 金融产品合规智能审查系统 - 核心表结构（对齐 PRD §5.3.1）
 -- 由 mysql 官方镜像在首次初始化时自动执行（写入 MYSQL_DATABASE 指定的库）
 

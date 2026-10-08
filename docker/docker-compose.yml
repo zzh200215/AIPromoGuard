@@ -47,7 +47,9 @@ services:
       - "${MYSQL_PORT:-3307}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./init-scripts/init_mysql.sql:/docker-entrypoint-initdb.d/init_mysql.sql:ro
+      # 注：不再挂载 init_mysql.sql——schema 唯一权威在仓库根 migrations/（Alembic），
+      # 由 api 容器启动时 `alembic upgrade head` 建表/升级（见下方 api.command）
+      # 历史文件 docker/init-scripts/init_mysql.sql 仅作参考保留。
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root123}"]
       interval: 10s
@@ -81,6 +83,9 @@ services:
         HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
     container_name: fcr-api
     restart: unless-stopped
+    # 迁移前置：先 `alembic upgrade head`（新库=建全部表，已有库=幂等升级）再起服务；
+    # exec 保证 uvicorn 成为主进程（信号处理正确）。worker 不跑迁移避免并发 DDL。
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn src.api.main:app --host 0.0.0.0 --port 8000"]
     depends_on:
       mysql:
         condition: service_healthy
@@ -130,6 +135,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      api:
+        condition: service_healthy   # 等 api 完成 alembic 迁移（worker 自身不跑迁移）
     env_file: ../.env
     environment:
       MYSQL_HOST: mysql

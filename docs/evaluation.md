@@ -45,7 +45,7 @@
   依赖 DB（skipif 保护），需先 `scripts/init_data/import_rules.py` 灌规则。
 - **本地包装** `scripts/evaluate/gate.sh`：`bash scripts/evaluate/gate.sh`，退出码即门禁结果。
   Docker 环境：`docker exec fcr-api python scripts/evaluate/evaluate.py --engine rule --min-recall 0.98 --max-fpr 0.02`。
-- **CI** `.github/workflows/eval-gate.yml`：push/PR 自动拉起 MySQL（复用 `docker/init-scripts/init_mysql.sql` schema）
+- **CI** `.github/workflows/eval-gate.yml`：push/PR 自动拉起 MySQL（schema 由 `python -m alembic upgrade head` 建自 `migrations/` 迁移链）
   → 灌规则 → 跑门禁测试。**仓库当前未推送（无 remote），推送后首次生效。**
   runner 为 ASCII 路径，不受本地 buildx 中文路径 bug（docker/buildx#3972）影响。
 - 变体集**不做门禁**（CI 无 LLM Key，full 引擎会降级为纯规则导致必然失败），

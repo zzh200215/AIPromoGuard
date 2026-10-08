@@ -26,6 +26,9 @@ ignore = ["B008"]  # FastAPI 依赖注入 Depends() 出现在参数默认值中�
 # 独立脚本（scripts/ 下可直接 python xxx.py 运行）先 sys.path.insert 定位仓库根，
 # 再导入 src 包——E402 属刻意模式，本地与容器内均可直接执行。
 "scripts/*.py" = ["E402"]
+# Alembic 自动生成的迁移脚本：renderer 不折行（长 create_index 属生成风格），
+# 其余规则照常检查（模板已保证 import 顺序与头部格式合规）
+"migrations/versions/*.py" = ["E501"]
 
 
 [tool.pytest.ini_options]
