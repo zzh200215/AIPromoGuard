@@ -7,7 +7,7 @@
   - 幻觉数 = VLM 报告但图中不存在的数字
 输出：data/spike_vlm/report.json + 控制台摘要。
 
-判据（产品升级方案.md R2-3）：
+判据（R2-3 立项门禁）：
   数字级准确率 >= 95% 且幻觉总数 = 0  -> 立项（VLM 直读方案）
   否则                               -> 降级两段式（VLM 定位区域 + OCR 精读）或砍
 
@@ -170,7 +170,6 @@ def call_vlm(image_path: str) -> list[dict]:
     import base64
 
     from openai import OpenAI
-
     from src.utils.config import settings
 
     if not settings.dashscope_api_key:
@@ -254,7 +253,7 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / "report.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\n===== Spike 结论 =====")
+    print("\n===== Spike 结论 =====")
     print(f"数字检出率: {recall:.1%} ({total_hit}/{total_gt})  "
           f"幻觉总数: {total_hallu}")
     print(f"判据: >=95% 且零幻觉\n结果: {verdict}")
