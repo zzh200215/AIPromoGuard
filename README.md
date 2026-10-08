@@ -188,7 +188,7 @@ src/
 ├── mcp_server/          # MCP server：审查能力封装为 stdio 工具（复用 workflow 节点）
 ├── services/            # 业务编排：审查/影响中心闭环/法规检索(RRF)/图谱/LLM 缓存/监管动态抓取
 ├── infrastructure/      # MySQL/Neo4j/ChromaDB/Embedding/Celery + LangGraph MySQL checkpointer
-├── parsers/             # txt/docx/pdf/ocr/mineru(可选深解析) + chunker
+├── parsers/             # txt/docx/pdf/ocr/mineru(可选)+pdf_table(表格通道) + chunker
 └── models/              # 14 张业务表 + 2 张 LangGraph checkpoint 表 ORM
 scripts/
 ├── crawl/               # 真实数据爬虫：罚单 + 法规全文（watchlist 驱动）+ 法规规则挖掘
@@ -220,7 +220,7 @@ frontend/                # Vue3 前端（任务/知识库/图谱/影响中心/�
 - 采纳率/翻案率的统计出口已建成（review_adoption.py + confirm 判定审计留痕），等待真实使用数据积累——测试期复核数据已按数据卫生约定清理，不用脚本数据冒充人工判断
 - MinerU 深解析通道（`parser.mineru_enabled`，默认关）为可选增强：扫描件 PDF 全文解析 + 文字版 PDF 表格块补充（spike：表格 100% 还原、数字召回 96.2%、CPU ~0.2 页/s）；spike 同时发现其会静默漏检封面装饰区文本块，故文字版 PDF 主路永远走 pypdf 文本层、MinerU 只补不替，数字差异记互校日志；MinerU 补入块 page=None（报告定位显示"-"）
 - 视觉层交叉篡改检测（R2-3）依赖 VLM 关键数字读出（spike：关键数字 100%/零幻觉）与 OCR/文档数字集比对，OCR 漏读小字数字是残余误报源，产出"疑似篡改"进人工核验而非自动确认
-- 勾稽规则引擎（R2-2）v1 覆盖边界：只消费 markdown 表格块（MinerU 通道产物），未开启 MinerU 的文字版 PDF 其表格为乱序碎片、勾稽不生效；表头语义映射为模板层（10 类典型演示表样本 10/10 识别，含货基/保险表正确跳过），LLM 辅助映射为后续增强；转置表（情景矩阵）仅支持跨位置收益率检查，不支持算术勾稽
+- 勾稽规则引擎（R2-2）：消费 markdown 表格块——**文字版 PDF 由 pdfplumber 表格通道默认产出**（`parser.pdf_tables_enabled=true`，spike 预声明判据 10/10：data/spike_pdfplumber/report.json），扫描件走 MinerU 通道（同构块）；两通道均只补不替（主路 pypdf 文本块零变化）；表头语义映射为模板层（10 类典型演示表样本按引擎口径全覆盖：可算表映射命中、货基/保险表正确跳过、合并表头走转置兜底），LLM 辅助映射为后续增强；转置表（情景矩阵）仅支持跨位置收益率检查，不支持算术勾稽；边界：无框线靠空白分列的版式（多为排版噪声）不在表格通道目标内；模板库存在覆盖缺口（如"起购金额"未入 principal 模式 → 该类表按字段不足静默跳过，属零误报优先设计，补库随数据飞轮）
 - 发布后监控（R3-1）v1：巡检对象为台账登记 `publish_url` 的**已授权自有渠道**（不做第三方爬取，微信公众号无官方 API 需人工粘贴兜底）；判定为双层——containment（批准版内容保留率，对网页导航/页脚噪声免疫）+ 关键数字缺失校验（R2-3 互校模式复用，数字被改一票判 changed）；changed 自动创建复审任务（created_by=None 系统发起，批准版文档为 diff 基线）
 - 时效性告警（R3-2）：驾驶舱 overview 返回 `stale_materials`（规则停用/法规废止 → rule_regulation_link → 审查结果反向定位的在用材料清单）；`POST /impact/materials/stale/sync` 可将待更新材料写入系统整改清单（复用整改决策/复测/自动关闭链路），依据恢复时条目自动关闭
 - 飞轮闭环（R4）已接线：①复核队列支持 `order=priority` 低置信×高风险优先排序（results API）；②judge 新增 `--export-golden`（人工复核结论沉淀金标准集，只取 confirmed_by>0 的真实人工判定）与 `--calibrate`（一致率 <85% 退出码 1 可接 CI）——偿还"judge 未经人工金标准校准"的债，但**依赖真实人工复核数据积累**，演示种子不冒充金标准；③`scripts/evaluate/overturn_review.py` 月度翻案归因（LLM 辅助四分类：规则缺失/检索未召回/提示词误导/解析错误，工单式产出不自动修改，LLM 未配置降级为纯统计）

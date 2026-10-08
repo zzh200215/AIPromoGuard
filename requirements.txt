@@ -40,6 +40,7 @@ mcp>=1.28
 
 # ---- 文档解析（W2 使用） ----
 pypdf>=4.2
+pdfplumber>=0.11     # PR-5 文字版 PDF 表格通道（线框表格 → markdown 块，供勾稽消费）
 python-docx>=1.1
 python-pptx>=1.0     # PPT 解析（营销材料常见格式）
 openpyxl>=3.1         # Excel 解析 + 批次汇总导出

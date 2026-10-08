@@ -43,6 +43,8 @@ parser:
   mineru_enabled: false      # R2-1 MinerU 深解析通道（扫描件全文+表格补充）；需 pip install mineru，CPU ~0.2 页/s
   mineru_always: false       # true = 文字版 PDF 也走混合解析补表格块（成本高，默认关）
   mineru_tier: standard      # MinerU 解析档位（spike：advanced 对漏块无改善，用 standard）
+  pdf_tables_enabled: true   # PR-5 文字版 PDF 表格通道：pdfplumber 抽表 → markdown 表格块
+                             # （只补不替，供勾稽消费；spike 10/10，data/spike_pdfplumber/report.json）
 
 # 规则引擎
 rule_engine:

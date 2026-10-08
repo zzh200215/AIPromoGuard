@@ -33,18 +33,22 @@ class DocumentService:
         return doc
 
     def _parse_routed(self, file_path: str | Path) -> ParsedDocument:
-        """解析路由（R2-1）：普通文档走既有工厂；PDF 按条件切 MinerU 混合通道。
+        """解析路由：普通文档走工厂；PDF 按条件切 MinerU 混合通道，否则走表格补充.
 
-        条件（全部满足才走 MinerU，成本护栏——MinerU CPU ~0.2 页/s）：
-        - parser.mineru_enabled 显式开启（默认 false）；
-        - 扩展名为 pdf；
-        - 文本层为空（扫描件，原 PdfParser 直接 422）或 mineru_always 开启。
-        MinerU 未安装/解析失败时降级回原路（扫描件维持原 422 语义）。
+        路由（PR-5 后）：
+        - 非 PDF：解析工厂直出；
+        - PDF + MinerU 关闭（默认）：pypdf 文本层主路 + pdfplumber 表格补充
+          （只补不替，见 _parse_text_layer）；
+        - PDF + MinerU 开启：扫描件走深解析（文本层为空）或混合解析
+          （mineru_always）；MinerU 未安装/失败时降级回"文本层 + 表格补充"。
         """
         cfg = settings.app_config("parser")
         path_str = str(file_path)
-        if not cfg.get("mineru_enabled") or not path_str.lower().endswith(".pdf"):
+        is_pdf = path_str.lower().endswith(".pdf")
+        if not is_pdf:
             return parse_document(path_str)
+        if not cfg.get("mineru_enabled"):
+            return self._parse_text_layer(path_str, cfg)
 
         from src.parsers.mineru_parser import parse_pdf_hybrid, pdf_text_layer_empty
 
@@ -52,10 +56,10 @@ class DocumentService:
             scan_like = pdf_text_layer_empty(path_str)
         except Exception as exc:  # noqa: BLE001 — 加密/损坏 PDF 交还原路报错
             logger.warning("PDF 文本层探测失败，走原路: %s", exc)
-            return parse_document(path_str)
+            return self._parse_text_layer(path_str, cfg)
 
         if not scan_like and not cfg.get("mineru_always"):
-            return parse_document(path_str)
+            return self._parse_text_layer(path_str, cfg)
 
         try:
             tier = cfg.get("mineru_tier", "standard")
@@ -68,7 +72,22 @@ class DocumentService:
             return parse_pdf_hybrid(path_str, tier=tier)
         except Exception as exc:  # noqa: BLE001 — MinerU 任何失败降级原路
             logger.warning("MinerU 解析失败，降级原路: %s", exc)
-            return parse_document(path_str)
+            return self._parse_text_layer(path_str, cfg)
+
+    def _parse_text_layer(self, path_str: str, cfg: dict) -> ParsedDocument:
+        """文字版 PDF 主路：pypdf 文本层（页码/封面文本块完整）+ 表格补充（PR-5）.
+
+        表格补充（pdfplumber 通道）**只增不改**——pypdf 块一个不动，markdown
+        表格块追加在尾部供勾稽规则消费；pdfplumber 不可用/异常/未开启时
+        静默走纯文本层（记日志）。扫描件（文本层为空）由 parse_document 维持
+        422 语义，不受本补充影响。
+        """
+        doc = parse_document(path_str)
+        if cfg.get("pdf_tables_enabled", True):
+            from src.parsers.pdf_table_adapter import merge_pdf_tables
+
+            merge_pdf_tables(doc, path_str)
+        return doc
 
     def chunk(
         self,
