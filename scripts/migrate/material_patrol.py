@@ -22,7 +22,10 @@ _NEW_COLUMNS = (
         (
             ("publish_url", "VARCHAR(512) DEFAULT NULL COMMENT '已发布渠道直链（官网等授权渠道）'"),
             ("channel", "VARCHAR(32) DEFAULT NULL COMMENT '发布渠道 web/wechat/douyin'"),
-            ("content_fingerprint", "TEXT DEFAULT NULL COMMENT '批准版规范化文本（巡检相似度基线）'"),
+            (
+                "content_fingerprint",
+                "TEXT DEFAULT NULL COMMENT '批准版规范化文本（巡检相似度基线）'",
+            ),
             ("patrol_status", "VARCHAR(16) DEFAULT NULL COMMENT 'ok/drift/changed/gone/error'"),
             ("patrol_checked_at", "DATETIME DEFAULT NULL COMMENT '最近巡检时间'"),
         ),

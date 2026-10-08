@@ -30,9 +30,13 @@ def page1() -> Image.Image:
     d.text((60, 650), "业绩比较基准（年化）3.50% - 4.50%", font=_f(40), fill=(60, 60, 60))
     d.text((60, 730), "最低认购金额 50,000 元    持有期限 366 天", font=_f(40), fill=(60, 60, 60))
     d.rectangle([60, 830, 1180, 1000], outline=(180, 140, 30), width=4)
-    d.text((100, 870), "★ 认购期：2026年10月8日 至 2026年10月15日 ★", font=_f(42, True), fill=(180, 140, 30))
-    d.text((60, 1600), "风险提示：本产品为非保本浮动收益产品，过往业绩不代表未来表现。市场有风险，投资须谨慎。",
-           font=_f(28), fill=(130, 130, 130))
+    d.text((100, 870), "★ 认购期：2026年10月8日 至 2026年10月15日 ★",
+           font=_f(42, True), fill=(180, 140, 30))
+    d.text(
+        (60, 1600),
+        "风险提示：本产品为非保本浮动收益产品，过往业绩不代表未来表现。市场有风险，投资须谨慎。",
+        font=_f(28), fill=(130, 130, 130),
+    )
     d.text((60, 1650), "产品管理人：XX基金管理有限公司    产品登记编码：C1234567890123",
            font=_f(28), fill=(130, 130, 130))
     return img
@@ -56,7 +60,7 @@ def page2() -> Image.Image:
     for ri, row in enumerate(rows):
         bold = ri == 0
         fill = (240, 244, 250) if ri == 0 else (255, 255, 255) if ri % 2 else (250, 250, 250)
-        for (x1, x2), cell in zip(cols, row):
+        for (x1, x2), cell in zip(cols, row, strict=True):
             d.rectangle([x1, y, x2, y + 70], fill=fill, outline=(180, 180, 180), width=1)
             d.text((x1 + 14, y + 18), cell, font=_f(30, bold), fill=(30, 30, 30))
         y += 70
@@ -72,7 +76,7 @@ def page2() -> Image.Image:
     for ri, row in enumerate(rows2):
         bold = ri == 0
         fill = (240, 244, 250) if ri == 0 else (255, 255, 255) if ri % 2 else (250, 250, 250)
-        for (x1, x2), cell in zip(cols2, row):
+        for (x1, x2), cell in zip(cols2, row, strict=True):
             d.rectangle([x1, y2, x2, y2 + 70], fill=fill, outline=(180, 180, 180), width=1)
             d.text((x1 + 14, y2 + 18), cell, font=_f(30, bold), fill=(30, 30, 30))
         y2 += 70
@@ -92,8 +96,10 @@ def main() -> None:
     page1().save(p, "PDF", save_all=True, append_images=[page2()], resolution=150)
     print(f"saved: {p}")
     print("ground truth:")
-    print("  页1: 大字 3.85% / 区间 3.50%-4.50% / 50,000 元 / 366 天 / 认购期 2026.10.08-10.15 / 编码 C1234567890123")
-    print("  页2 表1(4列x4行,含表头): 90/180/366 天, 1.20%, 925.00/1,868.00/3,846.00, 100,925.00/101,868.00/103,846.00")
+    print("  页1: 大字 3.85% / 区间 3.50%-4.50% / 50,000 元 / 366 天 / "
+          "认购期 2026.10.08-10.15 / 编码 C1234567890123")
+    print("  页2 表1(4列x4行,含表头): 90/180/366 天, 1.20%, "
+          "925.00/1,868.00/3,846.00, 100,925.00/101,868.00/103,846.00")
     print("  页2 表2(4列x3行,含表头): 乐观4.20%/中性3.85%/悲观2.10%, 4,200.00/3,850.00/2,100.00")
     print("  页2 脚注: 1.20% 0.25% 公式文字")
 
