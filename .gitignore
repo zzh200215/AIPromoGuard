@@ -60,3 +60,6 @@ models_cache/*
 
 # staging 环境数据目录（独立于演示数据，运行时产物）
 data_staging/
+
+# 离线 wheel 兜底目录（wheel 文件不入库，占位保留；用法见 docker/Dockerfile.api 注释）
+wheels/*.whl

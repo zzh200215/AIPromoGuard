@@ -15,13 +15,24 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libgomp1 fonts-wqy-zenhei libgl1 libglib2.0-0 libxcb1 libx11-6 libxext6 libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
+# 可选离线兜底：wheels/ 目录有 wheel 时先离线直装（--no-deps 防连带拉依赖），
+# 后面的主安装即视为已满足——用于镜像源个别大包 CDN 停滞时的人工救急
+# （2026-10-08 实测：aliyun 对 opencv_python-5.0.0.93 的节点两次构建僵死，
+#  宿主机分块续传拉取后由此注入；平时 wheels/ 只有 .gitkeep，此步为空操作）
+COPY wheels/ /wheels/
+RUN if ls /wheels/*.whl >/dev/null 2>&1; then pip install --no-index --no-deps /wheels/*.whl; fi
+
 # 国内网络可覆盖: docker build --build-arg PIP_MIRROR=https://pypi.tuna.tsinghua.edu.cn/simple
 ARG PIP_MIRROR=
 COPY requirements.txt .
-RUN if [ -n "$PIP_MIRROR" ]; then \
-        pip install --no-cache-dir -i "$PIP_MIRROR" -r requirements.txt; \
+# BuildKit 缓存挂载：wheel 缓存跨构建复用——requirements 变更时只下载新增/缺失包，
+# 而不是全量重装（实测无缓存挂载时：加一个依赖触发 ~180 包全量下载，~40 分钟）。
+# 注意：必须去掉 --no-cache-dir，否则缓存挂载形同虚设。
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    if [ -n "$PIP_MIRROR" ]; then \
+        pip install -i "$PIP_MIRROR" -r requirements.txt; \
     else \
-        pip install --no-cache-dir -r requirements.txt; \
+        pip install -r requirements.txt; \
     fi
 
 # 预下载 embedding 模型到镜像层（/app/.modelcache），运行时容器无需联网下载

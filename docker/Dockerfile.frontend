@@ -16,10 +16,12 @@ ARG NGINX_IMAGE=docker.m.daocloud.io/library/nginx:alpine
 FROM ${NODE_IMAGE} AS build
 WORKDIR /app
 
-# 依赖层独立缓存：package*.json 不变则 npm ci 结果复用
+# 依赖层独立缓存：package*.json 不变则 npm ci 结果复用；
+# BuildKit 缓存挂载让 npm 下载缓存跨构建复用（package-lock 变更时只拉新增包）
 ARG NPM_REGISTRY=https://registry.npmmirror.com
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm config set registry "$NPM_REGISTRY" && npm ci
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npm config set registry "$NPM_REGISTRY" && npm ci
 
 COPY frontend/ ./
 RUN npm run build
