@@ -33,8 +33,8 @@
             v-for="todo in todos"
             :key="todo.label"
             class="todo-card"
-            :class="[`tone-${todo.tone}`]"
-            @click="router.push(todo.to)"
+            :class="[`tone-${todo.tone}`, { 'todo-card--disabled': !todo.count }]"
+            @click="onTodoClick(todo)"
           >
             <div class="todo-top">
               <span class="todo-label">{{ todo.label }}</span>
@@ -244,21 +244,21 @@ const todos = computed(() => {
       label: '线上内容已变更',
       count: o.patrol_changed,
       hint: '巡检发现线上内容与批准版不一致，已自动建复审任务',
-      to: '/materials',
+      to: '/materials?filter=patrol_changed',
       tone: 'red',
     },
     {
       label: '线上页面失联',
       count: o.patrol_gone,
       hint: '已登记渠道页面下线（404/410），需人工确认',
-      to: '/materials',
+      to: '/materials?filter=patrol_gone',
       tone: 'red',
     },
     {
       label: '依据失效待更新',
       count: o.stale_materials?.stale_count ?? 0,
       hint: '规则停用或法规废止，引用该依据的在用材料需更新（影响中心可写入整改清单）',
-      to: '/impact',
+      to: '/impact?tab=stale',
       tone: 'amber',
     },
     {
@@ -270,6 +270,12 @@ const todos = computed(() => {
     },
   ]
 })
+
+/** 0 值卡片置灰不可点：跳入空清单没有意义，也避免演示时误点 */
+function onTodoClick(todo: { to: string; count?: number }) {
+  if (!todo.count) return
+  void router.push(todo.to)
+}
 
 const allClear = computed(
   () =>
@@ -439,6 +445,22 @@ onActivated(() => {
 
   &.tone-amber::before {
     background: var(--el-color-warning);
+  }
+
+  // 0 值（无事可办）：置灰且不可点，hover 反馈一并关闭
+  &.todo-card--disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+
+    &:hover {
+      transform: none;
+      box-shadow: none;
+      border-color: var(--app-border);
+
+      .todo-arrow {
+        color: var(--el-text-color-placeholder);
+      }
+    }
   }
 }
 

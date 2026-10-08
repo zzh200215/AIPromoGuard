@@ -26,6 +26,7 @@ export const listMaterials = (
     product_type?: string
     status?: string
     last_review_status?: string
+    patrol_status?: string
   },
 ) =>
   request<{ total: number; items: MaterialLedger[] }>({

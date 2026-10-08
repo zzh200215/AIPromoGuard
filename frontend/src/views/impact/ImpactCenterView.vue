@@ -81,7 +81,13 @@
         <div class="card-header">
           <span class="card-title">影响评估</span>
           <div class="header-actions">
-            <el-button size="small" :loading="syncingStale" @click="onSyncStale">
+            <el-button
+              ref="staleSyncRef"
+              size="small"
+              :loading="syncingStale"
+              :class="{ 'stale-focus': staleFocused }"
+              @click="onSyncStale"
+            >
               同步依据失效材料
             </el-button>
             <el-select v-model="statusFilter" size="small" style="width: 140px" @change="reload">
@@ -322,7 +328,7 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'impact-center' })
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { ElTable } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
@@ -402,6 +408,9 @@ const pageSize = 10
 const statusFilter = ref<AssessmentStatus | ''>('')
 const listLoading = ref(false)
 const syncingStale = ref(false)
+/** 驾驶舱「依据失效待更新」下钻（?tab=stale）时高亮同步入口，数秒后退场 */
+const staleFocused = ref(false)
+const staleSyncRef = ref<{ $el: HTMLElement } | null>(null)
 let loadSeq = 0
 
 // ---------- 详情抽屉 ----------
@@ -653,7 +662,23 @@ onMounted(() => {
   loadPenalties()
   loadAssessments()
   handleDeepLinkQuery()
+  handleStaleFocusQuery()
 })
+
+/**
+ * 驾驶舱「依据失效待更新」下钻：?tab=stale → 滚动定位并高亮「同步依据失效材料」。
+ * 仅作视觉引导，不自动执行同步（写入整改清单属人工决策动作）。
+ */
+function handleStaleFocusQuery() {
+  if (route.query.tab !== 'stale') return
+  staleFocused.value = true
+  void nextTick(() => {
+    staleSyncRef.value?.$el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
+  window.setTimeout(() => {
+    staleFocused.value = false
+  }, 6000)
+}
 
 /** 监管动态页「确认并评估」直达：?update_id=xx&analyze=1 自动发起影响分析。 */
 function handleDeepLinkQuery() {
@@ -670,6 +695,22 @@ function handleDeepLinkQuery() {
 .card-title {
   font-size: 14px;
   font-weight: 600;
+}
+
+// 下钻定位高亮：脉动 3 轮（staleFocused 数秒后置 false，动画自然结束）
+.stale-focus {
+  animation: stale-pulse 1.2s ease-in-out 3;
+}
+
+@keyframes stale-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(230, 162, 60, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px rgba(230, 162, 60, 0.1);
+  }
 }
 
 .header-hint {

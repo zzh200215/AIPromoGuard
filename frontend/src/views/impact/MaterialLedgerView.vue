@@ -15,19 +15,27 @@
 
     <el-card>
       <div class="filter-bar">
-        <el-select v-model="filterProduct" placeholder="产品类型" clearable style="width: 150px" @change="reload">
+        <el-select v-model="filterProduct" placeholder="产品类型" clearable style="width: 150px" @change="applyFilters">
           <el-option label="基金" value="fund" />
           <el-option label="保险" value="insurance" />
           <el-option label="银行理财" value="wealth" />
         </el-select>
-        <el-select v-model="filterStatus" placeholder="台账状态" clearable style="width: 130px" @change="reload">
+        <el-select v-model="filterStatus" placeholder="台账状态" clearable style="width: 130px" @change="applyFilters">
           <el-option label="在用" value="active" />
           <el-option label="已归档" value="archived" />
         </el-select>
-        <el-select v-model="filterReview" placeholder="最近审查" clearable style="width: 150px" @change="reload">
+        <el-select v-model="filterReview" placeholder="最近审查" clearable style="width: 150px" @change="applyFilters">
           <el-option label="存在违规" value="violation" />
           <el-option label="干净" value="clean" />
           <el-option label="失败" value="failed" />
+        </el-select>
+        <el-select v-model="filterPatrol" placeholder="线上巡检" clearable style="width: 150px" @change="applyFilters">
+          <el-option
+            v-for="(label, key) in PATROL_LABELS"
+            :key="key"
+            :label="label"
+            :value="key"
+          />
         </el-select>
       </div>
 
@@ -169,14 +177,20 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'material-ledger' })
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { createMaterial, listMaterials, patrolMaterials, updateMaterial } from '@/api/impact'
 import { useAuthStore } from '@/stores/auth'
+import {
+  buildMaterialQuery,
+  parseMaterialFilters,
+  type MaterialFilters,
+} from '@/utils/materialFilters'
 import type { MaterialLedger } from '@/types/impact'
 
 const auth = useAuthStore()
+const route = useRoute()
 const router = useRouter()
 
 const PRODUCT_LABELS: Record<string, string> = { fund: '基金', insurance: '保险', wealth: '银行理财' }
@@ -215,6 +229,7 @@ const pageSize = 20
 const filterProduct = ref('')
 const filterStatus = ref('')
 const filterReview = ref('')
+const filterPatrol = ref('')
 
 const dialogVisible = ref(false)
 const submitting = ref(false)
@@ -232,6 +247,25 @@ const form = ref({
 
 let loadSeq = 0
 
+/** 当前筛选态（与 URL query 双向映射，见 utils/materialFilters） */
+function currentFilters(): MaterialFilters {
+  return {
+    product: filterProduct.value,
+    status: filterStatus.value,
+    review: filterReview.value,
+    patrol: filterPatrol.value,
+  }
+}
+
+/**
+ * 筛选器变更统一入口：重载 + 同步 URL（replace 不产生历史记录；
+ * 全空时 query 清空，URL 保持干净）。
+ */
+function applyFilters() {
+  router.replace({ query: buildMaterialQuery(currentFilters()) })
+  reload()
+}
+
 function reload() {
   page.value = 1
   load()
@@ -247,6 +281,7 @@ async function load() {
       product_type: filterProduct.value || undefined,
       status: filterStatus.value || undefined,
       last_review_status: filterReview.value || undefined,
+      patrol_status: filterPatrol.value || undefined,
     })
     if (mySeq !== loadSeq) return
     rows.value = data.items
@@ -362,7 +397,38 @@ async function toggleArchive(row: MaterialLedger) {
   load()
 }
 
-onMounted(load)
+// 初始化：URL query（含 ?filter=patrol_changed 下钻别名）→ 筛选态 → 加载
+onMounted(() => {
+  const initial = parseMaterialFilters(route.query)
+  filterProduct.value = initial.product
+  filterStatus.value = initial.status
+  filterReview.value = initial.review
+  filterPatrol.value = initial.patrol
+  void load()
+})
+
+// 浏览器前进/后退或外部链接变更：以 URL 为准同步筛选态（值相同则短路，
+// 避免与 applyFilters 的 replace 形成循环）
+watch(
+  () => route.query,
+  (query) => {
+    const next = parseMaterialFilters(query)
+    const cur = currentFilters()
+    if (
+      next.product === cur.product &&
+      next.status === cur.status &&
+      next.review === cur.review &&
+      next.patrol === cur.patrol
+    ) {
+      return
+    }
+    filterProduct.value = next.product
+    filterStatus.value = next.status
+    filterReview.value = next.review
+    filterPatrol.value = next.patrol
+    reload()
+  },
+)
 </script>
 
 <style scoped>

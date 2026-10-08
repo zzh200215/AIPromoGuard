@@ -217,6 +217,7 @@ def list_materials(
     product_type: str | None = Query(None),
     status: str | None = Query(None),
     last_review_status: str | None = Query(None),
+    patrol_status: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -228,6 +229,9 @@ def list_materials(
         query = query.filter(ProductMaterial.status == status)
     if last_review_status:
         query = query.filter(ProductMaterial.last_review_status == last_review_status)
+    if patrol_status:
+        # R3 巡检结论过滤（驾驶舱「线上内容已变更/失联」卡片下钻，PR-1）
+        query = query.filter(ProductMaterial.patrol_status == patrol_status)
     total = query.count()
     rows = query.offset((page - 1) * page_size).limit(page_size).all()
     return ok(
