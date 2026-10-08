@@ -167,7 +167,10 @@ cd frontend && node dev-mock.mjs            # 另开终端 npm run dev
 ```bash
 python scripts/deploy/init_staging.py    # 幂等初始化：镜像检查 + chroma 快照 + 起栈 + 种子
 python scripts/demo/smoke_staging.py     # 四断言冒烟：健康 / 登录 / 任务列表 / 前端+API 反代
+python scripts/demo/smoke_demo_flow.py   # 八步演示动线冒烟（含证据包 SHA256 校验与整改闭环）——部署验收必跑
 ```
+
+八步动线说明与脚本设计约定见 `docs/demo-flow.md`；**后续所有 PR 合入 staging 后必跑 `smoke_demo_flow.py`**。
 
 镜像构建（含前端生产镜像）见 `scripts/deploy/init_staging.py` 输出的构建指引（ASCII 路径 workaround）；离线模型缓存注入见 `models_cache/README.md`。
 
