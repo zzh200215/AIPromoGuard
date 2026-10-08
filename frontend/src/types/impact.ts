@@ -181,3 +181,51 @@ export interface MaterialCreateBody {
   publish_url?: string
   channel?: string
 }
+
+/** 巡检差异片段（批准版 → 线上版，来自 diff_service 块级比对）。 */
+export interface PatrolDiffChange {
+  change_type: 'added' | 'removed' | 'modified'
+  change_id: string
+  /** 批准版文本（added 时为空） */
+  old_text: string
+  /** 线上版文本（removed 时为空） */
+  new_text: string
+  block_index?: number | null
+  block_count?: number
+}
+
+/** 巡检差异详情（GET /impact/materials/{id}/patrol-diff）：批准版 vs 线上存档快照。 */
+export interface PatrolDiff {
+  material_id: number
+  name: string
+  version: string
+  patrol_status?: string | null
+  patrol_checked_at?: string | null
+  /** 有线上快照且批准版可解析时为 true；否则看 reason */
+  available: boolean
+  reason?: string | null
+  /** 批准版内容在线上快照中的保留率（containment，0~1） */
+  similarity?: number | null
+  /** 批准版中消失的关键数字（被删/被改的高危信号） */
+  missing_numbers: string[]
+  changes: PatrolDiffChange[]
+  change_count: number
+  approved_file?: string | null
+  online_file?: string | null
+  online_archived_at?: string | null
+  /** changed 时自动创建的复审任务（无则 null） */
+  review_task_id?: number | null
+}
+
+/** 依据失效同步结果：highlight_ids = 本轮新增/刷新/重开的待办条目（整改清单高亮）。 */
+export interface StaleSyncResult {
+  assessment_id: number
+  checked: number
+  stale_count: number
+  added: number
+  refreshed: number
+  resolved: number
+  reopened: number
+  total: number
+  highlight_ids: number[]
+}

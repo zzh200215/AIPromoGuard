@@ -13,9 +13,11 @@ from src.models import ImpactAssessment, ReviewBatch
 from src.services.impact_service import (
     STALE_CONTAINER_TITLE,
     _entry_key,
+    _stale_state_snapshot,
     decide_remediation,
     get_or_create_stale_container,
     merge_stale_entries,
+    stale_touched_ids,
     sync_batch_to_assessment,
 )
 
@@ -153,6 +155,47 @@ def test_merge_ignores_review_entries():
     merge_stale_entries(remediation, [_stale(1)])
     assert review_entry["decision"] == "pending"
     assert len(remediation) == 2  # stale 条目独立追加，靠 kind 区分
+
+
+# ---------- stale_touched_ids：整改清单高亮（纯函数） ----------
+
+
+def test_touched_ids_new_entry():
+    """初次同步（快照为空）→ 全部新增条目高亮。"""
+    remediation: list[dict] = []
+    before = _stale_state_snapshot(remediation)
+    merge_stale_entries(remediation, [_stale(1), _stale(2)])
+    assert sorted(stale_touched_ids(before, remediation)) == [1, 2]
+
+
+def test_touched_ids_refresh_and_reopen_counted():
+    remediation: list[dict] = []
+    merge_stale_entries(remediation, [_stale(1)])
+
+    before = _stale_state_snapshot(remediation)  # 状态未变 → 无高亮
+    merge_stale_entries(remediation, [_stale(1)])
+    assert stale_touched_ids(before, remediation) == []
+
+    before = _stale_state_snapshot(remediation)  # 原因刷新 → 高亮
+    merge_stale_entries(remediation, [_stale(1, reasons=["法规已废止：新"])])
+    assert stale_touched_ids(before, remediation) == [1]
+
+    before = _stale_state_snapshot(remediation)  # 依据恢复 → 系统关闭 → 不高亮
+    merge_stale_entries(remediation, [])
+    assert stale_touched_ids(before, remediation) == []
+
+    before = _stale_state_snapshot(remediation)  # 再次失效 → 重开 → 高亮
+    merge_stale_entries(remediation, [_stale(1)])
+    assert stale_touched_ids(before, remediation) == [1]
+
+
+def test_touched_ids_skips_review_entries_and_closed():
+    """仅高亮 stale 待办：审查整改项与已关闭条目都不在集合内。"""
+    remediation: list[dict] = [{"task_id": 9, "material_id": 3, "decision": "pending"}]
+    before = _stale_state_snapshot(remediation)
+    merge_stale_entries(remediation, [_stale(1)])
+    remediation.append({"kind": "stale", "material_id": 2, "decision": "done"})
+    assert stale_touched_ids(before, remediation) == [1]
 
 
 # ---------- DB 用例：容器幂等 / 键兼容回归 ----------

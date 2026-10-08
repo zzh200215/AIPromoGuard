@@ -12,6 +12,7 @@ from src.infrastructure.database.mysql import SessionLocal
 from src.models import ProductMaterial, ReviewTask
 from src.services.content_patrol import (
     PatrolError,
+    build_patrol_diff,
     containment,
     normalize_for_compare,
     patrol_materials,
@@ -210,3 +211,145 @@ class TestPatrolDB:
         outcome2 = patrol_materials(db, [material.id], fetcher=lambda url: drifted)
         assert outcome2["counts"]["drift"] == 1
         assert material.patrol_status == "drift"
+
+
+# ---------- 巡检差异详情（build_patrol_diff：批准版 vs 线上存档快照） ----------
+
+_PD_BASE = "年化收益率 3.85%，最低认购 50,000 元，持有期限 366 天。"
+_PD_ONLINE = "年化收益率 9.85%，最低认购 50,000 元，持有期限 366 天。"
+
+
+@pytest.mark.skipif(not _db_ready(), reason="数据库不可用")
+class TestPatrolDiffDB:
+    """材料台账「差异详情」抽屉的数据构建：available 判定 / 数字缺失 / 片段 / 复审任务回指。"""
+
+    @pytest.fixture
+    def db(self):
+        session = SessionLocal()
+        yield session
+        session.close()
+
+    @pytest.fixture
+    def ctx(self, db, tmp_path, monkeypatch):
+        """独立 upload_dir + 材料 + 批准版文档；返回 (material, upload_root, doc_id)。"""
+        import uuid
+        from types import SimpleNamespace
+
+        import src.services.content_patrol as cp_mod
+
+        upload_root = tmp_path / "uploads"
+        doc_id = f"doc_pd{uuid.uuid4().hex[:8]}"
+        doc_dir = upload_root / "1"
+        doc_dir.mkdir(parents=True, exist_ok=True)
+        (doc_dir / f"{doc_id}.txt").write_text(_PD_BASE, encoding="utf-8")
+
+        monkeypatch.setattr(
+            cp_mod, "settings", SimpleNamespace(upload_dir=str(upload_root))
+        )
+
+        m = ProductMaterial(
+            name="差异详情测试材料",
+            product_type="fund",
+            material_type="单页",
+            status="active",
+            document_id=doc_id,
+        )
+        db.add(m)
+        db.commit()
+        db.refresh(m)
+        yield m, upload_root, doc_id
+        db.query(ReviewTask).filter(
+            ReviewTask.document_path.like(f"%doc_patrol_{m.id}_%")
+        ).delete(synchronize_session=False)
+        db.query(ProductMaterial).filter(ProductMaterial.id == m.id).delete(
+            synchronize_session=False
+        )
+        db.expire_all()
+        db.commit()
+
+    def test_available_diff_with_missing_number_and_fragments(self, db, ctx):
+        material, upload_root, _ = ctx
+        patrol_dir = upload_root / "patrol"
+        patrol_dir.mkdir(parents=True, exist_ok=True)
+        (patrol_dir / f"doc_patrol_{material.id}_20261008120000.txt").write_text(
+            _PD_ONLINE, encoding="utf-8"
+        )
+        material.patrol_status = "changed"
+        db.commit()
+
+        diff = build_patrol_diff(db, material)
+        assert diff["available"] is True
+        assert diff["similarity"] is not None and diff["similarity"] < 1.0
+        assert "3.85" in diff["missing_numbers"]  # 批准版收益率在线上消失
+        assert diff["change_count"] >= 1
+        assert any("9.85" in c["new_text"] for c in diff["changes"])
+        assert diff["online_archived_at"] == "2026-10-08 12:00:00"
+        assert diff["review_task_id"] is None  # 未创建复审任务时回指为空
+
+    def test_review_task_backlink(self, db, ctx):
+        """changed 触发复审任务后，抽屉可回指任务（「查看复审任务」按钮数据源）。"""
+        material, upload_root, _ = ctx
+        patrol_dir = upload_root / "patrol"
+        patrol_dir.mkdir(parents=True, exist_ok=True)
+        (patrol_dir / f"doc_patrol_{material.id}_20261008120000.txt").write_text(
+            _PD_ONLINE, encoding="utf-8"
+        )
+        task = ReviewTask(
+            task_name=f"[巡检] {material.name} 线上内容变更复审",
+            document_name=f"doc_patrol_{material.id}_20261008120000.txt",
+            document_path=str(patrol_dir / f"doc_patrol_{material.id}_20261008120000.txt"),
+            document_type="txt",
+            status="pending",
+            created_by=None,
+        )
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+
+        diff = build_patrol_diff(db, material)
+        assert diff["review_task_id"] == task.id
+
+    def test_no_snapshot_reason_by_status(self, db, ctx):
+        """无快照时按巡检状态给出可读原因（gone 讲清"页面下线，无内容可比"）。"""
+        material, _, _ = ctx
+        material.patrol_status = "gone"
+        db.commit()
+        diff = build_patrol_diff(db, material)
+        assert diff["available"] is False
+        assert "已下线" in (diff["reason"] or "")
+
+        material.patrol_status = "drift"
+        db.commit()
+        diff = build_patrol_diff(db, material)
+        assert diff["available"] is False
+        assert "漂移" in (diff["reason"] or "")
+
+    def test_archive_without_approved_doc(self, db, tmp_path, monkeypatch):
+        """有线上快照但材料未关联批准版文档 → 明确报因，不假装可比。"""
+        from types import SimpleNamespace
+
+        import src.services.content_patrol as cp_mod
+
+        upload_root = tmp_path / "uploads2"
+        patrol_dir = upload_root / "patrol"
+        patrol_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(
+            cp_mod, "settings", SimpleNamespace(upload_dir=str(upload_root))
+        )
+        m = ProductMaterial(
+            name="无批准版差异测试", product_type="fund", material_type="推文",
+            status="active", document_id=None,
+        )
+        db.add(m)
+        db.commit()
+        db.refresh(m)
+        try:
+            (patrol_dir / f"doc_patrol_{m.id}_20261008120000.txt").write_text(
+                _PD_ONLINE, encoding="utf-8"
+            )
+            diff = build_patrol_diff(db, m)
+            assert diff["available"] is False
+            assert "批准版" in (diff["reason"] or "")
+        finally:
+            db.delete(m)
+            db.commit()

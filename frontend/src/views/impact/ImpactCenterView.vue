@@ -235,13 +235,16 @@
           </template>
 
           <template v-if="remediation.length">
-            <div class="block-title remediation-title">
+            <div ref="remediationAnchor" class="block-title remediation-title">
               整改清单（复审终态自动生成）
+              <el-tag v-if="retestPolling" size="small" type="warning" effect="light" class="retest-tag">
+                复测进行中…
+              </el-tag>
               <el-button size="small" type="primary" plain @click="onExportRemediation">
                 导出 Excel
               </el-button>
             </div>
-            <el-table :data="remediation" size="small">
+            <el-table :data="remediation" size="small" :row-class-name="remediationRowClass">
               <el-table-column prop="material_name" label="材料" min-width="190" show-overflow-tooltip>
                 <template #default="{ row }">
                   {{ row.material_name }}
@@ -249,9 +252,16 @@
                     依据失效
                   </el-tag>
                   <el-tag v-if="row.retest" size="small" effect="light" class="retest-tag">复测</el-tag>
-                  <span v-else-if="row.retest_task_id && row.decision !== 'done'" class="retesting">
+                  <el-button
+                    v-else-if="row.retest_task_id && row.decision !== 'done'"
+                    link
+                    type="primary"
+                    size="small"
+                    class="retesting"
+                    @click="router.push(`/tasks/${row.retest_task_id}`)"
+                  >
                     复测中（任务 #{{ row.retest_task_id }}）
-                  </span>
+                  </el-button>
                 </template>
               </el-table-column>
               <el-table-column label="违规数" width="80">
@@ -328,7 +338,7 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'impact-center' })
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { ElTable } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
@@ -430,6 +440,16 @@ const remediation = computed<RemediationItem[]>(
 // stale 待更新条目存在时补"失效依据"列（审查整改项无此字段）
 const hasStaleRows = computed(() => remediation.value.some((r) => r.kind === 'stale'))
 
+/** 依据失效同步（R3-2）本轮新增/刷新的条目：整改清单行高亮 + 滚动定位 */
+const highlightIds = ref<number[]>([])
+const remediationAnchor = ref<HTMLElement | null>(null)
+
+function remediationRowClass({ row }: { row: RemediationItem }) {
+  return row.material_id !== null && highlightIds.value.includes(row.material_id)
+    ? 'remediation-highlight'
+    : ''
+}
+
 async function loadUpdates() {
   updatesLoading.value = true
   try {
@@ -483,22 +503,32 @@ async function loadDetail(id: number) {
 }
 
 function onSelectAssessment(row: ImpactAssessment) {
+  highlightIds.value = [] // 手动打开其他评估：清掉上一轮同步的高亮
   drawerVisible.value = true
   void loadDetail(row.id)
 }
 
 // R3-2 v2：依据失效材料（规则停用/法规废止反向定位）写入系统容器评估的整改清单，
-// 成功后直接打开容器详情（决策/上传整改版复用既有链路）
+// 成功后打开容器详情，高亮本轮新增/刷新的待办条目并滚动定位（决策/上传整改版复用既有链路）
 async function onSyncStale() {
   syncingStale.value = true
   try {
     const result = await syncStaleMaterials()
+    const highlightNote = result.highlight_ids.length
+      ? `，已高亮 ${result.highlight_ids.length} 条更新项`
+      : ''
     ElMessage.success(
-      `已同步：新增 ${result.added} 条待更新项，关闭 ${result.resolved} 条（共 ${result.total} 条）`,
+      `已同步：新增 ${result.added} 条待更新项，关闭 ${result.resolved} 条（共 ${result.total} 条）${highlightNote}`,
     )
     await loadAssessments()
+    highlightIds.value = result.highlight_ids
     drawerVisible.value = true
     await loadDetail(result.assessment_id)
+    if (result.highlight_ids.length) {
+      void nextTick(() =>
+        remediationAnchor.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      )
+    }
   } finally {
     syncingStale.value = false
   }
@@ -613,6 +643,61 @@ async function onDecide(row: RemediationItem, decision: 'remediate' | 'reject' |
 const retestFileInput = ref<HTMLInputElement>()
 const pendingRetestRow = ref<RemediationItem | null>(null)
 const uploadingRetest = ref(false)
+/** 复测进行中：轮询整改清单直至终态（自动关闭 / 生成新整改项），最多 2 分钟 */
+const retestPolling = ref(false)
+let retestPollTimer: number | null = null
+
+function stopRetestPoll() {
+  if (retestPollTimer !== null) {
+    window.clearInterval(retestPollTimer)
+    retestPollTimer = null
+  }
+  retestPolling.value = false
+}
+
+function startRetestPoll(materialId: number, assessmentId: number) {
+  stopRetestPoll()
+  retestPolling.value = true
+  // 上传前已存在的复测条目（多轮复测场景）：只认本轮“新出现”的终态信号
+  const baselineRetestTaskIds = new Set(
+    remediation.value.filter((r) => r.retest).map((r) => r.task_id),
+  )
+  let elapsed = 0
+  retestPollTimer = window.setInterval(async () => {
+    elapsed += 5
+    if (!detail.value || detail.value.id !== assessmentId) {
+      stopRetestPoll()
+      return
+    }
+    try {
+      await loadDetail(assessmentId)
+    } catch {
+      stopRetestPoll()
+      return
+    }
+    const rows = remediation.value
+    const newRetest = rows.find(
+      (r) => r.retest && r.material_id === materialId && !baselineRetestTaskIds.has(r.task_id),
+    )
+    const orig = rows.find((r) => r.material_id === materialId && !r.retest)
+    if (newRetest) {
+      stopRetestPoll()
+      if ((newRetest.violation_count ?? 0) === 0) {
+        ElMessage.success('复测通过：原整改项已自动关闭，台账已回写 clean')
+      } else {
+        ElMessage.warning(
+          `复测完成：仍检出 ${newRetest.violation_count} 条违规，已生成新的整改项`,
+        )
+      }
+    } else if (orig?.decision === 'done') {
+      stopRetestPoll()
+      ElMessage.success('复测通过：原整改项已自动关闭，台账已回写 clean')
+    } else if (elapsed >= 120) {
+      stopRetestPoll()
+      ElMessage.info('复测仍在进行，可稍后刷新查看结果')
+    }
+  }, 5000)
+}
 
 function canRetest(row: RemediationItem) {
   return (
@@ -637,12 +722,14 @@ async function onRetestFileChosen(event: Event) {
   pendingRetestRow.value = null
   if (!file || !row?.material_id || !detail.value) return
   uploadingRetest.value = true
+  const assessmentId = detail.value.id
   try {
-    const result = await retestMaterial(row.material_id, detail.value.id, file)
+    const result = await retestMaterial(row.material_id, assessmentId, file)
     ElMessage.success(
       `整改版已上传（${result.version}），复测任务 #${result.task_id} 已启动，通过后将自动关闭本整改项`,
     )
-    await loadDetail(detail.value.id)
+    await loadDetail(assessmentId)
+    startRetestPoll(row.material_id, assessmentId)
   } finally {
     uploadingRetest.value = false
   }
@@ -664,6 +751,8 @@ onMounted(() => {
   handleDeepLinkQuery()
   handleStaleFocusQuery()
 })
+
+onUnmounted(stopRetestPoll)
 
 /**
  * 驾驶舱「依据失效待更新」下钻：?tab=stale → 滚动定位并高亮「同步依据失效材料」。
@@ -810,5 +899,30 @@ function handleDeepLinkQuery() {
 
 table :deep(.el-table__row) {
   cursor: pointer;
+}
+
+/* 依据失效同步本轮新增/刷新的整改条目：琥珀左缘 + 入场脉冲 3 轮（高亮态由
+   highlightIds 控制，手动切换评估时清除） */
+:deep(.remediation-highlight) {
+  td {
+    background: var(--el-color-warning-light-9) !important;
+  }
+
+  td:first-child {
+    border-left: 3px solid var(--el-color-warning);
+  }
+
+  animation: remediation-pulse 1.2s ease-in-out 3;
+}
+
+@keyframes remediation-pulse {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 0 rgba(230, 162, 60, 0);
+  }
+
+  50% {
+    box-shadow: inset 0 0 12px 0 rgba(230, 162, 60, 0.35);
+  }
 }
 </style>

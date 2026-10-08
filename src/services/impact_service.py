@@ -129,18 +129,49 @@ def merge_stale_entries(remediation: list[dict], stale_materials: list[dict]) ->
     return counts
 
 
+def _stale_state_snapshot(remediation: list[dict]) -> dict[int, tuple]:
+    """同步前快照：stale 条目的 (决策, 原因清单)，用于识别本轮被触动的条目。"""
+    return {
+        e["material_id"]: (e.get("decision"), tuple(e.get("reasons") or []))
+        for e in remediation
+        if e.get("kind") == "stale" and e.get("material_id") is not None
+    }
+
+
+def stale_touched_ids(before: dict[int, tuple], remediation: list[dict]) -> list[int]:
+    """本轮同步新增/刷新/重开的 stale 待办条目 id（前端整改清单高亮用）。
+
+    「被触动」= 同步前不存在（新增）或 (决策, 原因) 发生变化（刷新/重开）；
+    已被系统关闭（依据恢复）或人工关闭的条目不返回——高亮只指向仍需处理的行。
+    """
+    touched: list[int] = []
+    for e in remediation:
+        if e.get("kind") != "stale" or e.get("material_id") is None:
+            continue
+        mid = e["material_id"]
+        state = (e.get("decision"), tuple(e.get("reasons") or []))
+        if before.get(mid) == state:
+            continue
+        if e.get("decision") in ("pending", "remediate"):
+            touched.append(mid)
+    return touched
+
+
 def sync_stale_to_assessment(db: Session) -> dict:
     """写入"待更新"整改项（R3-2 v2）：依据失效材料合并进系统容器的整改清单。
 
     复用 stale_materials_check 只读查询 + merge_stale_entries 纯函数；
     结果落容器评估，人工决策与整改复测走既有链路（见模块 docstring）。
+    响应携带 highlight_ids（本轮新增/刷新/重开的待办条目），供前端高亮。
     """
     summary = stale_materials_check(db)
     container = get_or_create_stale_container(db)
     items = container.items or {}
     remediation: list[dict] = items.get("remediation") or []
 
+    before = _stale_state_snapshot(remediation)
     counts = merge_stale_entries(remediation, summary["materials"])
+    highlight_ids = stale_touched_ids(before, remediation)
 
     items["remediation"] = remediation
     container.items = items
@@ -159,6 +190,7 @@ def sync_stale_to_assessment(db: Session) -> dict:
         "checked": summary["checked"],
         "stale_count": summary["stale_count"],
         "total": len(remediation),
+        "highlight_ids": highlight_ids,
         **counts,
     }
 

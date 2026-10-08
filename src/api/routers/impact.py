@@ -309,6 +309,23 @@ def sync_stale_materials(
     return ok(sync_stale_to_assessment(db))
 
 
+@router.get("/materials/{material_id}/patrol-diff")
+def get_patrol_diff(
+    material_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """巡检差异详情（材料台账「差异详情」抽屉）：批准版 vs 线上存档快照。
+
+    只读端点：数据源为巡检 changed 时归档的线上文本（upload/patrol/）与批准版
+    文档解析文本。无快照时返回 available=false 与原因（gone/drift/未巡检等）。
+    """
+    material = db.get(ProductMaterial, material_id)
+    if material is None:
+        raise AppError(ErrorCode.PARAM_ERROR, "材料不存在", http_status=404)
+    return ok(content_patrol.build_patrol_diff(db, material))
+
+
 @router.post("/materials/{material_id}/retest", status_code=201)
 async def retest_material(
     material_id: int,

@@ -63,17 +63,26 @@
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="线上巡检" width="110">
+        <el-table-column label="线上巡检" width="132">
           <template #default="{ row }">
-            <el-tooltip
-              v-if="row.patrol_status"
-              :content="PATROL_TIP[row.patrol_status] ?? ''"
-              placement="top"
-            >
-              <el-tag size="small" :type="PATROL_TAG[row.patrol_status] ?? 'info'">
-                {{ PATROL_LABELS[row.patrol_status] ?? row.patrol_status }}
-              </el-tag>
-            </el-tooltip>
+            <template v-if="row.patrol_status">
+              <el-tooltip
+                :content="`${PATROL_TIP[row.patrol_status] ?? ''}（点击查看差异详情）`"
+                placement="top"
+              >
+                <el-tag
+                  size="small"
+                  class="patrol-tag"
+                  :type="PATROL_TAG[row.patrol_status] ?? 'info'"
+                  @click="openPatrolDiff(row)"
+                >
+                  {{ PATROL_LABELS[row.patrol_status] ?? row.patrol_status }}
+                </el-tag>
+              </el-tooltip>
+              <el-button link size="small" class="patrol-diff-link" @click="openPatrolDiff(row)">
+                差异详情
+              </el-button>
+            </template>
             <span v-else class="patrol-none">{{ row.publish_url ? '未巡检' : '未登记渠道' }}</span>
           </template>
         </el-table-column>
@@ -172,6 +181,101 @@
         <el-button type="primary" :loading="submitting" @click="onSubmit">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 巡检差异详情（R3-1 下钻）：批准版 vs 线上存档快照 -->
+    <el-drawer
+      v-model="patrolDrawerVisible"
+      :title="patrolDiff ? `巡检差异 · ${patrolDiff.name}` : '巡检差异'"
+      size="600px"
+    >
+      <div v-loading="patrolDiffLoading" class="patrol-diff-body">
+        <template v-if="patrolDiff">
+          <div class="diff-head">
+            <el-tag size="small" :type="PATROL_TAG[patrolDiff.patrol_status ?? ''] ?? 'info'">
+              {{ PATROL_LABELS[patrolDiff.patrol_status ?? ''] ?? patrolDiff.patrol_status ?? '未巡检' }}
+            </el-tag>
+            <span class="muted">当前版本 {{ patrolDiff.version }}</span>
+            <span v-if="patrolDiff.patrol_checked_at" class="muted">
+              巡检于 {{ patrolDiff.patrol_checked_at }}
+            </span>
+          </div>
+
+          <template v-if="patrolDiff.available">
+            <div class="diff-metrics">
+              <div class="metric">
+                <div class="metric-label">内容保留率（批准版在线上）</div>
+                <div class="metric-value similarity">{{ similarityText(patrolDiff.similarity) }}</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">关键数字缺失</div>
+                <div class="metric-value">
+                  <template v-if="patrolDiff.missing_numbers.length">
+                    <el-tag
+                      v-for="num in patrolDiff.missing_numbers"
+                      :key="num"
+                      type="danger"
+                      size="small"
+                      effect="dark"
+                      class="missing-num"
+                    >
+                      {{ num }}
+                    </el-tag>
+                  </template>
+                  <span v-else class="ok-text">无（关键数字齐全）</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="block-title">
+              变更片段（{{ patrolDiff.change_count }} 处<span v-if="patrolDiff.change_count > patrolDiff.changes.length">
+                ，展示前 {{ patrolDiff.changes.length }} 处</span>）
+            </div>
+            <div v-if="patrolDiff.changes.length" class="diff-list">
+              <div v-for="change in patrolDiff.changes" :key="change.change_id" class="diff-item">
+                <div class="diff-item-head">
+                  {{ CHANGE_LABELS[change.change_type] ?? change.change_type }}
+                </div>
+                <div v-if="change.old_text" class="diff-block diff-old">
+                  <span class="diff-tag">批准版</span>
+                  <span class="diff-text">{{ change.old_text }}</span>
+                </div>
+                <div v-if="change.new_text" class="diff-block diff-new">
+                  <span class="diff-tag">线上版</span>
+                  <span class="diff-text">{{ change.new_text }}</span>
+                </div>
+              </div>
+            </div>
+            <el-empty
+              v-else
+              description="无文本块级变更（差异可能仅在空白或标点）"
+              :image-size="60"
+            />
+
+            <div class="diff-foot">
+              <span v-if="patrolDiff.online_archived_at" class="muted">
+                线上快照存档于 {{ patrolDiff.online_archived_at }}
+              </span>
+              <el-button
+                v-if="patrolDiff.review_task_id"
+                type="primary"
+                size="small"
+                @click="goReviewTask(patrolDiff.review_task_id)"
+              >
+                查看复审任务 #{{ patrolDiff.review_task_id }}
+              </el-button>
+            </div>
+          </template>
+
+          <el-alert
+            v-else
+            :title="patrolDiff.reason ?? '暂无线上快照可对比'"
+            type="info"
+            :closable="false"
+            show-icon
+          />
+        </template>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -180,14 +284,21 @@ defineOptions({ name: 'material-ledger' })
 import { onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
-import { createMaterial, listMaterials, patrolMaterials, updateMaterial } from '@/api/impact'
+import {
+  createMaterial,
+  getPatrolDiff,
+  listMaterials,
+  patrolMaterials,
+  updateMaterial,
+} from '@/api/impact'
 import { useAuthStore } from '@/stores/auth'
 import {
   buildMaterialQuery,
   parseMaterialFilters,
   type MaterialFilters,
 } from '@/utils/materialFilters'
-import type { MaterialLedger } from '@/types/impact'
+import { CHANGE_LABELS, similarityText } from '@/utils/patrolDiff'
+import type { MaterialLedger, PatrolDiff } from '@/types/impact'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -220,6 +331,29 @@ const PATROL_TIP: Record<string, string> = {
   error: '抓取失败（网络/超时），需人工检查',
 }
 const patrollingId = ref<number | null>(null)
+
+// ---------- 巡检差异抽屉（批准版 vs 线上快照） ----------
+const patrolDrawerVisible = ref(false)
+const patrolDiffLoading = ref(false)
+const patrolDiff = ref<PatrolDiff | null>(null)
+
+async function openPatrolDiff(row: MaterialLedger) {
+  patrolDrawerVisible.value = true
+  patrolDiffLoading.value = true
+  patrolDiff.value = null
+  try {
+    patrolDiff.value = await getPatrolDiff(row.id)
+  } catch {
+    // 拦截器已提示；抽屉保留为空态
+  } finally {
+    patrolDiffLoading.value = false
+  }
+}
+
+function goReviewTask(taskId: number) {
+  patrolDrawerVisible.value = false
+  router.push(`/tasks/${taskId}`)
+}
 
 const rows = ref<MaterialLedger[]>([])
 const loading = ref(false)
@@ -383,7 +517,11 @@ async function patrolOne(row: MaterialLedger) {
     } else {
       ElMessage.success('线上内容与批准版一致')
     }
-    load()
+    await load()
+    // 变更/失联是需人工介入的结论：直接打开差异抽屉（drift/ok 不打扰）
+    if (outcome.status === 'changed' || outcome.status === 'gone') {
+      void openPatrolDiff(row)
+    }
   } catch {
     // 拦截器已提示
   } finally {
@@ -441,5 +579,112 @@ watch(
   margin-top: 12px;
   display: flex;
   justify-content: flex-end;
+}
+.patrol-tag {
+  cursor: pointer;
+}
+.patrol-diff-link {
+  margin-left: 6px;
+  padding: 0;
+}
+.patrol-none {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+/* ---------- 巡检差异抽屉 ---------- */
+.patrol-diff-body {
+  min-height: 200px;
+}
+.diff-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.muted {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+.diff-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.metric {
+  border: 1px solid var(--app-border-light, var(--el-border-color-lighter));
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.metric-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 6px;
+}
+.metric-value {
+  font-size: 14px;
+  font-weight: 600;
+}
+.metric-value.similarity {
+  font-size: 20px;
+  color: var(--el-color-warning);
+}
+.missing-num {
+  margin-right: 6px;
+}
+.ok-text {
+  color: var(--el-color-success);
+  font-weight: 500;
+}
+.block-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 14px 0 8px;
+}
+.diff-item {
+  border: 1px solid var(--app-border-light, var(--el-border-color-lighter));
+  border-radius: 6px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.diff-item-head {
+  font-size: 12px;
+  padding: 4px 10px;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-secondary);
+}
+.diff-block {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.diff-block + .diff-block {
+  border-top: 1px dashed var(--el-border-color-lighter);
+}
+.diff-old {
+  background: var(--el-fill-color-lighter);
+}
+.diff-new {
+  background: var(--el-color-danger-light-9);
+}
+.diff-tag {
+  flex: none;
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  padding-top: 2px;
+}
+.diff-text {
+  word-break: break-all;
+}
+.diff-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 </style>

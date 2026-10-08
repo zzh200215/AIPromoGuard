@@ -11,8 +11,10 @@ import type {
   ImpactPenaltyCase,
   MaterialCreateBody,
   MaterialLedger,
+  PatrolDiff,
   RemediationItem,
   RetestResult,
+  StaleSyncResult,
 } from '@/types/impact'
 import type { Rule } from '@/types/rule'
 
@@ -126,20 +128,18 @@ export const decideRemediation = (
     },
   })
 
-/** 依据失效材料写入系统整改清单（R3-2 v2）：返回增量计数与容器评估 id。 */
+/** 依据失效材料写入系统整改清单（R3-2 v2）：返回增量计数、容器评估 id 与高亮条目。 */
 export const syncStaleMaterials = () =>
-  request<{
-    assessment_id: number
-    checked: number
-    stale_count: number
-    added: number
-    refreshed: number
-    resolved: number
-    reopened: number
-    total: number
-  }>({
+  request<StaleSyncResult>({
     url: '/impact/materials/stale/sync',
     method: 'post',
+  })
+
+/** 巡检差异详情（材料台账「差异详情」抽屉）：批准版 vs 线上存档快照。 */
+export const getPatrolDiff = (materialId: number) =>
+  request<PatrolDiff>({
+    url: `/impact/materials/${materialId}/patrol-diff`,
+    method: 'get',
   })
 
 /** 上传整改版材料并发起复测（multipart：file + assessment_id）。 */

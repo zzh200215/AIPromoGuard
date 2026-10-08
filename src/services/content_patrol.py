@@ -256,6 +256,120 @@ def patrol_one(
     )
 
 
+# 差异片段返回上限：抽屉展示用，全量片段对人工核验无增益（演示材料通常 <10 处）
+_MAX_DIFF_FRAGMENTS = 30
+
+# 无线上快照时按巡检状态给出可读原因（gone 与 changed 的语义差异要讲清楚）
+_NO_SNAPSHOT_REASON = {
+    "gone": "页面已下线（HTTP 404/410），无线上快照可对比——请人工确认发布状态",
+    "drift": "轻微漂移（未达变更阈值），未归档线上快照",
+    "ok": "线上内容与批准版一致，无需对比",
+    "error": "巡检抓取异常或基线缺失，未归档线上快照",
+}
+
+
+def _latest_patrol_archive(material_id: int) -> Path | None:
+    """changed 时归档的线上快照（upload/patrol/doc_patrol_{id}_{时间戳}.txt），取最新。"""
+    patrol_dir = Path(settings.upload_dir) / "patrol"
+    matches = sorted(
+        patrol_dir.glob(f"doc_patrol_{material_id}_*.txt"), key=lambda p: p.name
+    )
+    return matches[-1] if matches else None
+
+
+def _approved_raw_text(material: ProductMaterial) -> tuple[str | None, str | None]:
+    """批准版解析文本（mask=False，与巡检基线同口径）+ 来源文件名。"""
+    if not material.document_id:
+        return None, None
+    matches = list(Path(settings.upload_dir).glob(f"**/{material.document_id}.*"))
+    if not matches:
+        return None, None
+    try:
+        parsed = document_service.parse(matches[0], mask=False)
+    except Exception as exc:  # noqa: BLE001 — 解析失败按"无批准版"处理
+        logger.warning("巡检差异：批准版解析失败 %s: %s", material.document_id, exc)
+        return None, None
+    return parsed.text, matches[0].name
+
+
+def build_patrol_diff(db: Session, material: ProductMaterial) -> dict:
+    """巡检差异详情（材料台账「差异详情」抽屉）：批准版 vs 线上存档快照。
+
+    只读：批准版文本取自材料关联文档（与巡检基线同口径），线上文本取自
+    changed 时归档的快照（upload/patrol/）。无快照时返回 available=False
+    与按巡检状态生成的原因，前端据此提示而非报错。
+    """
+    from src.services.diff_service import diff_documents
+
+    result: dict = {
+        "material_id": material.id,
+        "name": material.name,
+        "version": material.version,
+        "patrol_status": material.patrol_status,
+        "patrol_checked_at": (
+            material.patrol_checked_at.isoformat(timespec="seconds")
+            if material.patrol_checked_at
+            else None
+        ),
+        "available": False,
+        "reason": None,
+        "similarity": None,
+        "missing_numbers": [],
+        "changes": [],
+        "change_count": 0,
+        "approved_file": None,
+        "online_file": None,
+        "online_archived_at": None,
+        "review_task_id": None,
+    }
+
+    archive = _latest_patrol_archive(material.id)
+    if archive is None:
+        result["reason"] = _NO_SNAPSHOT_REASON.get(
+            material.patrol_status or "",
+            "该材料尚未产生线上快照（仅实质变更会归档线上内容）",
+        )
+        return result
+
+    approved_text, approved_file = _approved_raw_text(material)
+    if approved_text is None:
+        result["reason"] = "缺批准版文档（材料未关联可解析的批准版），无法生成对比"
+        return result
+
+    online_text = archive.read_text(encoding="utf-8", errors="replace")
+    stamp = archive.stem.removeprefix(f"doc_patrol_{material.id}_")
+    result.update(
+        {
+            "available": True,
+            "similarity": round(containment(approved_text, online_text), 4),
+            "missing_numbers": _missing_key_numbers(approved_text, online_text),
+            "approved_file": approved_file,
+            "online_file": archive.name,
+            "online_archived_at": (
+                f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]} "
+                f"{stamp[8:10]}:{stamp[10:12]}:{stamp[12:14]}"
+                if len(stamp) == 14
+                else None
+            ),
+        }
+    )
+
+    old_blocks = [{"text": line} for line in approved_text.splitlines() if line.strip()]
+    new_blocks = [{"text": line} for line in online_text.splitlines() if line.strip()]
+    changes = diff_documents(old_blocks, new_blocks)
+    result["change_count"] = len(changes)
+    result["changes"] = [c.to_dict() for c in changes[:_MAX_DIFF_FRAGMENTS]]
+
+    task = (
+        db.query(ReviewTask)
+        .filter(ReviewTask.document_path.like(f"%doc_patrol_{material.id}_%"))
+        .order_by(ReviewTask.id.desc())
+        .first()
+    )
+    result["review_task_id"] = task.id if task else None
+    return result
+
+
 def patrol_materials(
     db: Session, material_ids: list[int] | None = None, fetcher=None
 ) -> dict:
