@@ -84,25 +84,50 @@ def _normalize(items: list) -> list[dict]:
     return findings
 
 
+def find_ocr_missing(visible_numbers: list[dict], ocr_text: str) -> list[dict]:
+    """图片级两路对照（PR-6）：VLM 读到、但图片自身 OCR 文字层未读到的数字.
+
+    这是篡改判定的**上游预筛**：图片 OCR 没读到的数字才有"漏读/被改"的
+    歧义；两路都读到的数字（归一相等）直接算一致，不进不一致判定。
+    输出条目携带两路信息：value=VLM 读到值，context=紧邻标签（位置）。
+    """
+    from src.services.tamper_check import extract_text_numbers, is_key_number, norm_number
+
+    ocr_nums = extract_text_numbers([{"text": ocr_text or ""}])
+    missing: list[dict] = []
+    for item in visible_numbers or []:
+        if not isinstance(item, dict):
+            continue
+        value = str(item.get("value") or "").strip()
+        context = str(item.get("context") or "").strip()
+        if not value or not is_key_number(context, value):
+            continue
+        if norm_number(value) in ocr_nums:
+            continue
+        missing.append({"value": value, "context": context})
+    return missing
+
+
 def scan_image_visual(
     image_path: str | Path,
     ocr_text: str,
     domain: str | None,
     client=None,
-) -> tuple[list[dict], dict | None, list[dict]]:
-    """视觉层合规分析。返回 (findings, usage, visible_numbers)。
+) -> tuple[list[dict], dict | None, list[dict], list[dict]]:
+    """视觉层合规分析。返回 (findings, usage, visible_numbers, ocr_missing)。
 
     visible_numbers 是 VLM 逐字读出的图中关键数字清单（R2-3 交叉篡改检测
-    的输入），未启用/失败/模型未输出时降级为 []。findings 的未启用/失败
-    降级为 []，不阻断审查（图片仍走 OCR 文本管线）。
+    的输入），未启用/失败/模型未输出时降级为 []。ocr_missing 是其子集：
+    图片自身 OCR 文字层未读到的数字（PR-6 两路对照的上游预筛），同样降级为 []。
+    findings 的未启用/失败降级为 []，不阻断审查（图片仍走 OCR 文本管线）。
     client 供测试注入（需提供 chat.completions.create 接口）；缺省按
     settings 现场构造 OpenAI 兼容客户端（与 QwenClient 同端点，模型独立）。
     """
     if not settings.vlm_enabled or not settings.dashscope_api_key:
-        return [], None, []
+        return [], None, [], []
     data_url = _data_url(image_path)
     if data_url is None:
-        return [], None, []
+        return [], None, [], []
 
     user_text = (
         f"领域：{domain or '未识别'}\n图片 OCR 文字：\n{ocr_text[:1500]}\n\n"
@@ -134,7 +159,7 @@ def scan_image_visual(
         )
     except Exception as exc:
         logger.warning("视觉层审查调用失败（降级跳过）: %s", exc)
-        return [], None, []
+        return [], None, [], []
 
     usage = getattr(resp, "usage", None)
     usage_dict = {
@@ -148,14 +173,16 @@ def scan_image_visual(
         content = choices[0].message.content or ""
     findings, visible_numbers = _parse_vlm_output(content)
     findings = _normalize(findings if isinstance(findings, list) else [])
+    ocr_missing = find_ocr_missing(visible_numbers, ocr_text)
     logger.info(
-        "视觉层审查：%s 处视觉风险，%s 个关键数字（%s tokens，%s）",
+        "视觉层审查：%s 处视觉风险，%s 个关键数字（其中 %s 个图片 OCR 未读到，%s tokens，%s）",
         len(findings),
         len(visible_numbers),
+        len(ocr_missing),
         usage_dict["total_tokens"],
         settings.vlm_model,
     )
-    return findings, usage_dict, visible_numbers
+    return findings, usage_dict, visible_numbers, ocr_missing
 
 
 def _parse_vlm_output(content: str) -> tuple[list, list]:

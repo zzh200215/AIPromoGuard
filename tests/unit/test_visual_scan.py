@@ -85,7 +85,7 @@ def _scan(tmp_path, client, ext="png", text="text"):
 
 def test_scan_success_normalizes_and_returns_usage(tmp_path):
     client = _FakeClient(_FakeResp())
-    findings, usage, _numbers = _scan(tmp_path, client, text="预期年化收益率 5.8%")
+    findings, usage, _numbers, _missing = _scan(tmp_path, client, text="预期年化收益率 5.8%")
     assert len(findings) == 2  # 缺 issue 的条目被丢弃
     first = findings[0]
     assert first["issue"] == "收益数字放大"
@@ -104,21 +104,66 @@ def test_scan_success_normalizes_and_returns_usage(tmp_path):
 
 def test_scan_no_key_degrades(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "dashscope_api_key", "")
-    assert _scan(tmp_path, _FakeClient(_FakeResp())) == ([], None, [])
+    assert _scan(tmp_path, _FakeClient(_FakeResp())) == ([], None, [], [])
 
 
 def test_scan_disabled_degrades(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "vlm_enabled", False)
-    assert _scan(tmp_path, _FakeClient(_FakeResp())) == ([], None, [])
+    assert _scan(tmp_path, _FakeClient(_FakeResp())) == ([], None, [], [])
 
 
 def test_scan_client_error_degrades(tmp_path):
-    assert _scan(tmp_path, _FakeClient(RuntimeError("boom"))) == ([], None, [])
+    assert _scan(tmp_path, _FakeClient(RuntimeError("boom"))) == ([], None, [], [])
 
 
 def test_scan_unsupported_ext_skips_client(tmp_path):
     client = _FakeClient(RuntimeError("不应被调用"))
-    assert _scan(tmp_path, client, ext="gif") == ([], None, [])
+    assert _scan(tmp_path, client, ext="gif") == ([], None, [], [])
+
+
+# ---------- find_ocr_missing（PR-6 图片级两路对照）----------
+
+
+def test_find_ocr_missing_keeps_unread_numbers():
+    """VLM 读到但图片 OCR 文字层没有的数字 → 进 missing（带位置=紧邻标签）。"""
+    missing = visual_scan.find_ocr_missing(
+        [{"value": "9.85", "context": "年化收益率"},
+         {"value": "366", "context": "持有期限"}],
+        "预期年化收益率 3.85%，产品期限 366 天",  # 366 读到 → 不算 missing
+    )
+    assert missing == [{"value": "9.85", "context": "年化收益率"}]
+
+
+def test_find_ocr_missing_normalizes_before_compare():
+    """归一后相等（千分位/尾零）算读到，不进 missing。"""
+    missing = visual_scan.find_ocr_missing(
+        [{"value": "50,000", "context": "认购金额"}, {"value": "3.80", "context": "费率"}],
+        "认购金额 50000.00 元，费率 3.8%",
+    )
+    assert missing == []
+
+
+def test_find_ocr_missing_filters_non_key_and_malformed():
+    missing = visual_scan.find_ocr_missing(
+        [None, {"value": "", "context": "收益率"}, {"value": "1", "context": ""}],
+        "材料正文",
+    )
+    assert missing == []
+
+
+def test_scan_success_returns_ocr_missing(tmp_path):
+    """端到端：VLM 输出 visible_numbers 时按图片 OCR 文本切出 missing 子集。"""
+    content = (
+        '{"findings": [], "visible_numbers": ['
+        '{"value": "9.85", "context": "年化收益率"},'
+        '{"value": "366", "context": "持有期限"}]}'
+    )
+    findings, _usage, numbers, missing = _scan(
+        tmp_path, _FakeClient(_FakeResp(content)), text="本产品期限 366 天"
+    )
+    assert findings == []
+    assert [n["value"] for n in numbers] == ["9.85", "366"]
+    assert [m["value"] for m in missing] == ["9.85"]
 
 
 def test_parse_extracts_visible_numbers(tmp_path):

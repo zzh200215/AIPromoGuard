@@ -35,7 +35,7 @@ from src.models import (
 from src.services import tamper_check
 from src.services.diff_service import build_review_blocks, diff_documents
 from src.services.document_service import document_service
-from src.services.visual_scan import scan_image_visual
+from src.services.visual_scan import find_ocr_missing, scan_image_visual
 from src.utils.config import settings
 from src.utils.errors import AppError, ErrorCode
 from src.utils.logger import get_logger
@@ -295,6 +295,18 @@ def _block_to_dict(block) -> dict:
     }
 
 
+def _raw_blocks_for_tamper(path: str) -> tuple[list[dict], str]:
+    """篡改比对的文字口径（PR-6）= **未脱敏**解析块 + 原文。
+
+    解析层脱敏把金额抹成 "***元"（"50,000元"→"50,***元"），用脱敏文本做
+    "图片读数 vs 文字材料"比对会给每个带单位金额报假篡改（真机验证实证）——
+    与巡检基线 10-07 的"两侧口径不一致"同类问题，参见 document_service.parse
+    注释。此处返回的内容只进数字比对，不进 LLM 上下文（隐私面不变）。
+    """
+    raw = document_service.parse(path, mask=False)
+    return [_block_to_dict(b) for b in raw.blocks], raw.text
+
+
 def execute_review(task_id: int) -> None:
     """执行一次完整审查（线程池与 Celery worker 共用入口）。"""
     db = SessionLocal()
@@ -332,14 +344,26 @@ def execute_review(task_id: int) -> None:
         vlm_usage = None
         doc_ext = (task.document_path or "").rsplit(".", 1)[-1].lower()
         if doc_ext in {"png", "jpg", "jpeg", "bmp"}:
-            vlm_findings, vlm_usage, visible_numbers = scan_image_visual(
+            vlm_findings, vlm_usage, visible_numbers, _ = scan_image_visual(
                 task.document_path, parsed.text, task.domain
             )
-            # R2-3 交叉篡改检测：VLM 关键数字 vs 全文数字集（含 OCR 图文与配套文档），
-            # 不一致 = 图片被局部修改或图文不同步（人工核验，不自动确认）
-            vlm_findings = vlm_findings + tamper_check.check_tamper(
-                visible_numbers, blocks, page=1
-            )
+            # R2-3 交叉篡改检测（PR-6 三分支）：VLM 关键数字 vs 文字材料数字集——
+            # 同位置有数字但不等 = 疑似篡改（一票 changed）；文字层未读到也无对应
+            # 位置 = 降级"待人工核验"（最可能是 OCR 漏读小字）。
+            #
+            # 比对必须用**未脱敏**口径（PR-6 真机验证发现）：解析层脱敏把金额抹成
+            # "***元"（"50,000元"→"50,***元"），用脱敏文本比对会给每个带单位金额
+            # 报假篡改——与巡检基线 10-07"两侧口径不一致"同类问题（见
+            # document_service.parse 注释）。仅在有数字可比对时才做第二遍解析
+            # （OCR 成本按需支付）；未脱敏文本只进比对、不进 LLM 上下文，隐私面不变。
+            raw_blocks: list[dict] = []
+            if visible_numbers:
+                raw_blocks, raw_text = _raw_blocks_for_tamper(task.document_path)
+            if raw_blocks:
+                ocr_missing = find_ocr_missing(visible_numbers, raw_text)
+                vlm_findings = vlm_findings + tamper_check.check_tamper(
+                    visible_numbers, raw_blocks, page=1, ocr_missing=ocr_missing
+                )
 
         initial_state = {
             "task_id": task.id,

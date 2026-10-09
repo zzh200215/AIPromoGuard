@@ -141,6 +141,34 @@
         <!-- 原文引用（无对照视图时是主要定位手段） -->
         <blockquote class="quote">{{ current.original_text }}</blockquote>
 
+        <!-- PR-6 两路数字对照：疑似篡改结论必须让复核人一眼看到"图片读数 vs
+             文字材料读数"，降级条目（OCR 未读到）在此显式标"待人工核验" -->
+        <div v-if="tamperRoutes" class="tamper-card">
+          <div class="tr-head">
+            <span class="tr-title">数字两路对照</span>
+            <el-tag v-if="tamperRoutes.unverified" size="small" type="warning" effect="light">
+              待人工核验
+            </el-tag>
+            <span v-else class="tr-note">同位置数字不一致，疑似图片被局部修改</span>
+          </div>
+          <div class="tr-grid">
+            <div class="tr-cell">
+              <div class="tr-label">图片（视觉模型读到）</div>
+              <div class="tr-value num">{{ tamperRoutes.vlm }}</div>
+              <div class="tr-sub">{{ tamperRoutes.label ?? '关键数字' }}</div>
+            </div>
+            <div class="tr-vs">VS</div>
+            <div class="tr-cell" :class="{ 'tr-miss': tamperRoutes.unverified }">
+              <div class="tr-label">文字材料（OCR / 解析）</div>
+              <div class="tr-value num">{{ tamperRoutes.text ?? '未读到' }}</div>
+              <div class="tr-sub">{{ tamperRoutes.label ?? '同位置' }}</div>
+            </div>
+          </div>
+          <div v-if="tamperRoutes.unverified" class="tr-guide">
+            文字层未读到该数字（可能为 OCR 漏读小字）——请人工核对原图，确认图中数字是否真实存在
+          </div>
+        </div>
+
         <!-- 法规依据 -->
         <div v-if="current.regulation_name" class="reg-card">
           <div class="reg-title">
@@ -259,6 +287,7 @@ import type { DocumentBlock } from '@/api/tasks'
 import { getResultTrail, type TrailEvent } from '@/api/results'
 import { resolveKeyAction, shouldIgnoreKeydown } from '@/composables/useKeyboardShortcuts'
 import { parseFindingDescription } from '@/utils/findingText'
+import { parseTamperRoutes } from '@/utils/tamperRoutes'
 import { SEVERITY_LABELS, VIOLATION_SOURCE_LABELS } from '@/constants/enums'
 import type { ReviewResult, ResultStatus } from '@/types/result'
 import ResultStatusMini from './ResultStatusMini.vue'
@@ -305,7 +334,7 @@ const KIND_TAG: Record<string, { type: 'danger' | 'warning' | 'info'; effect: 'd
 }
 const KIND_TIP: Record<string, string> = {
   pii: '内置检测（代码级不可停用）：材料含客户身份/联系方式，一票命中',
-  tamper: '图片数字与文字材料不一致，疑似 P 图篡改，需人工核对原图',
+  tamper: '图片数字与文字材料不一致：同位置数值不同=疑似 P 图（一票命中）；文字层未读到=待人工核验（可能 OCR 漏读小字）',
   consistency: '演示表算术校验：期末金额、收益测算、正文与表格的数字一致性',
   visual: '视觉模型识别的排版/符号/弱化类风险',
 }
@@ -425,6 +454,9 @@ const current = computed(() => (index.value >= 0 ? filtered.value[index.value] :
 
 /** F2-4：判定说明的 [维度前缀] 与正文分开渲染，避免前缀与正文重复造成阅读噪音 */
 const descParts = computed(() => parseFindingDescription(current.value?.description))
+
+/** PR-6：疑似篡改结论的两路数字（图片读数 vs 文字材料读数）；解析不到为 null */
+const tamperRoutes = computed(() => parseTamperRoutes(current.value?.original_text))
 
 // 默认选中：优先第一条待复核；筛选切换后选中项不在新分组时重置到第一条
 watch(
@@ -946,6 +978,91 @@ watch(selectedId, async (vid) => {
   background: var(--el-color-primary-light-9);
   border-radius: 10px;
   padding: 12px 16px;
+}
+
+/* PR-6 两路数字对照卡：疑似篡改结论的核验面板 */
+.tamper-card {
+  margin: 14px 0 0;
+  border: 1px solid var(--el-color-danger-light-7);
+  background: var(--el-color-danger-light-9);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+
+.tr-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tr-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-color-danger-dark-2);
+}
+
+.tr-note {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.tr-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.tr-cell {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  padding: 8px 12px;
+  min-width: 0;
+}
+
+.tr-cell.tr-miss {
+  border-style: dashed;
+  border-color: var(--el-color-warning);
+}
+
+.tr-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.tr-value {
+  margin-top: 2px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+  word-break: break-all;
+}
+
+.tr-miss .tr-value {
+  color: var(--el-color-warning);
+}
+
+.tr-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.tr-vs {
+  align-self: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--el-color-danger);
+}
+
+.tr-guide {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--el-color-warning-dark-2);
 }
 
 .reg-title {

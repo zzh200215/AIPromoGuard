@@ -142,3 +142,57 @@ describe('ReviewWorkbench · 复核路由（PR-2）', () => {
     expect(urgent[0].text()).toContain('违规片段2')
   })
 })
+
+describe('ReviewWorkbench · PR-6 疑似篡改两路数字对照', () => {
+  function tamperResult(original_text: string): ReviewResult {
+    return {
+      result_id: 101,
+      violation_type: 'vlm',
+      finding_kind: 'tamper',
+      risk_level: 'high',
+      original_text,
+      description: '[疑似篡改：图片数字与文字材料不一致] 判定说明',
+      confidence_score: 0.7,
+      status: 'pending_confirm',
+    }
+  }
+
+  it('changed：两路数字并排（图片 vs 文字），不标待人工核验', () => {
+    const wrapper = mount(ReviewWorkbench, {
+      props: { results: [tamperResult('年化收益率 图片：9.85 ｜ 文字：3.85')], canConfirm: true },
+    })
+    const card = wrapper.find('.tamper-card')
+    expect(card.exists()).toBe(true)
+    const cells = card.findAll('.tr-cell')
+    expect(cells.length).toBe(2)
+    expect(cells[0].text()).toContain('9.85') // 图片侧
+    expect(cells[1].text()).toContain('3.85') // 文字侧
+    expect(card.text()).not.toContain('待人工核验')
+  })
+
+  it('unverified：文字侧渲染"未读到" + 待人工核验标签 + 原图核对引导', () => {
+    const wrapper = mount(ReviewWorkbench, {
+      props: { results: [tamperResult('年化收益率 图片：9.85 ｜ 文字：未读到')], canConfirm: true },
+    })
+    const card = wrapper.find('.tamper-card')
+    expect(card.text()).toContain('待人工核验')
+    expect(card.text()).toContain('未读到')
+    expect(card.find('.tr-miss').exists()).toBe(true)
+    expect(card.find('.tr-guide').text()).toContain('人工核对原图')
+  })
+
+  it('普通结论（含聚合条目）不渲染对照卡', () => {
+    const wrapper = mount(ReviewWorkbench, {
+      props: {
+        results: [
+          {
+            ...tamperResult('未读到：9.85（年化收益率）、1000（认购金额）'),
+            description: '[疑似篡改：文字层未读到多数图片数字（待整档核对）] 判定说明',
+          },
+        ],
+        canConfirm: true,
+      },
+    })
+    expect(wrapper.find('.tamper-card').exists()).toBe(false)
+  })
+})
