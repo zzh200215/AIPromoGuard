@@ -45,6 +45,25 @@ def test_resolve_price_family_prefix():
     assert resolve_price("totally-unknown-model") == (None, None)
 
 
+def test_resolve_price_exact_model_wins_over_family():
+    """精确名单优先：新网关模型名含 'flash'/'plus' 子串，不得按 qwen 档位误计价。
+
+    当前接入商汤日日新 Token Plan（2026-10-09 起公测免费，单价 0）；正式计费后
+    须更新 pricing._EXACT 表，否则成本会低估。
+    """
+    assert resolve_price("deepseek-v4-flash") == (0.0, 0.0)
+    assert resolve_price("sensenova-6.8-flash-lite") == (0.0, 0.0)
+    assert resolve_price("glm-5.2") == (0.0, 0.0)
+    # 关键回归：不被 "flash" 子串拖进 qwen flash 档
+    assert resolve_price("deepseek-v4-flash") != resolve_price("qwen-flash")
+
+
+def test_estimate_cost_free_tier_model_reports_zero():
+    est = estimate_cost({"total_tokens": 12_345}, "sensenova-6.8-flash-lite")
+    assert est["priced"] is True
+    assert est["estimated_cost_cny"] == 0.0
+
+
 def test_estimate_cost_known_model():
     usage = {"prompt_tokens": 1_000_000, "completion_tokens": 1_000_000}
     est = estimate_cost(usage, "qwen-plus")

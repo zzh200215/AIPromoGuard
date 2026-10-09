@@ -208,9 +208,9 @@ def test_acomplete_falls_back_to_next_model():
         fail_models={"test-model"},
     )
     client = _bare_client(fake, model="test-model")
-    # settings.app_config("llm") 来自真实 configs/app.yaml，fallback_models=[qwen-turbo]
+    # settings.app_config("llm") 来自真实 configs/app.yaml，fallback_models=[glm-5.2]
     result = asyncio.run(client.acomplete([{"role": "user", "content": "q"}]))
-    assert result.model == "qwen-turbo"
+    assert result.model == "glm-5.2"
     assert result.content == "ok"
     assert result.total_tokens == 2
 
@@ -387,3 +387,69 @@ def test_plain_resp_tool_calls_none():
     result = _completion_from_plain()
     assert result.tool_calls is None
     assert result.content == "hello"
+
+
+# ---- 限流退避重试（2026-10-09 换网关：429 rpm exhausted 会整块丢判定）----
+
+
+class _RateLimitedFirst(_FakeAsyncOpenAI):
+    """前 N 次请求抛 429（rpm exhausted），之后正常返回——模拟网关按分钟限流。"""
+
+    def __init__(self, script: list, fail_times: int = 2):
+        super().__init__(script)
+        self.fail_times = fail_times
+        self.attempts = 0
+
+    async def create(self, **kwargs):
+        self.attempts += 1
+        if self.attempts <= self.fail_times:
+            raise RuntimeError(
+                "Error code: 429 - {'error': {'message': 'rpm exhausted', "
+                "'type': 'quota_exceeded_error'}}"
+            )
+        return await super().create(**kwargs)
+
+
+def test_rate_limit_retry_succeeds_after_backoff(monkeypatch):
+    """429 命中后按退避重试（此处把退避 sleep 换成立即返回，避免测试变慢）。"""
+    import src.core.llm.client as client_mod
+
+    monkeypatch.setattr(client_mod.asyncio, "sleep", _instant_sleep)
+    fake = _RateLimitedFirst([_resp("ok")], fail_times=2)
+    client = _bare_client(fake)
+    result = asyncio.run(client.acomplete([{"role": "user", "content": "q"}]))
+    assert result.content == "ok"
+    assert fake.attempts == 3  # 2 次限流 + 1 次成功
+    assert result.model == "test-model"  # 未降级到 fallback（重试即成功）
+
+
+def test_rate_limit_retry_exhausted_falls_back(monkeypatch):
+    """限流超过重试上限后仍失败 → 按既有降级链处理（不无限重试）。"""
+    import src.core.llm.client as client_mod
+
+    monkeypatch.setattr(client_mod.asyncio, "sleep", _instant_sleep)
+    fake = _RateLimitedFirst([_resp("ok")], fail_times=99)
+    client = _bare_client(fake)
+    try:
+        asyncio.run(client.acomplete([{"role": "user", "content": "q"}]))
+        raise AssertionError("限流超限应抛异常（由上层节点降级）")
+    except RuntimeError as exc:
+        assert "429" in str(exc)
+    # 默认 2 次重试 → 单模型最多 3 次尝试（primary + fallback 链各算一轮）
+    assert fake.attempts >= 3
+
+
+def test_non_rate_limit_error_not_retried(monkeypatch):
+    """非限流错误不重试（直接走降级链），避免掩盖真实故障。"""
+    import src.core.llm.client as client_mod
+
+    monkeypatch.setattr(client_mod.asyncio, "sleep", _instant_sleep)
+    fake = _FakeAsyncOpenAI([_resp("ok")], fail_models={"test-model"})
+    client = _bare_client(fake)
+    asyncio.run(client.acomplete([{"role": "user", "content": "q"}]))
+    # test-model 只尝试一次（无重试），随后降级到 fallback
+    assert sum(1 for c in fake.calls if c["model"] == "test-model") == 1
+
+
+async def _instant_sleep(_seconds):  # 测试用：跳过退避等待
+    return None

@@ -246,5 +246,6 @@ def test_report_pending_list_flags_vlm():
 
 
 def test_vlm_model_setting_default():
-    assert settings.vlm_model == "qwen-vl-plus"
+    """VLM 模型可配置且默认启用（具体模型名随 .env 切换供应商，不硬编码厂商）。"""
+    assert isinstance(settings.vlm_model, str) and settings.vlm_model
     assert settings.vlm_enabled is True

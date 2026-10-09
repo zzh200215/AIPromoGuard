@@ -6,12 +6,12 @@ app:
 
 # LLM（QWEN）配置：真实 Key 放 .env，这里只放非敏感默认
 llm:
-  provider: qwen            # qwen | openai | claude
-  model: qwen-plus
+  provider: sensenova      # 实际生效的 Key/Base/模型见 .env（LLM_BASE_URL/LLM_MODEL）
+  model: deepseek-v4-flash # 与 .env 保持一致，仅作文档口径
   temperature: 0.2
   max_tokens: 4096
   timeout_seconds: 120
-  fallback_models: [qwen-turbo]  # 主模型失败时的降级模型
+  fallback_models: [glm-5.2]  # 主模型失败时的降级模型（须在同一网关可用）
   # 真 function calling：LLM 审查时主动调法规检索工具查证再判定（ReAct 式自我查证）
   tool_calling:
     enabled: true            # 总开关；false 时 achat_json 走原纯 json_object 路径

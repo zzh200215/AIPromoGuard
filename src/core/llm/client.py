@@ -1,9 +1,11 @@
-"""QWEN LLM 客户端：走 DashScope OpenAI 兼容接口。
+"""LLM 客户端：走 OpenAI 兼容接口（当前网关见 .env LLM_BASE_URL）。
 
 能力（按接入时间演进）：
-- 未配置 DASHSCOPE_API_KEY 时 get_llm() 返回 None（由调用方决定降级）；
+- 未配置网关 Key（DASHSCOPE_API_KEY，历史名）时 get_llm() 返回 None（由调用方决定降级）；
 - 调用失败按 fallback_models 依次降级（configs/app.yaml llm.fallback_models），
   全部失败抛异常，由上层节点捕获做优雅降级；
+- **限流退避重试**：网关按 RPM/TPM 限流（429 rpm exhausted），并发审查块命中后
+  按 3s→6s 退避重试（settings.llm_rate_limit_retries，默认 2 次），避免整块失去判定；
 - chat_json/achat_json：结构化输出（response_format=json_object），解析失败
   自动带上错误反馈重试一次（self-repair），仍失败降级为空结果；
 - acomplete：AsyncOpenAI 异步版本，供 llm_scan 并发审查多个文档块；
@@ -14,6 +16,7 @@
 import asyncio
 import json
 import re
+import time
 from dataclasses import dataclass
 
 from openai import AsyncOpenAI, OpenAI
@@ -23,6 +26,10 @@ from src.utils.config import settings
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# 限流识别（网关 429 文案不一，按关键词兜底）与退避基数
+_RATE_LIMIT_HINTS = ("429", "rate limit", "rpm exhausted", "tpm exhausted", "too many requests")
+_RATE_LIMIT_BACKOFF_BASE = 3.0
 
 _REPAIR_INSTRUCTION = (
     "上面的输出不是合法的 JSON。请重新输出，只输出形如 "
@@ -172,6 +179,50 @@ class QwenClient:
         )
         return CompletionResult(content=content, model=model, usage=usage, tool_calls=tool_calls)
 
+    @staticmethod
+    def _is_rate_limited(exc: Exception) -> bool:
+        """限流异常识别（网关 429/rpm exhausted 文案不一，按关键词兜底）。"""
+        text = str(exc).lower()
+        return any(h in text for h in _RATE_LIMIT_HINTS)
+
+    def _create_with_retry(self, call, model: str):
+        """同步限流退避重试：命中 429 按 3s→6s 退避，其余异常直接上抛。"""
+        # getattr 兜底：测试以 SimpleNamespace 替身注入 settings 时缺该字段
+        retries = max(0, int(getattr(settings, "llm_rate_limit_retries", 2)))
+        delay = _RATE_LIMIT_BACKOFF_BASE
+        for attempt in range(retries + 1):
+            try:
+                return call()
+            except Exception as exc:
+                if attempt >= retries or not self._is_rate_limited(exc):
+                    raise
+                logger.warning(
+                    "LLM 限流（%s 第 %d/%d 次），%.0fs 后重试：%s",
+                    model, attempt + 1, retries, delay, str(exc)[:80],
+                )
+                time.sleep(delay)
+                delay *= 2
+        raise RuntimeError("unreachable")  # pragma: no cover
+
+    async def _acreate_with_retry(self, call, model: str):
+        """异步限流退避重试：语义同 _create_with_retry。"""
+        # getattr 兜底：测试以 SimpleNamespace 替身注入 settings 时缺该字段
+        retries = max(0, int(getattr(settings, "llm_rate_limit_retries", 2)))
+        delay = _RATE_LIMIT_BACKOFF_BASE
+        for attempt in range(retries + 1):
+            try:
+                return await call()
+            except Exception as exc:
+                if attempt >= retries or not self._is_rate_limited(exc):
+                    raise
+                logger.warning(
+                    "LLM 限流（%s 第 %d/%d 次），%.0fs 后重试：%s",
+                    model, attempt + 1, retries, delay, str(exc)[:80],
+                )
+                await asyncio.sleep(delay)
+                delay *= 2
+        raise RuntimeError("unreachable")  # pragma: no cover
+
     def complete(
         self,
         messages: list[dict],
@@ -185,15 +236,21 @@ class QwenClient:
         last_error: Exception | None = None
         for model in self._models():
             try:
-                resp = self._create(
-                    self._client, model, messages, temp, json_mode, tools, tool_choice
+                resp = self._create_with_retry(
+                    lambda m=model: self._create(
+                        self._client, m, messages, temp, json_mode, tools, tool_choice
+                    ),
+                    model,
                 )
                 return self._finish(resp, model, messages, json_mode)
             except Exception as exc:
                 # response_format 不被模型/网关支持时，去掉该参数重试一次
                 if json_mode and "response_format" in str(exc):
                     try:
-                        resp = self._create(self._client, model, messages, temp, False)
+                        resp = self._create_with_retry(
+                            lambda m=model: self._create(self._client, m, messages, temp, False),
+                            model,
+                        )
                         return self._finish(resp, model, messages, False)
                     except Exception as exc2:
                         last_error = exc2
@@ -217,14 +274,20 @@ class QwenClient:
         aclient = self._async_client()
         for model in self._models():
             try:
-                resp = await self._create(
-                    aclient, model, messages, temp, json_mode, tools, tool_choice
+                resp = await self._acreate_with_retry(
+                    lambda m=model: self._create(
+                        aclient, m, messages, temp, json_mode, tools, tool_choice
+                    ),
+                    model,
                 )
                 return self._finish(resp, model, messages, json_mode)
             except Exception as exc:
                 if json_mode and "response_format" in str(exc):
                     try:
-                        resp = await self._create(aclient, model, messages, temp, False)
+                        resp = await self._acreate_with_retry(
+                            lambda m=model: self._create(aclient, m, messages, temp, False),
+                            model,
+                        )
                         return self._finish(resp, model, messages, False)
                     except Exception as exc2:
                         last_error = exc2

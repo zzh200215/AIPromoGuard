@@ -110,7 +110,7 @@ flowchart LR
 | 后端 | FastAPI + SQLAlchemy 2.0 + MySQL 8（JWT + RBAC + 审计日志） |
 | Agent 编排 | LangGraph（领域条件路由 → 3 个独立审查子图多 Agent 分工 + 并行分支 reducer 合并 stage_log；`interrupt()` 人工复核关卡 + **自研 MySQL 持久化 checkpointer**（跨进程/跨重启恢复 + 孤儿任务自愈）；底层 LLM 真 Function Calling 工具查证） |
 | MCP | 官方 Python SDK（FastMCP，stdio）：规则扫描 / 法规检索 / 双引擎审查三个工具 |
-| LLM | 通义千问（DashScope OpenAI 兼容接口），`response_format=json_object` 结构化输出 + 真 Function Calling 工具查证 + 自纠错重试 + 模型 fallback 链 |
+| LLM | OpenAI 兼容网关（当前接商汤日日新 Token Plan：`deepseek-v4-flash` 文本 / `sensenova-6.8-flash-lite` 视觉；换供应商只改 `.env` 的 Key/Base/模型三行），`response_format=json_object` 结构化输出 + 真 Function Calling 工具查证 + 自纠错重试 + 限流退避重试 + 模型 fallback 链 |
 | 检索 | ChromaDB + fastembed（`bge-small-zh-v1.5` 本地 ONNX），混合检索 RRF 融合 + 可选 bge-reranker |
 | 知识图谱 | Neo4j（可选 profile，法规-条款-违规模式-处罚案例五元关联） |
 | 异步任务 | 线程池（默认）/ Celery + Redis（可选，无 worker 自动回退） |

@@ -32,15 +32,18 @@ class Settings(BaseSettings):
     app_port: int = 8000
     debug: bool = True
 
-    # LLM（QWEN）
+    # LLM（OpenAI 兼容网关；LLM 与 VLM 共用下方 Key 与 base_url）
+    # 注：dashscope_api_key 为历史变量名（兼容旧 .env），语义是"当前网关的 API Key"
     dashscope_api_key: str = ""
-    llm_model: str = "qwen-plus"
-    llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    llm_model: str = "deepseek-v4-flash"
+    llm_base_url: str = "https://token.sensenova.cn/v1"
     llm_temperature: float = 0.2
     llm_timeout: int = 120
+    # 限流退避重试次数（网关 429/rpm exhausted；3s→6s→12s 递增退避）
+    llm_rate_limit_retries: int = 2
 
-    # 视觉层审查（VLM，图片文档专用；走同一 DashScope 兼容端点的多模态模型）
-    vlm_model: str = "qwen-vl-plus"
+    # 视觉层审查（VLM，图片文档专用；走同一网关的多模态模型，需支持 image_url data URL）
+    vlm_model: str = "sensenova-6.8-flash-lite"
     vlm_enabled: bool = True
 
     # LLM 可观测性（Langfuse，可选：两 Key 均配置才启用，未配置时埋点 no-op）
