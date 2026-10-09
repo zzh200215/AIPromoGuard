@@ -155,17 +155,18 @@ def _mk_result(vtype: str, status: str, confirmed_by: int | None) -> ReviewResul
 
 @pytest.mark.skipif(not _db_ready(), reason="数据库不可用")
 def test_feedback_stats_excludes_auto_confirmed():
-    """方向②：自动确认（confirmed_by=0）不计入反馈统计，只统计人工复核。"""
+    """方向②：系统自动确认（无人工 actor）不计入反馈统计，只统计人工复核。"""
     db = SessionLocal()
     admin = _admin_id()
     try:
+        _ensure_task_9876001()  # FK 前置（PR-7）：结论必须挂在真实任务上
         db.query(ReviewResult).filter(ReviewResult.task_id == 9876001).delete()
         db.commit()
         headers = _admin_headers()
         base = client.get("/api/v1/results/feedback-stats", headers=headers).json()["data"]
         base = base["totals"]
         rows = [
-            _mk_result("rule", "confirmed", 0),  # 自动确认，应被排除
+            _mk_result("rule", "confirmed", None),  # 系统自动确认（无 actor），应被排除
             _mk_result("rule", "confirmed", admin),
             _mk_result("llm", "false_positive", admin),
         ]
@@ -189,7 +190,7 @@ def test_confirm_overturn_auto_confirmed():
     _ensure_task_9876001()
     db = SessionLocal()
     admin = _admin_id()
-    result = _mk_result("rule", "confirmed", 0)
+    result = _mk_result("rule", "confirmed", None)  # 系统自动确认（PR-7：无 actor）
     db.add(result)
     db.commit()
     result_id = result.id  # commit 后 id 已生成
@@ -238,7 +239,7 @@ def test_confirm_writes_audit_trail():
 
     _ensure_task_9876001()
     db = SessionLocal()
-    result = _mk_result("rule", "confirmed", 0)  # 自动确认结果被人工翻案
+    result = _mk_result("rule", "confirmed", None)  # 自动确认结果被人工翻案
     db.add(result)
     db.commit()
     result_id = result.id

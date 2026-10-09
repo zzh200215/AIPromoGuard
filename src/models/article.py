@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Index, String, Text
+from sqlalchemy import BigInteger, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database.mysql import Base
@@ -12,7 +12,11 @@ class Article(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    regulation_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    regulation_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("regulations.id", ondelete="CASCADE", name="fk_articles_regulation_id"),
+        nullable=False,
+    )
     chapter_no: Mapped[str | None] = mapped_column(String(64))  # 章
     section_no: Mapped[str | None] = mapped_column(String(16))  # 节
     article_no: Mapped[str | None] = mapped_column(String(16))  # 条，如：第二十六条

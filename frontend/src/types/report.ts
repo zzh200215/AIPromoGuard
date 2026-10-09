@@ -46,8 +46,10 @@ export interface ViolationItem {
   related_cases: RelatedCase[]
   /** 人工复核结论（report_service 合并，与 results 表同序对齐） */
   human_status?: HumanStatus
-  /** confirmed_by=0 表示系统自动确认 */
+  /** 人工判定人 user id（系统自动确认为 null，PR-7 前为哨兵 0） */
   human_confirmed_by?: number | null
+  /** 系统自动确认（status=confirmed 且无人工 actor；PR-7 起由后端派生） */
+  human_auto_confirmed?: boolean
   /** 关联审查结果 id（报告页批量判定用；未合并 results 时缺省） */
   result_id?: number
   regulation_id?: number | null

@@ -6,7 +6,7 @@
 import pytest
 from sqlalchemy import text
 from src.infrastructure.database.mysql import SessionLocal
-from src.models import ReviewResult, Rule
+from src.models import ReviewResult, ReviewTask, Rule
 from src.services.rule_tuning import (
     apply_suggestion,
     build_rule_suggestions,
@@ -52,7 +52,26 @@ def _mk_rule(db, keywords: list[str], is_active: int = 1) -> Rule:
     return rule
 
 
+def _ensure_task(db) -> None:
+    """FK 前置（PR-7）：review_results.task_id 必须指向真实任务行。
+
+    `fk_review_results_task_id` 上线后，凭空的合成 task_id 会被 MySQL 拒绝
+    （errno 1452），故测试自建父行（显式 id）——这也是约束在替我们拦"假数据"。
+    """
+    if db.get(ReviewTask, _TASK) is None:
+        db.add(
+            ReviewTask(
+                id=_TASK,
+                task_name="规则精调测试任务（临时）",
+                document_name="rule_tuning_test.txt",
+                status="completed",
+            )
+        )
+        db.commit()
+
+
 def _mk_result(db, rule_id: int, status: str, text: str, confidence: float = 0.85) -> None:
+    _ensure_task(db)
     db.add(
         ReviewResult(
             task_id=_TASK,
@@ -70,6 +89,7 @@ def _mk_result(db, rule_id: int, status: str, text: str, confidence: float = 0.8
 
 def _cleanup(db):
     db.query(ReviewResult).filter(ReviewResult.task_id == _TASK).delete()
+    db.query(ReviewTask).filter(ReviewTask.id == _TASK).delete()
     db.query(Rule).filter(Rule.rule_name.like("测试规则%")).delete()
     db.commit()
 

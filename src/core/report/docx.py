@@ -21,7 +21,7 @@ def _human_text(v: dict) -> str:
     status = v.get("human_status")
     if not status:
         return "—"
-    if status == "confirmed" and v.get("human_confirmed_by") == 0:
+    if status == "confirmed" and v.get("human_auto_confirmed"):
         return "已确认（自动）"
     return _HUMAN_LABEL.get(status, status)
 

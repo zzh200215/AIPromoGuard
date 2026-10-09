@@ -84,7 +84,7 @@
             effect="light"
             :type="HUMAN_TAG[row.human_status] ?? 'info'"
           >
-            {{ row.human_status === 'confirmed' && row.human_confirmed_by === 0 ? '已确认（自动）' : HUMAN_LABEL[row.human_status] ?? row.human_status }}
+            {{ row.human_status === 'confirmed' && row.human_auto_confirmed ? '已确认（自动）' : HUMAN_LABEL[row.human_status] ?? row.human_status }}
           </el-tag>
           <span v-else>—</span>
         </template>

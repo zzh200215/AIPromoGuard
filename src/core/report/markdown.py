@@ -14,11 +14,11 @@ _HUMAN_LABEL = {
 
 
 def _human_label(v: dict) -> str:
-    """人工结论列：自动确认（confirmed_by=0）单独标注，无人工数据时为 —。"""
+    """人工结论列：自动确认单独标注，无人工数据时为 —。"""
     status = v.get("human_status")
     if not status:
         return "—"
-    if status == "confirmed" and v.get("human_confirmed_by") == 0:
+    if status == "confirmed" and v.get("human_auto_confirmed"):
         return "已确认（自动）"
     return _HUMAN_LABEL.get(status, status)
 

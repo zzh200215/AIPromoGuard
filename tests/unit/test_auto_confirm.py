@@ -1,7 +1,8 @@
 """方向②人审分流测试：三档置信度自动确认。
 
-- _auto_confirm 纯逻辑（不依赖 DB）：rule/hybrid 高置信自动 confirmed（confirmed_by=0），
-  纯 llm 一律进人工队列，开关/阈值边界。
+- _auto_confirm 纯逻辑（不依赖 DB）：rule/hybrid 高置信自动 confirmed（无人工
+  actor，PR-7 起以 NULL 表达；见 ReviewResult.auto_confirmed），纯 llm 一律进
+  人工队列，开关/阈值边界。
 - _persist_results DB 集成（skipif）：写库后库内 status/confirmed_by/confirmed_at 正确。
 """
 
@@ -11,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import text
 from src.infrastructure.database.mysql import SessionLocal
-from src.models import ReviewResult
+from src.models import ReviewResult, ReviewTask
 from src.services import review_service
 from src.services.review_service import _AUTO_CONFIRM_BY, _auto_confirm
 
@@ -26,6 +27,20 @@ def _db_ready() -> bool:
         return True
     except Exception:
         return False
+
+
+def _ensure_task(db, task_id: int) -> None:
+    """FK 前置（PR-7）：结论的 task_id 必须指向真实任务行。"""
+    if db.get(ReviewTask, task_id) is None:
+        db.add(
+            ReviewTask(
+                id=task_id,
+                task_name="自动确认测试任务（临时）",
+                document_name="auto_confirm_test.txt",
+                status="completed",
+            )
+        )
+        db.commit()
 
 
 # ---------- _auto_confirm 纯逻辑 ----------
@@ -96,6 +111,7 @@ def test_auto_confirm_default_source_rule():
 def test_persist_results_three_tier(monkeypatch):
     db = SessionLocal()
     task_id = 987654321
+    _ensure_task(db, task_id)
     try:
         monkeypatch.setattr(
             review_service,
@@ -130,6 +146,7 @@ def test_persist_results_three_tier(monkeypatch):
         assert rows[0].confirmed_at is not None
     finally:
         db.query(ReviewResult).filter(ReviewResult.task_id == task_id).delete()
+        db.query(ReviewTask).filter(ReviewTask.id == task_id).delete()
         db.commit()
         db.close()
 
@@ -138,6 +155,7 @@ def test_persist_results_three_tier(monkeypatch):
 def test_persist_results_disabled_all_pending(monkeypatch):
     db = SessionLocal()
     task_id = 987654322
+    _ensure_task(db, task_id)
     try:
         monkeypatch.setattr(
             review_service,
@@ -159,6 +177,7 @@ def test_persist_results_disabled_all_pending(monkeypatch):
         assert row.confirmed_by is None
     finally:
         db.query(ReviewResult).filter(ReviewResult.task_id == task_id).delete()
+        db.query(ReviewTask).filter(ReviewTask.id == task_id).delete()
         db.commit()
         db.close()
 

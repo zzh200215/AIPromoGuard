@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Index, String, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, func
 from sqlalchemy.dialects.mysql import TINYINT
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,8 +14,12 @@ class Notification(Base):
     __table_args__ = (Index("idx_notifications_user", "user_id", "is_read"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    # 接收人；通知按用户隔离，不跨部门可见
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # 接收人；通知按用户隔离，不跨部门可见（用户删则通知随之删）
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE", name="fk_notifications_user_id"),
+        nullable=False,
+    )
     # task_failed / batch_completed / batch_failed（后续可扩展整改到期等）
     type: Mapped[str] = mapped_column(String(32), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)

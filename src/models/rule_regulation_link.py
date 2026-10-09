@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Index, String, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database.mysql import Base
@@ -17,12 +17,28 @@ class RuleRegulationLink(Base):
     __table_args__ = (
         Index("idx_link_rule", "rule_id"),
         Index("idx_link_regulation", "regulation_id"),
+        # PR-7：外键列索引显式化
+        Index("idx_link_article", "article_id"),
+        Index("idx_link_created_by", "created_by"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    rule_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    regulation_id: Mapped[int | None] = mapped_column(BigInteger)
-    article_id: Mapped[int | None] = mapped_column(BigInteger)
+    # 关联行强从属于规则与法规（任一被删则该关联无意义）；条款/创建人为弱引用
+    rule_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("rules.id", ondelete="CASCADE", name="fk_rule_regulation_links_rule_id"),
+        nullable=False,
+    )
+    regulation_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "regulations.id", ondelete="CASCADE", name="fk_rule_regulation_links_regulation_id"
+        ),
+    )
+    article_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("articles.id", ondelete="SET NULL", name="fk_rule_regulation_links_article_id"),
+    )
     citation: Mapped[str | None] = mapped_column(String(255))  # 引用文本
     link_type: Mapped[str] = mapped_column(
         String(16), nullable=False, default="support", server_default="support"
@@ -30,5 +46,8 @@ class RuleRegulationLink(Base):
     source: Mapped[str] = mapped_column(
         String(16), nullable=False, default="manual", server_default="manual"
     )
-    created_by: Mapped[int | None] = mapped_column(BigInteger)
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="SET NULL", name="fk_rule_regulation_links_created_by"),
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -127,8 +127,10 @@ def recover_orphan_tasks() -> dict:
     finally:
         db.close()
 
-# 系统自动确认标识（confirmed_by=0）：规则/双引擎高置信命中自动判违规，与人工复核区分。
-_AUTO_CONFIRM_BY = 0
+# 系统自动确认的 actor 表达（PR-7）：NULL=无人工 actor（原为哨兵值 0——0 不是
+# 合法 users.id，与 fk_review_results_confirmed_by 冲突，故改用 NULL；
+# "是否自动确认"统一由 ReviewResult.auto_confirmed 派生，勿再手写 0 比较）。
+_AUTO_CONFIRM_BY: int | None = None
 _AUTO_CONFIRM_SOURCES = {"rule", "hybrid"}
 
 _QUEUE_BACKEND: str | None = None  # "celery" | "thread"
@@ -503,7 +505,8 @@ def _auto_confirm(finding: dict, cfg: dict) -> tuple[str, datetime | None, int |
     """人审分流：规则/双引擎高置信命中自动确认，其余进人工队列。
 
     - violation_type in (rule, hybrid) 且 confidence >= threshold → 自动 confirmed，
-      confirmed_by=0（系统自动），confirmed_at 记录自动确认时刻。
+      confirmed_by=None（无人工 actor，PR-7 起以 NULL 表达"系统自动"，派生见
+      ReviewResult.auto_confirmed），confirmed_at 记录自动确认时刻。
     - evidence_supported=False（引用的法规不在召回条款中，证据核验关卡标记）
       → 即使 hybrid 高置信也强制 pending_confirm：引用幻觉必须由人工裁决。
     - 其余（纯 llm、低于阈值的 rule/hybrid）→ pending_confirm。

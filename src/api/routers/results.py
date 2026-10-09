@@ -131,7 +131,7 @@ def list_results(
                     "status": r.status,
                     "confirmed_at": r.confirmed_at.isoformat() if r.confirmed_at else None,
                     "confirmed_by": r.confirmed_by,
-                    "auto_confirmed": r.confirmed_by == 0,  # 系统自动确认（方向②分流）
+                    "auto_confirmed": r.auto_confirmed,  # 系统自动确认（方向②分流）
                     **_basis(r),
                 }
                 for r in items
@@ -218,7 +218,7 @@ def confirm_result(
     # 判定前留痕：翻案率（采纳率报告口径）依赖"翻转前状态 + 是否系统自动确认"，
     # confirmed_by 翻案后会被覆盖，事后无从还原，必须在这里落审计。
     before_status = result.status
-    before_auto_confirmed = result.confirmed_by == 0
+    before_auto_confirmed = result.auto_confirmed
     result.status = body.verdict
     result.confirmed_at = datetime.now()
     result.confirmed_by = current_user.id
@@ -251,7 +251,7 @@ def confirm_result(
             "status": result.status,
             "confirmed_by": result.confirmed_by,
             "confirmed_at": result.confirmed_at.isoformat(),
-            "auto_confirmed": result.confirmed_by == 0,
+            "auto_confirmed": result.auto_confirmed,
         }
     )
 
@@ -286,7 +286,7 @@ def bulk_confirm_results(
             skipped.append({"result_id": rid, "reason": "forbidden"})
             continue
         before_status = result.status
-        before_auto_confirmed = result.confirmed_by == 0
+        before_auto_confirmed = result.auto_confirmed
         result.status = body.verdict
         result.confirmed_at = now
         result.confirmed_by = current_user.id
@@ -392,8 +392,9 @@ def feedback_stats(
 ) -> dict:
     """反馈闭环统计（W17）：按检出来源（规则/LLM/混合）聚合人工确认结果。
 
-    仅统计人工复核过的结果（confirmed_by>0）：方向②的自动确认（confirmed_by=0）
-    不计入，保证确认率/误报率反映真实人工判定，避免自动分流污染精调数据。
+    仅统计人工复核过的结果（confirmed_by 指向真实用户）：方向②的自动确认
+    （confirmed_by 为空，见 ReviewResult.auto_confirmed）不计入，保证确认率/误报率
+    反映真实人工判定，避免自动分流污染精调数据。
     前端反馈统计页标记 adminOnly，此处后端同口径兜底（非 admin 仅可看自己
     任务的结果明细，不应看到全局精调统计）。
     """
@@ -442,8 +443,8 @@ def rules_quality(
 ) -> dict:
     """规则质量报告（W17）：按 rule_id 统计命中/确认/误报，锁定高误报规则供精调。
 
-    仅统计已人工复核的结果（confirmed_by>0，confirmed + false_positive），
-    按误报率降序。方向②自动确认（confirmed_by=0）不计入，避免虚高确认率。
+    仅统计已人工复核的结果（confirmed_by 指向真实用户，confirmed + false_positive），
+    按误报率降序。方向②自动确认（无人工 actor）不计入，避免虚高确认率。
     """
     rows = (
         db.query(ReviewResult.rule_id, ReviewResult.status, func.count(ReviewResult.id))

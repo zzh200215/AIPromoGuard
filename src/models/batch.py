@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Index, Integer, String, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database.mysql import Base
@@ -22,8 +22,11 @@ class ReviewBatch(Base):
     failed_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
-    created_by: Mapped[int | None] = mapped_column(BigInteger)
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL", name="fk_review_batches_created_by")
+    )
     # 批次来源：manual 手动圈选 / impact_assessment 法规影响中心一键创建
+    # 注：source_id 为多态引用（指向 review_tasks 之外的业务对象），**不建外键**
     source_type: Mapped[str | None] = mapped_column(String(32))
     source_id: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

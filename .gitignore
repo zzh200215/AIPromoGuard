@@ -63,3 +63,6 @@ data_staging/
 
 # 离线 wheel 兜底目录（wheel 文件不入库，占位保留；用法见 docker/Dockerfile.api 注释）
 wheels/*.whl
+
+# 会话级实时进度台（本地工具，非交付物）
+.workbuddy/live/

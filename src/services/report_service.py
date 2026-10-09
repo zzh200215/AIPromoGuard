@@ -41,6 +41,8 @@ def merge_human_decisions(db: Session, report: dict, task_id: int) -> dict:
             v["result_id"] = r.id
             v["human_status"] = r.status
             v["human_confirmed_by"] = r.confirmed_by
+            # 系统自动确认由 status + 无 actor 派生（PR-7：不再用哨兵 0）
+            v["human_auto_confirmed"] = r.auto_confirmed
             v["human_confirmed_at"] = r.confirmed_at.isoformat() if r.confirmed_at else None
             if r.regulation_id:
                 v["regulation_id"] = r.regulation_id
@@ -56,8 +58,8 @@ def merge_human_decisions(db: Session, report: dict, task_id: int) -> dict:
         "pending_confirm": counts.get("pending_confirm", 0),
         "confirmed": counts.get("confirmed", 0),
         "false_positive": counts.get("false_positive", 0),
-        # confirmed_by=0 是系统自动确认（方向②分流），不算人工复核
-        "auto_confirmed": sum(1 for r in results if r.confirmed_by == 0),
+        # 系统自动确认（status=confirmed 且无人工 actor；PR-7 起以 NULL 表达），不计人工复核
+        "auto_confirmed": sum(1 for r in results if r.auto_confirmed),
         "manual_reviewed": sum(
             1 for r in results if r.status in ("confirmed", "false_positive") and r.confirmed_by
         ),

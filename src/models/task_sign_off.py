@@ -6,7 +6,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Index, String, Text, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database.mysql import Base
@@ -14,11 +14,25 @@ from src.infrastructure.database.mysql import Base
 
 class TaskSignOff(Base):
     __tablename__ = "task_sign_offs"
-    __table_args__ = (Index("idx_task_sign_offs_task", "task_id"),)
+    __table_args__ = (
+        Index("idx_task_sign_offs_task", "task_id"),
+        # PR-7：签字人外键列索引显式化
+        Index("idx_sign_offs_user", "user_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    task_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # 强从属：任务删除则签发留痕无意义
+    task_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("review_tasks.id", ondelete="CASCADE", name="fk_task_sign_offs_task_id"),
+        nullable=False,
+    )
+    # 签字人 RESTRICT：签发是审计证据，有签字记录的用户不允许硬删除
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="RESTRICT", name="fk_task_sign_offs_user_id"),
+        nullable=False,
+    )
     username: Mapped[str] = mapped_column(String(64), nullable=False)
     # released = 同意放行；rejected = 驳回整改
     decision: Mapped[str] = mapped_column(String(16), nullable=False)

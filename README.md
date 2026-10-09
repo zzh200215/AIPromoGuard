@@ -215,7 +215,7 @@ frontend/                # Vue3 前端（任务/知识库/图谱/影响中心/�
 - `VectorStore` 抽象预留了 Milvus 分支但未实现（`NotImplementedError`），当前仅 ChromaDB
 - 结构化法条溯源的覆盖度取决于规则-法规关联表：已关联的规则能落到具体条款，历史未关联规则仅有报告级文本引用（hybrid 检索的 related_regulations），启发式兜底只保证"最相关"而非"唯一正确"
 - 影响中心的风险打分权重与复测闭环基于固定演示种子（10 材料 / 3 高 3 中 4 低）验证，未经真实合规团队数据校准
-- 前端未做生产托管（CI 已验证可构建）；数据库无外键约束（应用层维护一致性）
+- 数据库外键已补齐（PR-7：9 张子表 / 21 条约束，强从属 CASCADE、弱引用 SET NULL、签发人 RESTRICT）——建约束前须先跑 `scripts/maintenance/orphan_cleanup.py --apply` 清孤儿行（审计留 `data/audits/`）；迁移幂等与约束生效由 `scripts/maintenance/fk_loop_check.py` 在临时库验证（upgrade→downgrade→upgrade + 真插数据抽查）；多态引用列（`review_batches.source_id`/`audit_logs.resource_id`/`product_materials.document_id`）不建外键；dev 库因历史 init SQL 与 ORM 建表并存存在 signed/unsigned 类型差（4 列），迁移按父列实际类型自动对齐（全新库为 no-op）
 - 风险定级打分卡权重为经验值，未经真实数据校准
 - 采纳率/翻案率的统计出口已建成（review_adoption.py + confirm 判定审计留痕），等待真实使用数据积累——测试期复核数据已按数据卫生约定清理，不用脚本数据冒充人工判断
 - MinerU 深解析通道（`parser.mineru_enabled`，默认关）为可选增强：扫描件 PDF 全文解析 + 文字版 PDF 表格块补充（spike：表格 100% 还原、数字召回 96.2%、CPU ~0.2 页/s）；spike 同时发现其会静默漏检封面装饰区文本块，故文字版 PDF 主路永远走 pypdf 文本层、MinerU 只补不替，数字差异记互校日志；MinerU 补入块 page=None（报告定位显示"-"）

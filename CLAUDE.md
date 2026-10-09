@@ -16,6 +16,7 @@
   - 新库/升级：`python -m alembic upgrade head`（docker api 容器启动时自动执行）
   - 生成迁移：`python -m alembic revision --autogenerate -m "描述"`（对开发库）
   - 漂移校验（模型改了忘写迁移会红）：`python scripts/maintenance/schema_drift_check.py`
+  - 加外键类迁移的前置与验证（PR-7）：`python scripts/maintenance/orphan_cleanup.py`（默认只读扫描，`--apply` 清孤儿行并落 `data/audits/`）→ 迁移 → `python scripts/maintenance/fk_loop_check.py`（临时库 upgrade→downgrade→upgrade + 真插数据抽查）；外键图三方一致（迁移 FKS / 清洗脚本 FK_SPECS / ORM ForeignKey）由 `tests/unit/test_fk_specs.py` 机械校验
   - 历史 `docker/init-scripts/init_mysql.sql` 与 `scripts/migrate/*.py` 均已废弃，勿再使用。
 - staging 环境（PR 合入后先冒烟，演示环境只在演示前定点同步）：
   - 初始化：`python scripts/deploy/init_staging.py`（幂等；端口 3308/8001/8081）

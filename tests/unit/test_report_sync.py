@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 from src.core.report.markdown import render_markdown
 from src.infrastructure.database.mysql import SessionLocal
-from src.models import ReviewResult
+from src.models import ReviewResult, ReviewTask, User
 from src.services.report_service import merge_human_decisions, refresh_report
 
 # ---------- render_markdown 纯逻辑 ----------
@@ -53,7 +53,7 @@ def test_markdown_marks_auto_confirmed_and_defaults():
         "summary": {"total_violations": 1, "high_risk": 0, "medium_risk": 0, "low_risk": 1},
         "violations": [
             {"risk_level": "low", "source": "rule", "human_status": "confirmed",
-             "human_confirmed_by": 0, "original_text": "x"},
+             "human_auto_confirmed": True, "original_text": "x"},
             {"risk_level": "low", "source": "rule", "original_text": "y"},
         ],
     }
@@ -80,22 +80,47 @@ def _db_ready() -> bool:
 _TASK_ID = 987654331
 
 
+def _admin_id() -> int:
+    db = SessionLocal()
+    try:
+        return db.query(User).filter(User.username == "admin").one().id
+    finally:
+        db.close()
+
+
+def _ensure_task(db):
+    """FK 前置（PR-7）：结论的 task_id / confirmed_by 必须指向真实行。"""
+    if db.get(ReviewTask, _TASK_ID) is None:
+        db.add(
+            ReviewTask(
+                id=_TASK_ID,
+                task_name="报告同步测试任务（临时）",
+                document_name="report_sync_test.txt",
+                status="completed",
+            )
+        )
+        db.commit()
+
+
 def _seed_results(db):
+    _ensure_task(db)
+    admin = _admin_id()
     rows = [
         ReviewResult(
             task_id=_TASK_ID, violation_type="rule", risk_level="high",
             original_text="保本保收益", confidence_score=0.95, status="confirmed",
-            confirmed_by=7,
+            confirmed_by=admin,
         ),
         ReviewResult(
             task_id=_TASK_ID, violation_type="llm", risk_level="medium",
             original_text="零风险", confidence_score=0.6, status="false_positive",
-            confirmed_by=7,
+            confirmed_by=admin,
         ),
         ReviewResult(
+            # 系统自动确认：PR-7 起以"无人工 actor（NULL）"表达
             task_id=_TASK_ID, violation_type="rule", risk_level="low",
             original_text="宽松表述", confidence_score=0.9, status="confirmed",
-            confirmed_by=0,
+            confirmed_by=None,
         ),
     ]
     db.add_all(rows)
@@ -117,11 +142,13 @@ def test_merge_human_decisions_summary():
         # 剔除误报后 2 处：高 1 + 低 1
         assert hr["final_total"] == 2
         assert (hr["final_high"], hr["final_medium"], hr["final_low"]) == (1, 0, 1)
-        # 下标对齐：逐条人工结论已附上
+        # 下标对齐：逐条人工结论已附上（第 3 条为系统自动确认：无 actor + 自动标记）
         assert report["violations"][1]["human_status"] == "false_positive"
-        assert report["violations"][2]["human_confirmed_by"] == 0
+        assert report["violations"][2]["human_confirmed_by"] is None
+        assert report["violations"][2]["human_auto_confirmed"] is True
     finally:
         db.query(ReviewResult).filter(ReviewResult.task_id == _TASK_ID).delete()
+        db.query(ReviewTask).filter(ReviewTask.id == _TASK_ID).delete()
         db.commit()
         db.close()
 
@@ -153,7 +180,7 @@ def test_refresh_report_rewrites_on_new_decisions(tmp_path):
         row = db.query(ReviewResult).filter(ReviewResult.task_id == _TASK_ID).first()
         row.status = "false_positive"
         row.confirmed_at = datetime.now()
-        row.confirmed_by = 9
+        row.confirmed_by = _admin_id()
         db.commit()
         second = refresh_report(db, task)
         assert second["human_review"]["false_positive"] == 2
@@ -161,5 +188,6 @@ def test_refresh_report_rewrites_on_new_decisions(tmp_path):
         assert json_path.read_text(encoding="utf-8") != before
     finally:
         db.query(ReviewResult).filter(ReviewResult.task_id == _TASK_ID).delete()
+        db.query(ReviewTask).filter(ReviewTask.id == _TASK_ID).delete()
         db.commit()
         db.close()
