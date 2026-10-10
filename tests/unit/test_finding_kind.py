@@ -37,6 +37,10 @@ class _FakeQuery:
     def filter(self, *a, **k):
         return self
 
+    def first(self):
+        # 旧结果探测（PR-9：空删跳过以避免并发死锁）：fake 视为无旧结果
+        return None
+
     def delete(self):
         return 0
 

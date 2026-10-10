@@ -7,6 +7,7 @@ Neo4j 容器通过 `docker compose --profile graph up -d neo4j` 启动，
 """
 
 import threading
+import time
 from typing import Any
 
 from src.utils.config import settings
@@ -25,6 +26,27 @@ except ImportError:  # neo4j driver 未安装时优雅降级
 
 _lock = threading.Lock()
 _driver = None
+
+# 服务不可达后的快速失败冷却：driver 对每次查询都会先尝试建连（实测每次 ~2s），
+# 无 Neo4j 的默认部署下单次审查累积 30s+ 白等（PR-9 性能基线实测）。
+# 首次探测失败进入冷却期，期间直接降级不触碰 driver；冷却结束自动重探
+# （服务恢复后无需重启进程）。health() 探测成功时也会立即清除冷却。
+_COOLDOWN_SECONDS = 60.0
+_unavailable_until = 0.0  # time.monotonic() 时间戳
+
+
+def _in_cooldown() -> bool:
+    return time.monotonic() < _unavailable_until
+
+
+def _mark_unavailable() -> None:
+    global _unavailable_until
+    _unavailable_until = time.monotonic() + _COOLDOWN_SECONDS
+
+
+def _clear_cooldown() -> None:
+    global _unavailable_until
+    _unavailable_until = 0.0
 
 
 def get_driver():
@@ -55,13 +77,14 @@ def get_driver():
 
 
 def health() -> bool:
-    """连通性探测：可写会话执行一次 `RETURN 1`。"""
+    """连通性探测：可写会话执行一次 `RETURN 1`（成功则清除快速失败冷却）。"""
     driver = get_driver()
     if driver is None:
         return False
     try:
         with driver.session(database="neo4j") as session:
             session.run("RETURN 1").consume()
+        _clear_cooldown()
         return True
     except Exception:
         return False
@@ -71,7 +94,11 @@ def run_cypher(query: str, params: dict[str, Any] | None = None) -> list[dict[st
     """执行 Cypher 查询并返回记录列表（dict 形式）。
 
     连接不可用时返回空列表（不抛异常），由调用方判断是否降级。
+    服务不可达会进入快速失败冷却（_COOLDOWN_SECONDS）——冷却期内直接返回空，
+    避免每次查询都付 driver 重连代价。
     """
+    if _in_cooldown():
+        return []
     driver = get_driver()
     if driver is None:
         return []
@@ -80,7 +107,11 @@ def run_cypher(query: str, params: dict[str, Any] | None = None) -> list[dict[st
             result = session.run(query, params or {})
             return [record.data() for record in result]
     except ServiceUnavailable:
-        logger.warning("Neo4j 服务不可用，知识图谱查询降级为空")
+        _mark_unavailable()
+        logger.warning(
+            "Neo4j 服务不可用，知识图谱查询降级为空（%.0f 秒内快速失败不再重连）",
+            _COOLDOWN_SECONDS,
+        )
         return []
     except Exception:
         logger.exception("Neo4j 查询失败")

@@ -8,11 +8,13 @@
 """
 
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from sqlalchemy import func, update
+from sqlalchemy.exc import OperationalError
 
 from src.core.agents.graph import run_review
 from src.core.agents.runtime import (
@@ -136,24 +138,35 @@ _AUTO_CONFIRM_SOURCES = {"rule", "hybrid"}
 _QUEUE_BACKEND: str | None = None  # "celery" | "thread"
 _LAST_CHECK = 0.0
 _CHECK_TTL = 30.0
+_QUEUE_CHECK_LOCK = threading.Lock()  # 探测串行化：celery control.ping 非线程安全
 
 
 def _use_celery() -> bool:
-    """探测 Celery worker 是否可用（ping，结果缓存 30s，避免每请求开销）。"""
+    """探测 Celery worker 是否可用（ping，结果缓存 30s，避免每请求开销）。
+
+    探测加锁串行化：celery control.ping 的 pidbox/连接在多线程并发调用下
+    有概率挂死（PR-9 并发实测：20 线程并发首次探测卡住提交阶段 100s+，
+    20 个任务全量 pending）——锁内双检，等锁线程直接复用探测结果。
+    """
     global _QUEUE_BACKEND, _LAST_CHECK
     now = time.monotonic()
     if _QUEUE_BACKEND and now - _LAST_CHECK < _CHECK_TTL:
         return _QUEUE_BACKEND == "celery"
-    try:
-        from src.infrastructure.queue.celery_app import celery_app
+    with _QUEUE_CHECK_LOCK:
+        # 双检：等锁期间可能有其他线程已完成探测并刷新缓存
+        now = time.monotonic()
+        if _QUEUE_BACKEND and now - _LAST_CHECK < _CHECK_TTL:
+            return _QUEUE_BACKEND == "celery"
+        try:
+            from src.infrastructure.queue.celery_app import celery_app
 
-        workers = celery_app.control.ping(timeout=0.5)
-        _QUEUE_BACKEND = "celery" if workers else "thread"
-    except Exception:
-        _QUEUE_BACKEND = "thread"
-    _LAST_CHECK = now
-    logger.info("审查队列后端: %s", _QUEUE_BACKEND)
-    return _QUEUE_BACKEND == "celery"
+            workers = celery_app.control.ping(timeout=0.5)
+            _QUEUE_BACKEND = "celery" if workers else "thread"
+        except Exception:
+            _QUEUE_BACKEND = "thread"
+        _LAST_CHECK = now
+        logger.info("审查队列后端: %s", _QUEUE_BACKEND)
+        return _QUEUE_BACKEND == "celery"
 
 
 def start_review(task_id: int) -> None:
@@ -424,19 +437,40 @@ def execute_review(task_id: int) -> None:
         db.close()
 
 
+_DEADLOCK_ERRNO = 1213
+_FINALIZE_RETRIES = 3
+
+
 def _finalize_task(db, task: ReviewTask, result: dict) -> None:
-    """图跑完后的落库：结果明细、节点耗时、报告路径与任务终态。"""
+    """图跑完后的落库：结果明细、节点耗时、报告路径与任务终态。
+
+    并发任务批量落库在 REPEATABLE READ 隔离级别下仍可能遇 1213 死锁
+    （子表索引 gap 锁交叉，PR-9 并发实测）——落库幂等（_persist_results 先清
+    后插），对死锁做有限重试兜底；非死锁异常照抛。
+    """
     report_data = result.get("report") or {}
     findings = report_data.get("violations", [])
-    _persist_results(db, task.id, findings, profile=safe_profile(task.profile))
-
-    task.stages = result.get("stage_log")  # 各 Agent 节点耗时（W14）
-    task.llm_usage = result.get("llm_usage")  # token 用量/预估成本（成本归因）
-    task.report_path = result.get("report_path")
-    task.status = "completed"
-    task.progress = 100
-    task.completed_at = datetime.now()
-    db.commit()
+    for attempt in range(_FINALIZE_RETRIES):
+        try:
+            _persist_results(db, task.id, findings, profile=safe_profile(task.profile))
+            task.stages = result.get("stage_log")  # 各 Agent 节点耗时（W14）
+            task.llm_usage = result.get("llm_usage")  # token 用量/预估成本（成本归因）
+            task.report_path = result.get("report_path")
+            task.status = "completed"
+            task.progress = 100
+            task.completed_at = datetime.now()
+            db.commit()
+            break
+        except OperationalError as exc:
+            db.rollback()
+            errno = exc.orig.args[0] if exc.orig is not None and exc.orig.args else None
+            if errno != _DEADLOCK_ERRNO or attempt >= _FINALIZE_RETRIES - 1:
+                raise
+            logger.warning("task %s 落库遇死锁（1213），第 %s 次重试", task.id, attempt + 1)
+            time.sleep(0.1 * (attempt + 1))
+            task = db.get(ReviewTask, task.id)
+            if task is None:
+                raise
     _update_batch_counts(db, task)
     cleanup_task_checkpoints(task.id)  # 图已到终点，checkpoint 不再需要
     logger.info("task %s 审查完成，命中 %s 条违规", task.id, len(findings))
@@ -563,8 +597,15 @@ def _citation_for_rule(
 
 
 def _persist_results(db, task_id: int, findings: list[dict], profile: str | None = None) -> None:
-    # 幂等：任务重跑/消息重投前清掉旧结果，避免同一任务结果重复追加
-    db.query(ReviewResult).filter(ReviewResult.task_id == task_id).delete()
+    # 幂等：任务重跑/消息重投前清掉旧结果，避免同一任务结果重复追加。
+    # 先探测再删：空 DELETE 会在 idx_task_id 索引上加 supremum gap 锁（被删行
+    # 不存在时扫到索引末尾），并发任务各自 INSERT 时插入意向锁交叉等待 →
+    # 1213 死锁（PR-9 并发实测 4 档稳定复现）；无旧结果时跳过删除即无此锁。
+    has_old = (
+        db.query(ReviewResult.id).filter(ReviewResult.task_id == task_id).first() is not None
+    )
+    if has_old:
+        db.query(ReviewResult).filter(ReviewResult.task_id == task_id).delete()
     auto_cfg = effective_auto_confirm(
         profile, settings.app_config("workflow").get("auto_confirm", {})
     )

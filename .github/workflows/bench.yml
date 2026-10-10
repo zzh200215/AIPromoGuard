@@ -1,0 +1,89 @@
+# 性能基线 bench（手动触发，不进门禁）：
+#   PR-9 的两个基准脚本在 CI 跑一遍，结果（JSON + 控制台摘要）上传 artifact，
+#   供版本间趋势对比。**数值不做门禁判红**——基准受 runner 环境（CPU/磁盘/调度）
+#   影响，同一 runner 上的相对变化才有意义；门禁口径见 eval-gate.yml。
+#
+# 用法：Actions 页 → bench → Run workflow（可选填 levels / repeats）。
+# 环境：与 ci.yml 同配方的最小种子（schema + 规则 + 核心法规 + admin + 文章索引），
+#   DASHSCOPE_API_KEY 置空 → 吞吐基准走 offline（LLM 降级）口径。
+name: bench
+
+on:
+  workflow_dispatch:
+    inputs:
+      levels:
+        description: "并发档位（逗号分隔）"
+        required: false
+        default: "5,10,20"
+      repeats:
+        description: "每档重复轮数"
+        required: false
+        default: "3"
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root123
+          MYSQL_DATABASE: compliance_review
+          TZ: Asia/Shanghai
+        ports:
+          - "3306:3306"
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -proot123 --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: "3306"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root123
+      MYSQL_DATABASE: compliance_review
+      DASHSCOPE_API_KEY: ""
+      PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          pip install -e ".[dev]"
+
+      - name: Init schema (Alembic)
+        run: python -m alembic upgrade head
+
+      - name: Seed data (minimal: rules / regulations / admin)
+        run: |
+          python scripts/init_data/import_rules.py
+          python scripts/init_data/import_regulations.py
+          python scripts/init_data/init_admin.py
+
+      - name: Build article vector index (fastembed 首次下载 bge-small-zh)
+        run: python scripts/init_data/index_articles.py
+
+      - name: Retrieval latency bench
+        run: |
+          python scripts/bench/bench_retrieval_latency.py --json bench-out/retrieval.json
+
+      - name: Review throughput bench (offline: LLM 降级)
+        run: |
+          python scripts/bench/bench_review_throughput.py \
+            --levels "${{ github.event.inputs.levels }}" \
+            --repeat "${{ github.event.inputs.repeats }}" \
+            --json bench-out/throughput.json
+
+      - name: Upload bench results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: bench-out/
+          retention-days: 30
