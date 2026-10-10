@@ -177,17 +177,55 @@ def _assert_no_orphans(bind) -> None:
         )
 
 
+def _has_fk(bind, name: str) -> bool:
+    return bool(
+        bind.execute(
+            sa.text(
+                "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS "
+                "WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = :n "
+                "AND CONSTRAINT_TYPE = 'FOREIGN KEY'"
+            ),
+            {"n": name},
+        ).scalar()
+    )
+
+
+def _has_index(bind, table: str, name: str) -> bool:
+    return bool(
+        bind.execute(
+            sa.text(
+                "SELECT COUNT(*) FROM information_schema.STATISTICS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :n"
+            ),
+            {"t": table, "n": name},
+        ).scalar()
+    )
+
+
 def _create_fk(idx: int) -> None:
+    """建索引 + 外键（幂等：MySQL DDL 非事务，迁移中断重跑时跳过已建部分）。
+
+    staging 部署验收实测（PR-7 中断恢复场景）：首次迁移在孤儿断言处中止——
+    DDL 已隐式提交不可回滚，重跑撞 errno 1826 Duplicate foreign key。存在性
+    检查使迁移可从中断处恢复。
+    """
     child, col, parent, parent_col, rule, name, index_name = FKS[idx]
-    if index_name:
+    bind = op.get_bind()
+    if index_name and not _has_index(bind, child, index_name):
         op.create_index(index_name, child, [col])
-    op.create_foreign_key(name, child, parent, [col], [parent_col], ondelete=rule)
+    if _has_fk(bind, name):
+        print(f"[fk] 跳过已存在：{name}")
+    else:
+        op.create_foreign_key(name, child, parent, [col], [parent_col], ondelete=rule)
 
 
 def _drop_fk(idx: int) -> None:
+    """删外键 + 索引（对称幂等：不存在则跳过）。"""
     child, _col, _parent, _parent_col, _rule, name, index_name = FKS[idx]
-    op.drop_constraint(name, child, type_="foreignkey")
-    if index_name:
+    bind = op.get_bind()
+    if _has_fk(bind, name):
+        op.drop_constraint(name, child, type_="foreignkey")
+    if index_name and _has_index(bind, child, index_name):
         op.drop_index(index_name, table_name=child)
 
 
