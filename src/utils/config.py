@@ -64,11 +64,9 @@ class Settings(BaseSettings):
     # 异步任务队列（B2：Celery broker，为空时回退 redis_url）
     celery_broker_url: str = ""
 
-    # 向量库
-    vector_store_type: str = "chroma"  # chroma | milvus
+    # 向量库（当前唯一实现为 chroma；Milvus 死分支已按 PR-8 清理，见 README 已知限制）
+    vector_store_type: str = "chroma"
     chroma_persist_dir: str = "./data/chroma"
-    milvus_host: str = "127.0.0.1"
-    milvus_port: int = 19530
 
     # 知识图谱（Neo4j，W9）
     neo4j_uri: str = "bolt://127.0.0.1:7687"

@@ -21,7 +21,7 @@ llm:
 
 # 向量检索
 vectorstore:
-  type: chroma               # chroma | milvus
+  type: chroma               # 唯一实现（Milvus 死分支已按 PR-8 清理，见 README 已知限制）
   top_k: 10
   distance: cosine
   collection_prefix: legal_

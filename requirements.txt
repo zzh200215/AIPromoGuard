@@ -22,7 +22,7 @@ alembic>=1.13        # schema 迁移框架（权威入口 migrations/，见该�
 # ---- 缓存 / 队列 ----
 redis>=5.0
 
-# ---- 向量检索（MVP 先用 ChromaDB，抽象层预留 Milvus 切换） ----
+# ---- 向量检索（ChromaDB 为唯一实现；Milvus 扩展点已清理，见 README 已知限制） ----
 # 0.5.x 存在 SQLite 元数据间歇性损坏（max_seqid 读到 int），升级到 1.x 根治
 chromadb>=1.0
 fastembed>=0.8        # ONNX 轻量 embedding（bge-small-zh-v1.5），免 torch

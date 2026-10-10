@@ -105,25 +105,35 @@ def test_regulation_articles_crud():
     assert regs
     rid = regs[0]["id"]
 
-    # 新增条款
-    created = client.post(
-        f"/api/v1/regulations/{rid}/articles", headers=h,
-        json={"article_no": "测试条", "content": "测试条款内容，不得承诺保本保收益。"},
-    )
-    assert created.status_code == 201
-    aid = created.json()["data"]["id"]
+    aid = None
+    try:
+        # 新增条款
+        created = client.post(
+            f"/api/v1/regulations/{rid}/articles", headers=h,
+            json={"article_no": "测试条", "content": "测试条款内容，不得承诺保本保收益。"},
+        )
+        assert created.status_code == 201
+        aid = created.json()["data"]["id"]
 
-    # 列表可见
-    listed = client.get(f"/api/v1/regulations/{rid}/articles", headers=h).json()["data"]
-    assert any(a["id"] == aid for a in listed["items"])
+        # 列表可见
+        listed = client.get(f"/api/v1/regulations/{rid}/articles", headers=h).json()["data"]
+        assert any(a["id"] == aid for a in listed["items"])
 
-    # 更新（触发向量失效）
-    updated = client.put(
-        f"/api/v1/regulations/articles/{aid}", headers=h, json={"content": "更新后的测试条款内容。"}
-    )
-    assert updated.status_code == 200
-    assert updated.json()["data"]["vector_id"] is None
+        # 更新（触发向量失效）
+        updated = client.put(
+            f"/api/v1/regulations/articles/{aid}",
+            headers=h,
+            json={"content": "更新后的测试条款内容。"},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["data"]["vector_id"] is None
 
-    # 删除
-    deleted = client.delete(f"/api/v1/regulations/articles/{aid}", headers=h)
-    assert deleted.status_code == 200
+        # 删除
+        deleted = client.delete(f"/api/v1/regulations/articles/{aid}", headers=h)
+        assert deleted.status_code == 200
+        aid = None  # 已删，无需兜底
+    finally:
+        # 兜底：断言中途失败也不留脏数据（历史教训：articles 曾残留两条"测试条"，
+        # 被 index_articles 索引进 Chroma 污染语义检索——PR-8 真机验证发现并清理）
+        if aid is not None:
+            client.delete(f"/api/v1/regulations/articles/{aid}", headers=h)

@@ -212,7 +212,7 @@ frontend/                # Vue3 前端（任务/知识库/图谱/影响中心/�
 - 法律类全文仍为节选（保险法/基金法等）：国家法律法规数据库已改版 SPA、检索 API 不可达，待接口恢复后补抓；11 部目标规章官方源未覆盖，记录于 watchlist 待人工兜底
 - 挖掘规则激活采用"证据驱动自动激活"（--auto-activate：过对抗门禁即激活），人工可在规则库复核停用；7 条 draft 挖掘规则待人工审核
 - Agentic RAG 与 LLM 缓存为显式开启（workflow.agentic_retrieval / workflow.llm_cache），Judge 为本地工具——三者均为成本护栏下的可选增强；judge 判分未经人工金标准校准且与被评模型同源，仅作观测不进门禁
-- `VectorStore` 抽象预留了 Milvus 分支但未实现（`NotImplementedError`），当前仅 ChromaDB
+- 向量库收敛为 ChromaDB 唯一实现（PR-8 清理历史预留的 Milvus 死分支：知识库扩容未在范围内、实现后无真实负载验证，属"为不存在的规模写代码"；当前 809 条款规模 Chroma 无压力，扩展点需要时再引入——此决策若知识库上量可翻案）；`VECTOR_STORE_TYPE` 保留校验，非法值响亮报错而非静默降级
 - 结构化法条溯源的覆盖度取决于规则-法规关联表：已关联的规则能落到具体条款，历史未关联规则仅有报告级文本引用（hybrid 检索的 related_regulations），启发式兜底只保证"最相关"而非"唯一正确"
 - 影响中心的风险打分权重与复测闭环基于固定演示种子（10 材料 / 3 高 3 中 4 低）验证，未经真实合规团队数据校准
 - 数据库外键已补齐（PR-7：9 张子表 / 21 条约束，强从属 CASCADE、弱引用 SET NULL、签发人 RESTRICT）——建约束前须先跑 `scripts/maintenance/orphan_cleanup.py --apply` 清孤儿行（审计留 `data/audits/`）；迁移幂等与约束生效由 `scripts/maintenance/fk_loop_check.py` 在临时库验证（upgrade→downgrade→upgrade + 真插数据抽查）；多态引用列（`review_batches.source_id`/`audit_logs.resource_id`/`product_materials.document_id`）不建外键；dev 库因历史 init SQL 与 ORM 建表并存存在 signed/unsigned 类型差（4 列），迁移按父列实际类型自动对齐（全新库为 no-op）

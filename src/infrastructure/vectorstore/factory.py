@@ -1,4 +1,4 @@
-"""向量存储工厂：根据配置返回对应实现。"""
+"""向量存储工厂：ChromaDB 为当前唯一实现（Milvus 死分支已按 PR-8 清理）。"""
 
 from functools import lru_cache
 
@@ -9,15 +9,14 @@ from .base import VectorStore
 
 @lru_cache
 def get_vector_store() -> VectorStore:
+    # 唯一实现为 chroma。仍校验配置值：历史文档预留过 milvus，.env 残留该值时应
+    # 响亮报错而非静默降级（扩展点需要时再引入，见 README 已知限制）。
     store_type = settings.vector_store_type
-    if store_type == "chroma":
-        from .chroma import ChromaVectorStore
-
-        return ChromaVectorStore()
-
-    if store_type == "milvus":
-        raise NotImplementedError(
-            "Milvus 实现尚未接入；当前 MVP 使用 ChromaDB（VECTOR_STORE_TYPE=chroma）。"
+    if store_type != "chroma":
+        raise ValueError(
+            f"不支持的向量库类型: {store_type}（当前唯一实现为 chroma，见 README 已知限制）"
         )
 
-    raise ValueError(f"未知向量库类型: {store_type}（可选: chroma | milvus）")
+    from .chroma import ChromaVectorStore
+
+    return ChromaVectorStore()

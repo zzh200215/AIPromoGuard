@@ -6,8 +6,8 @@
 # 图谱数据库（Phase 3 使用，Neo4j）单独通过 profile 启动:
 #   docker compose --profile graph up -d neo4j
 #
-# 说明: 原 PRD 规划的 Milvus 向量库，MVP 阶段改用进程内 ChromaDB（无需容器），
-#       待向量数据量上来后再切回 Milvus。
+# 说明: 原 PRD 规划的 Milvus 向量库已按 PR-8 清理（知识库扩容未在范围内，实现后无
+#       真实负载验证）；向量检索用进程内 ChromaDB（无需容器），上量需要扩展点时可翻案。
 #
 # ⚠️ 构建镜像（buildx + 中文路径兼容 bug，docker/buildx#3972）:
 #   buildx 以构建上下文路径生成 session key，仓库路径含非 ASCII 字符

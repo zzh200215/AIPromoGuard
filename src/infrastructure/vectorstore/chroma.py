@@ -1,4 +1,4 @@
-"""ChromaDB 实现（MVP 默认向量库）。"""
+"""ChromaDB 实现（当前唯一向量库）。"""
 
 
 import chromadb

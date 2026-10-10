@@ -1,4 +1,8 @@
-"""向量存储抽象接口：MVP 用 ChromaDB 实现，预留 Milvus 平滑切换。"""
+"""向量存储抽象接口：业务层只依赖本接口，当前唯一实现为 ChromaDB。
+
+（历史预留的 Milvus 分支已按 PR-8 清理——知识库扩容未列入范围，实现后无真实
+工作负载验证；扩展点需要时再引入，见 README 已知限制。）
+"""
 
 from abc import ABC, abstractmethod
 
