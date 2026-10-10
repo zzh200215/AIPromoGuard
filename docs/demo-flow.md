@@ -33,6 +33,30 @@ STAGING_API_BASE=http://127.0.0.1:8000 python scripts/demo/smoke_demo_flow.py
   审查/复测含真实 LLM 调用，staging 冷启动较慢时放宽即可。
 - 完整跑一遍约 3–6 分钟（两段真实审查管线）。
 
+## 部署验收节奏（PR-4④ 固化）
+
+审计（2026-10-10）发现"每 PR 合入后必跑"曾靠人工纪律、PR-6/7 合入时被积压——固化为明确 checklist：
+
+**每个 PR 合入 main 后（写代码的人当天执行）**：
+
+```bash
+# 1) 重建镜像（PR 改了 src/ 前端/迁移/Dockerfile 任一才需要；层缓存命中约 1-5 分钟）
+#    —— ASCII 路径 workaround 与增量同步方法见 docker/docker-compose.yml 顶部注释
+# 2) 初始化 staging（幂等；PR 改了解析/向量数据才需要 --refresh-chroma）
+python scripts/deploy/init_staging.py
+# 3) 冒烟两连（顺序：快断言先行定位，八步看全链路）
+python scripts/demo/smoke_staging.py          # 四断言，~5s
+python scripts/demo/smoke_demo_flow.py        # 八步，3-6 分钟（含真实 LLM）
+# 4) 结果记入 PR 描述（八步各步状态 + 耗时）
+```
+
+**八步含真实 LLM 调用无法进 CI 门禁**；CI 侧的自动化等价物是
+`staging-smoke.yml`（workflow_dispatch 手动触发：构建镜像 + 容器内迁移 +
+种子 + **四断言**——不含 LLM 步骤），用于发版前的环境级验证。
+
+**积压处理**：万一某 PR 跳过了（如 hotfix 抢时间），必须在下一个 PR 的验收中
+**补跑并显式声明"覆盖至上一提交"**——不允许无冒烟的连续合入超过 1 个 PR。
+
 ## 设计说明（为什么这么写）
 
 - **幂等可重复**：每次运行新建文档/任务/材料（名称带时间戳），不依赖前次状态；

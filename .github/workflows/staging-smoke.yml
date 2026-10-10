@@ -1,0 +1,57 @@
+# staging 部署冒烟（手动触发，不进门禁）：PR-4④ 部署验收节奏的 CI 等价物。
+#
+# 验证链路：镜像可构建（api+web）→ 容器内 alembic 迁移 → 容器内种子
+#   （规则/法规/罚单/admin/向量索引）→ 四断言冒烟（健康/登录/任务列表/前端反代）。
+#
+# 与本地验收的口径差异：**不含八步动线**——八步含真实 LLM 调用（runner 无网关
+# key），发版验收的主口径仍是本地 staging 的八步（见 docs/demo-flow.md 的
+# 「部署验收节奏」节）；本 job 用于无本地环境时的环境级验证与镜像构建回归。
+#
+# 说明：
+#   - runner 路径为 ASCII，无本地 buildx 中文路径问题，直接 docker build；
+#   - models_cache 置空目录：Dockerfile 允许空目录（容器内在线下载 fastembed 模型）；
+#   - data/chroma 置空目录：init_staging 的快照步骤复制空目录，向量索引在
+#     容器内种子阶段从零构建（全新库=全新向量，恰好覆盖"全新库路径"）。
+name: staging-smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_seed:
+        description: "跳过种子（复用已有 staging 数据时）"
+        required: false
+        default: "false"
+
+jobs:
+  staging-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Prepare empty dirs required by Dockerfile / init_staging
+        run: |
+          mkdir -p models_cache data/chroma
+
+      - name: Build API image
+        run: docker build -f docker/Dockerfile.api -t financial-compliance-review-api .
+
+      - name: Build Web image
+        run: docker build -f docker/Dockerfile.frontend -t financial-compliance-review-web .
+
+      - name: Init staging (起栈 + 容器内迁移 + 种子，幂等)
+        run: |
+          SKIP=""
+          if [ "${{ github.event.inputs.skip_seed }}" = "true" ]; then SKIP="--skip-seed"; fi
+          python scripts/deploy/init_staging.py $SKIP
+
+      - name: Smoke (四断言：健康/登录/任务列表/前端+反代)
+        run: python scripts/demo/smoke_staging.py
+
+      - name: Dump staging-api logs on failure
+        if: failure()
+        run: docker logs staging-api 2>&1 | tail -60
