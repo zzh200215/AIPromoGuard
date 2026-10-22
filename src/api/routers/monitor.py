@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from src.api.middleware.auth import require_permission
 from src.infrastructure.database.mysql import get_db
-from src.models import AuditLog, Regulation, ReviewTask, Rule, User
+from src.models import AuditLog, PenaltyCase, Regulation, ReviewTask, Rule, User
 from src.services import graph_service
 from src.utils.config import settings
 from src.utils.response import ok
@@ -92,6 +92,35 @@ def system_monitor(
         "users": db.query(User).count(),
     }
 
+    # 知识库飞轮动态：最近入库/发布（驱动舱侧栏"看起来在长"——数据飞轮可见化）
+    recent_activity = {
+        "regulations": [
+            {
+                "id": r.id,
+                "name": r.regulation_name,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in db.query(Regulation).order_by(Regulation.id.desc()).limit(3).all()
+        ],
+        "rules": [
+            {
+                "id": r.id,
+                "name": r.rule_name,
+                "status": r.status,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            }
+            for r in db.query(Rule).order_by(Rule.id.desc()).limit(3).all()
+        ],
+        "penalty_cases": [
+            {
+                "id": c.id,
+                "name": c.case_name,
+                "penalty_date": c.penalty_date.isoformat() if c.penalty_date else None,
+            }
+            for c in db.query(PenaltyCase).order_by(PenaltyCase.id.desc()).limit(3).all()
+        ],
+    }
+
     # 3. 向量库
     vectors = _vector_counts()
 
@@ -118,6 +147,7 @@ def system_monitor(
                 "avg_duration_seconds": round(avg_ms, 1) if avg_ms is not None else None,
             },
             "database": {"ok": db_ok, "knowledge_base": kb},
+            "recent_activity": recent_activity,
             "vector_store": vectors,
             "graph": graph,
             "celery": celery,

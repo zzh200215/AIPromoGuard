@@ -14,6 +14,8 @@ from src.utils.errors import AppError, ErrorCode
 
 _PBC_HTML = (
     "<ul>"
+    # 栏目导航自链接：2026-10-19 曾把"部门规章"当文档标题入库（#62），必须跳过
+    '<li><a href="/tiaofasi/144941/144957/index.html">部门规章</a></li>'
     '<li><a href="/tiaofasi/144941/144957/2026012916432593034/index.html">'
     "中国人民银行令〔2026〕第3号 管理办法</a></li>"
     '<li><a href="/tiaofasi/144941/144957/2026012314163359926/index.html">'
@@ -54,6 +56,8 @@ def test_parse_pbc():
     expected = "http://www.pbc.gov.cn/tiaofasi/144941/144957/2026012916432593034/index.html"
     assert items[0].url == expected
     assert items[1].doc_no == "〔2025〕第13号"
+    # 栏目导航（"部门规章"自链接）不应进入结果
+    assert all(i.title != "部门规章" for i in items)
 
 
 def test_parse_nfra():

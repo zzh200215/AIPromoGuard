@@ -79,6 +79,10 @@ def _parse_pbc(html: bytes) -> list[RegulationItem]:
             continue
         if not href.startswith("/tiaofasi/144941/144957/") or not href.endswith("/index.html"):
             continue
+        # 栏目导航不是文件（2026-10-19 修复：#62 曾把栏目名"部门规章"当文档入库）：
+        # 排除列表页自指链接与纯栏目名
+        if href.rstrip("/") in _PBC_LISTING_HREFS or title in _PBC_NAV_LABELS:
+            continue
         items.append(
             RegulationItem(
                 source="pbc",
@@ -173,6 +177,10 @@ def _parse_csrc(html: bytes) -> list[RegulationItem]:
     return items
 
 
+# pbc 列表页的栏目导航（不是文件）：命中即跳过，防栏目名被当标题入库
+_PBC_NAV_LABELS = {"部门规章", "行政法规", "规范性文件", "规章", "政策法规", "法律法规", "更多"}
+_PBC_LISTING_HREFS = {"/tiaofasi/144941/144957/index.html"}
+
 _PARSERS = {"pbc": _parse_pbc, "nfra": _parse_nfra, "csrc": _parse_csrc}
 
 
@@ -221,10 +229,16 @@ def _llm_tag_titles(db: Session, items: list[RegulationItem]) -> None:
         ]
         try:
             content = llm.chat(build_tag_messages(payload))
-        except Exception:
-            logger.warning("LLM 打标调用失败，跳过本批 %s 条", len(batch))
+        except Exception as exc:  # noqa: BLE001 — 打标失败不阻塞抓取，但须显性可诊断
+            logger.error("LLM 打标调用失败，跳过本批 %s 条：%s", len(batch), exc)
             continue
         tags = parse_tag_response(content)
+        if not tags:
+            logger.warning(
+                "LLM 打标输出解析为空（响应 %s 字符），跳过本批 %s 条",
+                len(content or ""),
+                len(batch),
+            )
         for idx, item in enumerate(batch):
             tag = tags.get(idx)
             if not tag or not tag.get("is_finance"):

@@ -35,11 +35,16 @@ celery_app.conf.update(
     enable_utc=True,
     task_track_started=True,   # 任务一旦开始即可查询（PRD §11.3 状态追踪）
     task_default_queue=QUEUE_REVIEW,
-    # 周期任务：监管动态定时抓取（beat 服务调度，worker 执行）
+    # 周期任务（beat 服务调度，worker 执行）
     beat_schedule={
         "poll-regulators-daily": {
             "task": "regulation.poll_updates",
             "schedule": crontab(hour=8, minute=0),
+        },
+        # 发布后巡检（R3-1）：每周一次（脚本注释建议 7 天周期），与每日抓取错峰
+        "patrol-published-weekly": {
+            "task": "patrol.published",
+            "schedule": crontab(day_of_week=1, hour=8, minute=30),
         },
     },
 )

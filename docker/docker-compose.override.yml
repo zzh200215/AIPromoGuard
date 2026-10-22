@@ -1,0 +1,29 @@
+# 本地常驻机运行参数覆盖（2026-10-12 首次实战限流实测后的调整）
+#
+# 背景：网关按 RPM 限流，首战 8 并发请求（2 任务 × 4 块）打爆配额
+# （429 rpm exhausted），重试上限 2 次耗尽 → 单份 14/22 块失败。
+# 本文件把限流重试上限提到 5 次（3s→6s→12s→24s→48s 指数退避），
+# 与源码/配置的下调配套：app.yaml llm_concurrency=1（块串行）、
+# review_service max_workers=1（任务串行）——峰值 1 个 LLM 请求。
+#
+# 可逆：删除本文件即回 compose 默认（无此环境变量 → settings 默认 2 次）。
+services:
+  api:
+    environment:
+      LLM_RATE_LIMIT_RETRIES: "5"
+
+  # ── 心跳服务（2026-10-13 加入）：监管轮询每日 8:00 ──
+  # celery beat 调度 → worker 执行（见 celery_app.beat_schedule: poll-regulators-daily）
+  # - 复用 api 镜像：同代码版本、免重复构建（对应主 compose "worker 与 api 同镜像"注释）
+  # - worker 并发 -c 1：与 api 线程池 max_workers=1 同护栏，防再撞网关 RPM 配额
+  # - api 侧 _use_celery() 探测到 worker 在线后，审查任务自动改由 worker 独占执行
+  #   （避免多进程并发写 ChromaDB——项目设计内行为，无需改配置）
+  # - 可逆：删除本段 + `docker compose --profile queue rm -sf worker beat` 即回退
+  worker:
+    image: financial-compliance-review-api:latest
+    command: ["celery", "-A", "src.infrastructure.queue.celery_app", "worker", "-l", "info", "-Q", "review_tasks", "-c", "1"]
+    environment:
+      LLM_RATE_LIMIT_RETRIES: "5"
+
+  beat:
+    image: financial-compliance-review-api:latest
