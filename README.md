@@ -90,7 +90,7 @@ flowchart LR
     H -->|通过| I["variant_cases.json 扩充 + 回归门禁"]
 ```
 
-**当前规模（2026-08-29）**：法规 **48 部 / 809 条款**（其中 20 部为官方渠道全文抓取，含《互联网保险业务监管办法》83 条、《保险经纪人监管规定》108 条全文）、规则 **82 条（75 条激活服役，其中 25 条为挖掘规则）**、真实罚单 **68 条**、对抗评估集 **44 案例 / 89 标注点**。
+**当前规模（2026-10-22 校准）**：法规 **113 部 / 2951 条款**（全部为官方渠道全文抓取 + 确定性切分；2026-10-19 单日新增 43 部 / 1557 条款——16 部央行规章（`fetch_pbc_regulations.py`）、27 部经 `fetch_regulations.py` 补抓的金监总局与证监会规章；2026-10-22 再补 5 部 / 105 条款（`backfill_from_url.py` 走情报里存的详情页 URL 直取，绕开索引匹配））、规则 **87 条（77 条激活服役——2026-10-22 停用 2 条重复的演示规则；其中 25 条为挖掘规则，8 条 draft 待审）**、真实罚单 **128 条**（NFRA 台账 + CSRC 决定书，2026-10-19 补抓 59 条）、对抗评估集 **44 案例 / 89 标注点**。
 
 三层质量关卡：条款切分过条号连续性校验；规则过引擎级冒烟测试（LLM 正例必须命中、否定变体与内置合规语料必须不命中、与库内规则语义查重）；激活前必须通过逐规则隔离门禁（自证召回 100% + 自身零误报）且不破坏回归基准集（gate 口径 0.98/0.02）。不达标者自动退回 draft。
 
@@ -131,7 +131,7 @@ docker compose -f docker/docker-compose.yml up -d
 python scripts/init_data/init_admin.py            # 默认 admin / admin123（RBAC 角色权限 + 管理员，幂等）
 python scripts/init_data/import_regulations.py
 python scripts/init_data/import_rules.py
-python scripts/init_data/import_penalty_cases.py  # 真实罚单（库内累计 68 条，快照 38 条）
+python scripts/init_data/import_penalty_cases.py  # 真实罚单（库内累计 128 条，快照 38 条）
 python scripts/init_data/import_rules.py --json scripts/init_data/rules_mined.json  # 25 条挖掘规则（与 rules.json 同 schema）
 python scripts/init_data/index_articles.py
 python scripts/init_data/index_cases.py
@@ -201,18 +201,18 @@ frontend/                # Vue3 前端（任务/知识库/图谱/影响中心/�
 
 ## 质量保障
 
-- **单元 + 集成测试**：344 个用例（规则引擎 / LangGraph 工作流与人工复核 / 领域路由 / LLM 输出校验与工具查证 / 检索融合 / 爬虫解析 / API 层 / MCP stdio 协议级集成 / 影响中心全链路与整改复测闭环 / MySQL checkpointer 原语与跨重启恢复 / 孤儿任务自愈），`pytest tests/ --basetemp=.pytest-tmp`
+- **单元 + 集成测试**：689 个用例（规则引擎 / LangGraph 工作流与人工复核 / 领域路由 / LLM 输出校验与工具查证 / 检索融合 / 爬虫解析 / API 层 / MCP stdio 协议级集成 / 影响中心全链路与整改复测闭环 / MySQL checkpointer 原语与跨重启恢复 / 孤儿任务自愈），`pytest tests/ --basetemp=.pytest-tmp`
 - **CI（GitHub Actions）**：ruff 静态检查 + 全量测试（MySQL service + 完整种子与向量索引配方，本地已用全新库验证）+ 前端生产构建；另有独立的规则引擎指标门禁 workflow（跌破召回/误报阈值即红）
 - **评估门禁**：独立于单测的准确率评估（精确字符级 span 匹配），`--min-recall/--max-fpr` 退出码可接 CI
 - **数据卫生**：人工复核统计只计真实人工数据（排除系统自动确认，避免循环论证）；有标注集构建与数据事故的复盘记录（docs/evaluation.md）
 
 ## 已知限制（诚实清单）
 
-- 知识库规模仍距生产差 1-2 个数量级：48 部法规 / 809 条款 / 75 条激活规则 / 68 条罚单（数据飞轮已建成，扩规模是重复性劳动）
+- 知识库规模仍距生产差 1 个数量级：113 部法规 / 2951 条款 / 77 条激活规则 / 128 条罚单（数据飞轮已建成，扩规模是重复性劳动）
 - 法律类全文仍为节选（保险法/基金法等）：国家法律法规数据库已改版 SPA、检索 API 不可达，待接口恢复后补抓；11 部目标规章官方源未覆盖，记录于 watchlist 待人工兜底
 - 挖掘规则激活采用"证据驱动自动激活"（--auto-activate：过对抗门禁即激活），人工可在规则库复核停用；7 条 draft 挖掘规则待人工审核
 - Agentic RAG 与 LLM 缓存为显式开启（workflow.agentic_retrieval / workflow.llm_cache），Judge 为本地工具——三者均为成本护栏下的可选增强；judge 判分未经人工金标准校准且与被评模型同源，仅作观测不进门禁
-- 向量库收敛为 ChromaDB 唯一实现（PR-8 清理历史预留的 Milvus 死分支：知识库扩容未在范围内、实现后无真实负载验证，属"为不存在的规模写代码"；当前 809 条款规模 Chroma 无压力，扩展点需要时再引入——此决策若知识库上量可翻案）；`VECTOR_STORE_TYPE` 保留校验，非法值响亮报错而非静默降级
+- 向量库收敛为 ChromaDB 唯一实现（PR-8 清理历史预留的 Milvus 死分支：知识库扩容未在范围内、实现后无真实负载验证，属"为不存在的规模写代码"；当前 2951 条款规模 Chroma 无压力，扩展点需要时再引入——此决策若知识库上量可翻案）；`VECTOR_STORE_TYPE` 保留校验，非法值响亮报错而非静默降级
 - 结构化法条溯源的覆盖度取决于规则-法规关联表：已关联的规则能落到具体条款，历史未关联规则仅有报告级文本引用（hybrid 检索的 related_regulations），启发式兜底只保证"最相关"而非"唯一正确"
 - 影响中心的风险打分权重与复测闭环基于固定演示种子（10 材料 / 3 高 3 中 4 低）验证，未经真实合规团队数据校准
 - 数据库外键已补齐（PR-7：9 张子表 / 21 条约束，强从属 CASCADE、弱引用 SET NULL、签发人 RESTRICT）——建约束前须先跑 `scripts/maintenance/orphan_cleanup.py --apply` 清孤儿行（审计留 `data/audits/`）；迁移幂等与约束生效由 `scripts/maintenance/fk_loop_check.py` 在临时库验证（upgrade→downgrade→upgrade + 真插数据抽查）；多态引用列（`review_batches.source_id`/`audit_logs.resource_id`/`product_materials.document_id`）不建外键；dev 库因历史 init SQL 与 ORM 建表并存存在 signed/unsigned 类型差（4 列），迁移按父列实际类型自动对齐（全新库为 no-op）
