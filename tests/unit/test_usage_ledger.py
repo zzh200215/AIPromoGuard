@@ -86,7 +86,11 @@ class _FakeInner:
         )
 
     async def achat_json(self, messages, temperature=None, **kwargs):
-        return [{"x": 1}], {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+        return (
+            [{"x": 1}],
+            {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+            [{"regulation_name": "测试法", "article_no": "第一条"}],
+        )
 
 
 def test_recording_llm_complete_and_chat_record():
@@ -104,8 +108,10 @@ def test_recording_llm_achat_json_records_merged_usage():
     import asyncio
 
     llm = RecordingLLM(_FakeInner())
-    data, usage = asyncio.run(llm.achat_json([{"role": "user", "content": "hi"}]))
+    data, usage, tool_articles = asyncio.run(llm.achat_json([{"role": "user", "content": "hi"}]))
     assert data == [{"x": 1}]
+    # 三元组透传：工具查证条款随结果返回（2026-10-19）
+    assert tool_articles == [{"regulation_name": "测试法", "article_no": "第一条"}]
     summary = ledger_summary()
     assert summary["total_tokens"] == 150
     assert summary["calls"] == 1

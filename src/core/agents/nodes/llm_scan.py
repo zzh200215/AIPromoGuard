@@ -105,16 +105,17 @@ def _parse_raw(content: str) -> list:
 async def _scan_block(
     llm, block: dict, articles: list[dict], domain: str | None = None
 ) -> tuple[list[dict], int, dict]:
-    """审查单个文档块：结构化调用 + 逐条校验，返回 (findings, 丢弃数, usage)。
+    """审查单个文档块：结构化调用 + 逐条校验，返回 (findings, 丢弃数, usage, tool_articles)。
 
     enable_tool_calls=True 时启用真 function calling：LLM 主动调 search_regulations
     查证法规再判定（configs/app.yaml llm.tool_calling 控制护栏与开关），domain 透传给检索。
+    tool_articles 为工具查证检索到的条款（并入证据核验集）。
     _FakeLLM.achat_json 签名 (messages, temperature=None) 兼容新增关键字参数。
     """
     messages = build_review_messages(block.get("text", ""), articles)
     tc_cfg = (settings.app_config("llm") or {}).get("tool_calling") or {}
     use_tools = bool(tc_cfg.get("enabled", True))
-    data, usage = await llm.achat_json(
+    data, usage, tool_articles = await llm.achat_json(
         messages,
         enable_tool_calls=use_tools,
         domain=domain,
@@ -124,7 +125,61 @@ async def _scan_block(
         valid = _validate_finding(item, block)
         if valid is not None:
             findings.append(valid)
-    return findings, len(data) - len(findings), usage
+    return findings, len(data) - len(findings), usage, tool_articles
+
+
+def _scan_units(blocks: list[dict], max_chars: int) -> list[dict]:
+    """把相邻小段合并成一个"扫描单元"：一个单元一次 LLM 调用。
+
+    动机（2026-10-22 实测）：llm_scan 原本按段落逐块调用，583 字的营销话术被切成 6 段
+    → 6 次串行 LLM（每次 20-160s，prompt 里 1.4k tokens 是固定系统提示）。
+    真实材料几十段时，审查时间直接以小时计。合并后调用数与段落数解耦。
+
+    - max_chars <= 0：保持历史行为（一 block 一单元）；
+    - 标题段总是新单元开头（章节边界，避免跨章节混判）；
+    - 单元保留 `_parts` 原始段落，供结论回定位（page/paragraph 不丢精度）。
+    """
+    if max_chars <= 0:
+        return [{**b, "_parts": [b]} for b in blocks]
+
+    units: list[list[dict]] = []
+    cur: list[dict] = []
+    size = 0
+    for b in blocks:
+        text = b.get("text") or ""
+        if cur and (b.get("heading") or size + len(text) > max_chars):
+            units.append(cur)
+            cur, size = [], 0
+        cur.append(b)
+        size += len(text)
+    if cur:
+        units.append(cur)
+
+    return [
+        {
+            "text": "\n".join(p.get("text") or "" for p in parts),
+            "page": parts[0].get("page"),
+            "paragraph": parts[0].get("paragraph"),
+            "_parts": parts,
+        }
+        for parts in units
+    ]
+
+
+def _relocate(finding: dict, parts: list[dict]) -> dict:
+    """把结论定位回原始段落——合并扫描后仍要告诉用户"哪一段"出的问题。"""
+    if len(parts) <= 1:
+        return finding
+    text = finding.get("original_text") or ""
+    for probe in (text, text[:12]):
+        if not probe:
+            continue
+        for p in parts:
+            if probe in (p.get("text") or ""):
+                finding["page"] = p.get("page")
+                finding["paragraph"] = p.get("paragraph")
+                return finding
+    return finding
 
 
 def llm_scan(state: ReviewState) -> dict:
@@ -140,21 +195,33 @@ def llm_scan(state: ReviewState) -> dict:
     max_chunks = int(workflow_cfg.get("llm_max_chunks", 0))  # 0 = 审查全部块
 
     blocks = [b for b in state.get("blocks", []) if (b.get("text") or "").strip()]
+    # 小段合并成扫描单元（llm_scan_chunk_chars<=0 时保持历史的一段落一调用）
+    max_scan_chars = int(workflow_cfg.get("llm_scan_chunk_chars", 0) or 0)
+    units = _scan_units(blocks, max_scan_chars)
     if max_chunks > 0:
-        blocks = blocks[:max_chunks]
+        units = units[:max_chunks]
 
     async def _run() -> list:
         sem = asyncio.Semaphore(concurrency)
 
-        async def _guarded(b: dict):
+        async def _guarded(unit: dict):
             async with sem:
                 try:
-                    return await _scan_block(llm, b, articles, domain)
+                    found, dropped_cnt, usage, tool_arts = await _scan_block(
+                        llm, unit, articles, domain
+                    )
+                    parts = unit.get("_parts") or [unit]
+                    return (
+                        [_relocate(f, parts) for f in found],
+                        dropped_cnt,
+                        usage,
+                        tool_arts,
+                    )
                 except Exception:  # 单块失败不影响整体，降级跳过
                     logger.exception("LLM 审查块失败，降级跳过")
-                    return [], 0, None
+                    return [], 0, None, []
 
-        return await asyncio.gather(*(_guarded(b) for b in blocks))
+        return await asyncio.gather(*(_guarded(u) for u in units))
 
     results = asyncio.run(_run())
 
@@ -162,9 +229,11 @@ def llm_scan(state: ReviewState) -> dict:
     dropped = 0
     failed = 0
     usages: list[dict] = []
-    for block_findings, block_dropped, usage in results:
+    tool_articles: list[dict] = []
+    for block_findings, block_dropped, usage, block_tool_articles in results:
         findings.extend(block_findings)
         dropped += block_dropped
+        tool_articles.extend(block_tool_articles or [])
         if usage is None:
             failed += 1
         else:
@@ -182,4 +251,4 @@ def llm_scan(state: ReviewState) -> dict:
         logger.warning("LLM 审查全部 %d 块调用失败，降级为空结果", len(blocks))
     if dropped:
         logger.info("LLM 审查丢弃 %s 条无效/低置信度判定", dropped)
-    return {"llm_findings": findings, "llm_usage": usage_summary}
+    return {"llm_findings": findings, "llm_usage": usage_summary, "tool_articles": tool_articles}

@@ -101,9 +101,9 @@ class RecordingLLM:
         return self.complete(messages, temperature).content
 
     async def achat_json(self, messages: list[dict], temperature: float | None = None, **kwargs):
-        data, usage = await self._inner.achat_json(messages, temperature, **kwargs)
+        data, usage, tool_articles = await self._inner.achat_json(messages, temperature, **kwargs)
         record_usage({**(usage or {}), "model": getattr(self._inner, "model", None)})
-        return data, usage
+        return data, usage, tool_articles
 
     def __getattr__(self, name):
         return getattr(self._inner, name)

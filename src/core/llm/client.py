@@ -363,13 +363,17 @@ class QwenClient:
         调用检索工具查证法规（json_mode 与 tools 互斥，故每轮走 json_mode=False），
         用返回条款支撑判定、再输出结构化 findings。护栏：max_tool_rounds 回合 +
         max_tool_calls_total 累计调用，双上限防成本爆炸；任何异常/超限回退普通路径。
+        返回 (findings, usage, tool_articles)——tool_articles 为工具查证检索到的条款
+        （与初始召回并入证据核验集，2026-10-16）。
         """
         if not enable_tool_calls:
-            return await self._achat_json_plain(messages, temperature)
+            data, usage = await self._achat_json_plain(messages, temperature)
+            return data, usage, []
 
         cfg = settings.app_config("llm").get("tool_calling") or {}
         if not cfg.get("enabled", True):
-            return await self._achat_json_plain(messages, temperature)
+            data, usage = await self._achat_json_plain(messages, temperature)
+            return data, usage, []
 
         tool_list = tools
         execute = execute_tool
@@ -382,6 +386,7 @@ class QwenClient:
         cur_messages = list(messages)
         call_count = 0
         usages: list[dict] = []
+        tool_articles: list[dict] = []  # 工具查证检索到的条款（进证据核验集）
 
         for _ in range(max_rounds + 1):
             try:
@@ -394,20 +399,22 @@ class QwenClient:
                 )
             except Exception as exc:
                 logger.warning("LLM 工具循环调用失败: %s，回退普通路径", exc)
-                return await self._achat_json_plain(messages, temperature)
+                data, usage = await self._achat_json_plain(messages, temperature)
+                return data, usage, tool_articles
             usages.append(result.usage)
 
             if not result.tool_calls:
                 data = extract_findings(result.content)
                 if data is not None:
-                    return data, merge_usage(*usages)
+                    return data, merge_usage(*usages), tool_articles
                 # 无工具调用但内容不是合法 JSON：走普通 json 修复，保证契约
-                return await self._achat_json_plain(cur_messages, temperature)
+                data, usage = await self._achat_json_plain(cur_messages, temperature)
+                return data, usage, tool_articles
 
             call_count += len(result.tool_calls)
             if call_count > max_calls:
                 logger.warning("LLM 工具调用超出护栏 %s 次，终止循环", max_calls)
-                return [], merge_usage(*usages)
+                return [], merge_usage(*usages), tool_articles
 
             # 追加 assistant 的 tool_calls + 逐条执行结果（消息对严格交替，防 API 400）
             cur_messages.append(
@@ -427,6 +434,10 @@ class QwenClient:
                     out = execute(tc["name"], tc["arguments"])
                 except Exception as exc:
                     out = f"调用失败: {exc}"
+                # 工具查证结果进证据核验集（2026-10-15 审计发现的机制缺口）：
+                # LLM 主动检索到的条款与初始召回同级可信，conflict_resolve 据此核验引用
+                if tc["name"] == "search_regulations" and isinstance(out, dict):
+                    tool_articles.extend(out.get("articles") or [])
                 cur_messages.append(
                     {
                         "role": "tool",
@@ -437,7 +448,7 @@ class QwenClient:
 
         # 循环结束仍未得到结构化 findings：成本护栏，直接返回空，不再追加调用
         logger.warning("LLM 工具循环达到回合上限，返回空结果")
-        return [], merge_usage(*usages)
+        return [], merge_usage(*usages), tool_articles
 
     # ---------- 兼容入口 ----------
 

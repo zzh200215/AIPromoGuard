@@ -1,9 +1,27 @@
 """LLM 审查输出校验（幻觉抑制）与并发审查单元测试。"""
 
+import pytest
 import src.core.agents.nodes.llm_scan as mod
 
 _BLOCK = {"text": "本产品保本保收益", "page": 1, "paragraph": 2}
 
+
+
+@pytest.fixture(autouse=True)
+def _disable_block_merge(monkeypatch):
+    """本模块测的是"一段一次调用"的语义；合并行为在 test_llm_scan_merge 里单独测。
+
+    生产默认开启 llm_scan_chunk_chars（1200），这里显式关掉，避免语义被全局配置绑架。
+    """
+    orig = type(mod.settings).app_config
+
+    def patched(self, section):
+        cfg = orig(self, section)
+        if section == "workflow":
+            cfg = {**cfg, "llm_scan_chunk_chars": 0}
+        return cfg
+
+    monkeypatch.setattr(type(mod.settings), "app_config", patched)
 
 def _finding(**overrides):
     base = {
@@ -35,7 +53,12 @@ class _FakeLLM:
             raise RuntimeError("LLM 调用失败")
         block_text = messages[-1]["content"].split("待审查文档片段：")[-1].strip()
         finding = _finding(issue=block_text[:20], original_text=block_text)
-        return [finding], {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+        # achat_json 现为三元组 (findings, usage, tool_articles)；工具条款此处为空
+        return (
+            [finding],
+            {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            [],
+        )
 
 
 def _blocks(n: int) -> list[dict]:

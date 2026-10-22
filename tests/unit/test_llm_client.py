@@ -161,7 +161,7 @@ def test_achat_json_parses_wrapper_and_collects_usage():
         ]
     )
     client = _bare_client(fake)
-    data, usage = asyncio.run(client.achat_json([{"role": "user", "content": "q"}]))
+    data, usage, tool_articles = asyncio.run(client.achat_json([{"role": "user", "content": "q"}]))
     assert data == [{"issue": "a"}]
     assert usage["total_tokens"] == 15
     # 结构化输出模式：请求带 response_format
@@ -181,7 +181,7 @@ def test_achat_json_repairs_invalid_json():
         ),
     ])
     client = _bare_client(fake)
-    data, usage = asyncio.run(client.achat_json([{"role": "user", "content": "q"}]))
+    data, usage, tool_articles = asyncio.run(client.achat_json([{"role": "user", "content": "q"}]))
     assert data == []
     assert usage["calls"] == 2
     assert usage["total_tokens"] == 25
@@ -197,7 +197,7 @@ def test_achat_json_repair_still_fails_returns_empty():
         _resp("still bad"),
     ])
     client = _bare_client(fake)
-    data, usage = asyncio.run(client.achat_json([{"role": "user", "content": "q"}]))
+    data, usage, tool_articles = asyncio.run(client.achat_json([{"role": "user", "content": "q"}]))
     assert data == []
 
 
@@ -301,7 +301,7 @@ def test_achat_json_single_tool_then_final_answer():
         ),
     ])
     client = _bare_client(fake)
-    data, usage = asyncio.run(
+    data, usage, tool_articles = asyncio.run(
         client.achat_json(
             [{"role": "user", "content": "查一下"}],
             enable_tool_calls=True,
@@ -312,6 +312,8 @@ def test_achat_json_single_tool_then_final_answer():
     assert data == [{"question": "测试"}]
     assert usage["calls"] == 2
     assert usage["total_tokens"] == 14
+    # 工具查证到的条款随结果返回（进证据核验集，2026-10-16）
+    assert tool_articles == [{"regulation_name": "测试法", "content": "测试条款"}]
     # 工具轮：无 response_format（json 与 tools 互斥），有 tools
     assert "response_format" not in fake.calls[0]
     assert fake.calls[0]["tools"] == _TOOLS
@@ -347,7 +349,7 @@ def test_achat_json_guard_limits_excessive_tools(monkeypatch):
     ]
     fake = _FakeAsyncOpenAI(script)
     client = _bare_client(fake)
-    data, usage = asyncio.run(
+    data, usage, tool_articles = asyncio.run(
         client.achat_json(
             [{"role": "user", "content": "q"}],
             enable_tool_calls=True,
@@ -366,7 +368,7 @@ def test_achat_json_disabled_keeps_plain_path():
         _resp('{"findings": []}', {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}),
     ])
     client = _bare_client(fake)
-    data, usage = asyncio.run(client.achat_json([{"role": "user", "content": "q"}]))
+    data, usage, tool_articles = asyncio.run(client.achat_json([{"role": "user", "content": "q"}]))
     assert data == []
     assert fake.calls[0]["response_format"] == {"type": "json_object"}
     assert "tools" not in fake.calls[0]

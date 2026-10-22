@@ -43,7 +43,8 @@ from src.utils.errors import AppError, ErrorCode
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
-_executor = ThreadPoolExecutor(max_workers=2)
+# 首战限流实测：2 并发×4 块打爆网关 RPM，任务串行化（配合 llm_concurrency=1 峰值 1 请求）
+_executor = ThreadPoolExecutor(max_workers=1)
 
 
 def _human_review_enabled() -> bool:
@@ -108,7 +109,13 @@ def recover_orphan_tasks() -> dict:
                                 pending.extend(value)
                     task.status = "awaiting_review"
                     task.progress = 80
-                    task.stages = {"human_review": {"status": "awaiting", "pending": pending}}
+                    # 合并而非覆盖：自愈恢复也要保留已点亮的节点条目（stage_sink）
+                    merged_stages = dict(task.stages or {})
+                    merged_stages["human_review"] = {
+                        "status": "awaiting",
+                        "pending": pending,
+                    }
+                    task.stages = merged_stages
                     db.commit()
                     outcome["recovered"] += 1
                     logger.info(
@@ -404,9 +411,13 @@ def execute_review(task_id: int) -> None:
                 # resume_human_review 从 checkpoint 续跑（risk_assess → report）
                 task.status = "awaiting_review"
                 task.progress = 80
-                task.stages = {
-                    "human_review": {"status": "awaiting", "pending": outcome["pending"]}
+                # 合并而非覆盖：保留节点级增量落库已点亮的条目（stage_sink）
+                merged_stages = dict(task.stages or {})
+                merged_stages["human_review"] = {
+                    "status": "awaiting",
+                    "pending": outcome["pending"],
                 }
+                task.stages = merged_stages
                 db.commit()
                 logger.info(
                     "task %s 等待人工复核（%s 条待确认）", task_id, len(outcome["pending"])
