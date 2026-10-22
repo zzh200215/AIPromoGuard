@@ -1,344 +1,536 @@
 [
   {
-    "case_name": "国家金融监督管理总局江西监管局对中英人寿保险股份有限公司江西分公司及相关责任人行政处罚案",
-    "penalty_org": "国家金融监督管理总局江西监管局",
-    "penalty_date": "2026-08-28",
-    "penalty_result": "对中英人寿保险股份有限公司江西分公司罚款7万元；对章煜超给予警告并罚款1万元",
-    "violation_summary": "给予投保人保险合同约定以外的利益",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269425&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "贵州金融监管局对庞启宗（时任平安养老保险股份有限公司贵州分公司保险渠道部副经理）行政处罚案",
-    "penalty_org": "贵州金融监管局",
-    "penalty_date": "2026-08-28",
-    "penalty_result": "警告并罚款5万元",
-    "violation_summary": "未按照规定使用经备案的保险条款",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269543&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "北京金融监管局对张洪侠（时任中国平安人寿保险股份有限公司北京分公司个人代理人）行政处罚案",
-    "penalty_org": "北京金融监管局",
-    "penalty_date": "2026-08-28",
-    "penalty_result": "警告并罚款人民币2万元",
-    "violation_summary": "欺骗投保人",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269586&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "北京金融监管局对李冬梅（时任中国平安人寿保险股份有限公司北京分公司个人代理人）行政处罚案",
-    "penalty_org": "北京金融监管局",
-    "penalty_date": "2026-08-28",
-    "penalty_result": "警告并罚款人民币2万元",
-    "violation_summary": "欺骗投保人",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269586&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "北京金融监管局对复星保德信人寿保险有限公司北京分公司行政处罚案",
-    "penalty_org": "北京金融监管局",
-    "penalty_date": "2026-08-28",
-    "penalty_result": "罚款人民币2万元",
-    "violation_summary": "违规宣传",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269586&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "北京金融监管局对李悦[时任复星保德信人寿保险有限公司北京分公司中介业务部助理经理（主持工作）]行政处罚案",
-    "penalty_org": "北京金融监管局",
-    "penalty_date": "2026-08-28",
-    "penalty_result": "警告",
-    "violation_summary": "违规宣传",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269586&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "北京金融监管局对杨凯军行政处罚案",
-    "penalty_org": "北京金融监管局",
-    "penalty_date": "2026-08-28",
-    "penalty_result": "责令杨凯军停止从事保险公估业务5年",
-    "violation_summary": "在保险公估业务中谋取不正当利益",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269586&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "国家金融监督管理总局安徽监管局对中国人寿财产保险股份有限公司合肥市中心支公司及相关责任人行政处罚案",
-    "penalty_org": "国家金融监督管理总局安徽监管局",
-    "penalty_date": "2026-08-28",
-    "penalty_result": "对中国人寿财产保险股份有限公司合肥市中心支公司罚款55万元。对宗升通、孟星、许先健、郝世武警告并处罚款合计18万元。",
-    "violation_summary": "财务数据不真实、未按规定执行保险费率",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1268320&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "贵州金融监管局对贾鹏（时任富德生命人寿保险股份有限公司贵州分公司银保管理部经理）行政处罚案",
-    "penalty_org": "贵州金融监管局",
-    "penalty_date": "2026-08-26",
-    "penalty_result": "警告并罚款7万元",
-    "violation_summary": "未按照规定使用经备案的保险费率",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269354&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "黑龙江金融监管局对建信人寿保险股份有限公司黑龙江分公司行政处罚案",
-    "penalty_org": "黑龙江金融监管局",
-    "penalty_date": "2026-08-25",
-    "penalty_result": "罚款5万元",
-    "violation_summary": "给予投保人保险合同约定以外的其他利益",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269245&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "河南金融监管局对魏秋英（时任平安人寿中牟支公司个人代理人）行政处罚案",
-    "penalty_org": "河南金融监管局",
-    "penalty_date": "2026-08-25",
-    "penalty_result": "禁止4年进入保险业",
-    "violation_summary": "欺骗保险人、投保人、被保险人或者受益人",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269228&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "北京金融监管局对中华联合财产保险股份有限公司北京分公司及相关责任人行政处罚案",
-    "penalty_org": "北京金融监管局",
-    "penalty_date": "2026-08-21",
-    "penalty_result": "对中华联合财产保险股份有限公司北京分公司给予罚款合计80万元；对徐川给予警告并处罚款12万元；对朱振玉给予警告并处罚款5万元；对吴军给予警告并处罚款7万元；对徐广明给予警告并处罚款2万元；对张红彬给予警告并处罚款4万元；对刘冬给予警告并处罚款4万元；对崔健给予警告并处罚款2万元。",
-    "violation_summary": "未如实记录业务及管理费，虚挂保险中介业务套取费用，农业保险未严格执行经备案的保险条款",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1268707&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "辽宁金融监管局对大家人寿保险股份有限公司沈阳中心支公司行政处罚案",
-    "penalty_org": "辽宁金融监管局",
-    "penalty_date": "2026-08-18",
-    "penalty_result": "罚款21万元",
-    "violation_summary": "虚构保险中介业务",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1268420&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "辽宁金融监管局对阳光财产保险股份有限公司沈阳中心支公司行政处罚案",
-    "penalty_org": "辽宁金融监管局",
-    "penalty_date": "2026-08-18",
-    "penalty_result": "罚款103万元",
-    "violation_summary": "虚构保险中介业务套取费用、财务数据不真实、未按照规定使用经批准或者备案的保险条款和保险费率等",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1268420&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "北京金融监管局对郭鹏（时任友邦人寿保险有限公司北京分公司个人代理人）行政处罚案",
-    "penalty_org": "北京金融监管局",
-    "penalty_date": "2026-08-28",
-    "penalty_result": "警告并罚款人民币2万元",
-    "violation_summary": "阻碍投保人履行如实告知义务",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269586&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "厦门金融监管局对中国平安人寿保险股份有限公司厦门分公司及相关责任人员行政处罚案",
-    "penalty_org": "厦门金融监管局",
-    "penalty_date": "2026-08-28",
-    "penalty_result": "对中国平安人寿保险股份有限公司厦门分公司罚款30万元；对周顺忠警告并罚款7万元，对林霞警告并罚款3万元。",
-    "violation_summary": "给予合同约定以外其他利益",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269753&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "厦门金融监管局对中国太平洋财产保险股份有限公司厦门分公司及相关责任人员行政处罚案",
-    "penalty_org": "厦门金融监管局",
-    "penalty_date": "2026-08-28",
-    "penalty_result": "对中国太平洋财产保险股份有限公司厦门分公司罚款94万元；对林臻瑜、董小亭、侯美琪分别警告并罚款4万元，对白宏彬警告并罚款1万元。",
-    "violation_summary": "虚挂中介业务套取费用，财务业务数据不真实，给予合同约定以外其他利益",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269753&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "黑龙江金融监管局对瑞众人寿保险有限责任公司黑龙江分公司行政处罚案",
-    "penalty_org": "黑龙江金融监管局",
-    "penalty_date": "2026-08-25",
-    "penalty_result": "罚款13万元",
-    "violation_summary": "给予投保人合同约定外其他利益",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269246&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "浙江金融监管局对中信银行股份有限公司杭州分行及相关责任人行政处罚案",
+    "case_name": "浙江金融监管局对中国银行股份有限公司富阳支行及相关责任人行政处罚案",
     "penalty_org": "浙江金融监管局",
-    "penalty_date": "2026-08-25",
-    "penalty_result": "对中信银行股份有限公司杭州分行罚款130万元，对陈青霞警告。",
-    "violation_summary": "流动资金贷款管理不审慎；个人经营贷款管理不审慎等。",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269238&itemId=4114",
+    "penalty_date": "2026-10-16",
+    "penalty_result": "对中国银行股份有限公司富阳支行罚款20万元；对蒋涛（涉刑）禁止从事银行业工作15年。",
+    "violation_summary": "信用卡及个人消费贷款业务管理不审慎。",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274694&itemId=4114",
     "source": "nfra"
   },
   {
-    "case_name": "河南金融监管局对中原农业保险股份有限公司郑州市分公司行政处罚案",
-    "penalty_org": "河南金融监管局",
-    "penalty_date": "2026-08-25",
+    "case_name": "云南金融监管局对安诚财产保险股份有限公司云南分公司及相关责任人行政处罚案",
+    "penalty_org": "云南金融监管局",
+    "penalty_date": "2026-10-13",
+    "penalty_result": "对安诚财产保险股份有限公司云南分公司罚款70万元；对李忠、张薇、骆曾祥、邱旸添予以警告并处罚款合计23万元。",
+    "violation_summary": "编制虚假财务资料；未按规定使用经备案的保险费率。",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274646&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "福建金融监管局对中国平安财产保险股份有限公司福州中心支公司及相关责任人行政处罚案",
+    "penalty_org": "福建金融监管局",
+    "penalty_date": "2026-10-13",
+    "penalty_result": "对中国平安财产保险股份有限公司福州中心支公司处以67万元罚款，对林秋给予警告并处以9万元罚款，对包素萍给予警告并处以5万元罚款，对阮冬阳给予警告并处以5万元罚款，对程平苏给予警告并处以4.5万元罚款",
+    "violation_summary": "财务数据不真实；虚挂保险中介业务套取费用",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274080&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "福建金融监管局对中国平安财产保险股份有限公司福建分公司及相关责任人行政处罚案",
+    "penalty_org": "福建金融监管局",
+    "penalty_date": "2026-10-13",
+    "penalty_result": "对中国平安财产保险股份有限公司福建分公司处以50万元罚款，对陈福珍给予警告并处以7万元罚款，对吴浩东给予警告并处以7万元罚款",
+    "violation_summary": "未按照规定使用经备案的保险条款、保险费率",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274079&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对交通银行股份有限公司私人银行部行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-12",
+    "penalty_result": "罚款100万元",
+    "violation_summary": "代销业务尽职调查严重违反审慎经营规则、代销业务风险评级严重违反审慎经营规则",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274495&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对上海浦东恒通村镇银行股份有限公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-12",
+    "penalty_result": "罚款90万元",
+    "violation_summary": "贷款管理严重违反审慎经营规则、以不正当手段吸收存款",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274495&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对金斯妤（时任上海浦东恒通村镇银行股份有限公司运营管理部副总经理（主持工作））行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-12",
+    "penalty_result": "警告",
+    "violation_summary": "以不正当手段吸收存款",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274495&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对中信银行股份有限公司上海宛平路支行行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-12",
     "penalty_result": "罚款30万元",
-    "violation_summary": "编制或者提供虚假的报告、报表、文件、资料",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269228&itemId=4114",
+    "violation_summary": "个人代销业务合格投资者管理严重违反审慎经营规则",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274495&itemId=4114",
     "source": "nfra"
   },
   {
-    "case_name": "河南金融监管局对众诚汽车保险股份有限公司河南分公司行政处罚案",
-    "penalty_org": "河南金融监管局",
-    "penalty_date": "2026-08-25",
-    "penalty_result": "罚款35万元",
-    "violation_summary": "编制或者提供虚假的报告、报表、文件、资料",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269228&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "河南金融监管局对安诚财产保险股份有限公司河南分公司行政处罚案",
-    "penalty_org": "河南金融监管局",
-    "penalty_date": "2026-08-25",
-    "penalty_result": "罚款35万元",
-    "violation_summary": "编制或者提供虚假的报告、报表、文件、资料",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269228&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "河南金融监管局对杨延青（时任民生银行郑州分行零售质量控制部负责人）行政处罚案",
-    "penalty_org": "河南金融监管局",
-    "penalty_date": "2026-08-25",
-    "penalty_result": "警告",
-    "violation_summary": "违规支付佣金",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269228&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "河南金融监管局对张有赋（时任工商银行河南省分行党委委员、副行长）行政处罚案",
-    "penalty_org": "河南金融监管局",
-    "penalty_date": "2026-08-25",
-    "penalty_result": "禁止从事银行业工作8年",
-    "violation_summary": "贷款调查不尽职、贷后管理不到位",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269228&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "河南金融监管局对普浩（时任国家开发银行河南省分行客户三处处长）行政处罚案",
-    "penalty_org": "河南金融监管局",
-    "penalty_date": "2026-08-25",
-    "penalty_result": "禁止从事银行业工作4年",
-    "violation_summary": "贷款审查不尽职",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269228&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "河南金融监管局对霍新才（时任工商银行河南省分行资产负债管理部副总经理）行政处罚案",
-    "penalty_org": "河南金融监管局",
-    "penalty_date": "2026-08-25",
-    "penalty_result": "禁止从事银行业工作15年",
-    "violation_summary": "内控管理不到位",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1269228&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "贵州金融监管局对张玉宇（时任浙商银行股份有限公司贵阳分行企业金融一部客户经理）行政处罚案",
-    "penalty_org": "贵州金融监管局",
-    "penalty_date": "2026-08-21",
-    "penalty_result": "禁止终身从事银行业工作",
-    "violation_summary": "违规存贷挂钩",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1268766&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "浙江金融监管局对华融金融租赁股份有限公司及相关责任人行政处罚案",
+    "case_name": "浙江金融监管局对大家财产保险有限责任公司杭州中心支公司及相关责任人行政处罚案",
     "penalty_org": "浙江金融监管局",
-    "penalty_date": "2026-08-21",
-    "penalty_result": "对华融金融租赁股份有限公司罚款100万元；对郑轶超警告；对鲍志华警告；对袁振华禁止从事银行业工作10年。",
-    "violation_summary": "直租业务不审慎；回租项目投放不审慎。",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1268385&itemId=4114",
+    "penalty_date": "2026-10-10",
+    "penalty_result": "对大家财产保险有限责任公司杭州中心支公司罚款35万元；对吴锴辉警告并罚款7万元。",
+    "violation_summary": "未按照规定使用经批准或者备案的保险条款、保险费率。",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274218&itemId=4114",
     "source": "nfra"
   },
   {
-    "case_name": "国家金融监督管理总局天津监管局对中国中信金融资产管理股份有限公司天津市分公司（原中国华融资产管理股份有限公司天津市分公司）行政处罚案",
-    "penalty_org": "国家金融监督管理总局天津监管局",
-    "penalty_date": "2026-08-21",
-    "penalty_result": "对中国中信金融资产管理股份有限公司天津市分公司罚款135万元。对姜传波警告；对李淑琴警告并处罚款6万元。",
-    "violation_summary": "违规收购非金融机构不良资产；未按规定及时下调风险分类；实质性重组业务认定不审慎、风险加权资产计量不准确",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1268926&itemId=4114",
+    "case_name": "浙江金融监管局对大家财产保险有限责任公司浙江分公司及相关责任人行政处罚案",
+    "penalty_org": "浙江金融监管局",
+    "penalty_date": "2026-10-10",
+    "penalty_result": "对大家财产保险有限责任公司浙江分公司警告并罚款41万元；对邢来警告并罚款8万元，对陈虎警告并罚款0.8万元。",
+    "violation_summary": "未按照规定使用经批准或者备案的保险条款、保险费率等。",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274218&itemId=4114",
     "source": "nfra"
   },
   {
-    "case_name": "深圳金融监管局对恒大人寿保险有限公司及相关责任人行政处罚案",
+    "case_name": "浙江金融监管局对阳光财产保险股份有限公司浙江省分公司及相关责任人行政处罚案",
+    "penalty_org": "浙江金融监管局",
+    "penalty_date": "2026-10-10",
+    "penalty_result": "对阳光财产保险股份有限公司浙江省分公司罚款90万元；对叶胜警告并罚款15万元。",
+    "violation_summary": "未按照规定使用经批准或者备案的保险条款、保险费率等。",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274218&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对长安责任保险股份有限公司上海市分公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-09",
+    "penalty_result": "警告并处罚款3万元",
+    "violation_summary": "跨省、自治区、直辖市经营保险业务",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274221&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对长安责任保险股份有限公司上海市青浦支公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-09",
+    "penalty_result": "罚款20万元",
+    "violation_summary": "违规套取费用，编制虚假报表行为利用开展保险业务为其他机构牟取不正当利益行为",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274221&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对迟豪骏（时任长安责任保险股份有限公司上海市青浦支公司负责人）行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-09",
+    "penalty_result": "警告并处罚款2.7万元",
+    "violation_summary": "违规套取费用，编制虚假报表行为利用开展保险业务为其他机构牟取不正当利益行为",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274221&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对中国人民财产保险股份有限公司上海市长宁支公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-09",
+    "penalty_result": "罚款15万元",
+    "violation_summary": "未按照规定使用经批准或者备案的保险条款",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274221&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对王建萍（时任中国人民财产保险股份有限公司上海市卢湾支公司副总经理）行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-09",
+    "penalty_result": "警告并处罚款2万元",
+    "violation_summary": "未按照规定使用经批准或者备案的保险条款",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274221&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "四川金融监管局对金祥保险销售有限公司邛崃分公司及相关责任人行政处罚案",
+    "penalty_org": "四川金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "对金祥保险销售邛崃分公司罚款人民币12万元；对卢燕警告并罚款人民币2万元。",
+    "violation_summary": "利用虚假中介业务为保险公司牟取不正当利益",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274255&itemId=4114",
+    "source": "nfra",
+    "related_regulations": [
+      "保险销售行为管理办法"
+    ]
+  },
+  {
+    "case_name": "上海金融监管局对太平人寿保险有限公司上海分公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "警告并罚款16万元",
+    "violation_summary": "编制虚假材料、未向投保人询问基本医疗保险等情况",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对李建昌（时任美华保险销售有限公司保险代理从业人员）行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "警告并罚款1万元",
+    "violation_summary": "违规销售非保险金融产品",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对中邮人寿保险股份有限公司上海分公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "警告并罚款7万元",
+    "violation_summary": "给予投保人保险合同约定以外的其他利益、未向投保人询问基本医疗保险等情况",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对高永海（时任中邮人寿保险股份有限公司上海分公司邮银业务部总经理）行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "警告并罚款2万元",
+    "violation_summary": "给予投保人保险合同约定以外的其他利益",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对中意财产保险有限公司上海分公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "罚款40万元",
+    "violation_summary": "未按规定使用经备案的保险条款、费率",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对太平洋健康保险股份有限公司上海分公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "警告并罚款23万元",
+    "violation_summary": "未按规定使用经备案的保险条款、费率，跨区域经营保险业务",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对郑文浩（时任太平洋健康保险股份有限公司上海分公司东区重要客户业务中心业务拓展三部经理）行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "警告并罚款4万元",
+    "violation_summary": "未按规定使用经备案的保险条款、费率",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对明亚保险经纪股份有限公司上海分公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "罚款6万元",
+    "violation_summary": "欺骗保险人、投保人、被保险人或者受益人",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对鼎和财产保险股份有限公司上海分公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "警告并罚款54万元",
+    "violation_summary": "编制提供虚假的报表资料，未按规定使用经备案的保险条款，跨省、自治区、直辖市经营保险业务",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对马亮（时任鼎和财产保险股份有限公司上海分公司非车险部副经理（主持工作））行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "警告并罚款1.2万元",
+    "violation_summary": "未按规定使用经备案的保险条款",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对泰康养老保险股份有限公司上海分公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "警告并罚款53万元",
+    "violation_summary": "未按规定使用经备案的保险条款和保险费率、跨区域经营保险业务",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对郑廷强（时任泰康养老保险股份有限公司上海分公司总经理）行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "警告并罚款10万元",
+    "violation_summary": "未按规定使用经备案的保险条款和保险费率",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "浙江金融监管局对浙江临安农村商业银行股份有限公司及相关责任人行政处罚案",
+    "penalty_org": "浙江金融监管局",
+    "penalty_date": "2026-10-14",
+    "penalty_result": "对浙江临安农村商业银行股份有限公司罚款140万元，对方平军警告。",
+    "violation_summary": "违规设置绩效考核指标等。",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274691&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对韩亚银行（中国）有限公司上海浦东支行行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-12",
+    "penalty_result": "罚款80万元",
+    "violation_summary": "虚增存贷款、以贷收费",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274495&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对中国东方资产管理股份有限公司上海市分公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-12",
+    "penalty_result": "罚款100万元",
+    "violation_summary": "非洁净收购不良资产、投后管理不到位",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274495&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对王凤（时任上海浦东恒通村镇银行股份有限公司周浦支行客户经理）行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-12",
+    "penalty_result": "警告",
+    "violation_summary": "贷款管理严重违反审慎经营规则",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274495&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对中船财务有限责任公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-12",
+    "penalty_result": "罚款100万元",
+    "violation_summary": "员工行为管理严重违反审慎经营规则",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274495&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对上海嘉定洪都村镇银行股份有限公司江桥支行行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-12",
+    "penalty_result": "罚款40万元",
+    "violation_summary": "贷款管理严重违反审慎经营规则",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274495&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对上海嘉定民生村镇银行股份有限公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-12",
+    "penalty_result": "罚款60万元",
+    "violation_summary": "贷款管理严重违反审慎经营规则",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274495&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "国家金融监督管理总局大连监管局对孙毅坤（时任交通银行大连分行副行长）行政处罚案",
+    "penalty_org": "国家金融监督管理总局大连监管局",
+    "penalty_date": "2026-10-12",
+    "penalty_result": "禁止从事银行业工作五年",
+    "violation_summary": "审批准入、贷款“三查”、授信管理违规",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274450&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "国家金融监督管理总局海南监管局对民生银行三亚分行原员工汪洋行政处罚案",
+    "penalty_org": "国家金融监督管理总局海南监管局",
+    "penalty_date": "2026-10-10",
+    "penalty_result": "对汪洋予以警告并罚款10万元",
+    "violation_summary": "违规办理票据转贴现业务、票据业务内控管理不到位、员工异常行为管理不到位、问责处理不到位等",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274386&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "国家金融监督管理总局海南监管局对民生银行三亚分行原员工王东芝行政处罚案",
+    "penalty_org": "国家金融监督管理总局海南监管局",
+    "penalty_date": "2026-10-10",
+    "penalty_result": "对王东芝予以警告并罚款25万元",
+    "violation_summary": "违规办理票据转贴现业务、票据业务内控管理不到位、员工异常行为管理不到位等",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274386&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "深圳金融监管局对广东华润银行深圳分行及相关责任人行政处罚案",
     "penalty_org": "深圳金融监管局",
-    "penalty_date": "2026-08-21",
-    "penalty_result": "对机构罚款176万元，对刘浩给予警告并处11万元罚款，对赵冬梅、彭建军分别给予警告并处5万元罚款。",
-    "violation_summary": "关联交易、资金运用、内控管理行为存在违规",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1268808&itemId=4114",
+    "penalty_date": "2026-10-10",
+    "penalty_result": "对机构罚款110万元；对李雅静、彭罡睿给予警告，对李智隽、丁学海、王楷分别禁止从事银行业工作4年、6年、7年。",
+    "violation_summary": "银行承兑汇票贸易背景真实性审查不严，超授信额度签发银行承兑汇票",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274402&itemId=4114",
     "source": "nfra"
   },
   {
-    "case_name": "北京金融监管局对建信金融租赁有限公司及相关责任人行政处罚案",
-    "penalty_org": "北京金融监管局",
-    "penalty_date": "2026-08-21",
-    "penalty_result": "对建信金融租赁有限公司罚款30万元；对蔡方给予警告。",
-    "violation_summary": "租赁资产风险分类不准确",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1268707&itemId=4114",
+    "case_name": "江苏金融监管局对中国农业银行股份有限公司江苏省分行及下辖分支机构、相关责任人员行政处罚案",
+    "penalty_org": "江苏金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "对中国农业银行股份有限公司江苏省分行及下辖14家分支机构罚款合计600万元；对陈勇、张珂、朱颖、蔡拥军、成翔宇、张东、王丽萍、井琦、陈超、刘军、彭孝纹、康苏文、蒋勇、黄晨希、陆璟璟、秦文志、俞吉星警告并罚款合计102万元。",
+    "violation_summary": "个人贷款业务管理不到位、流动资金贷款业务管理不到位、固定资产贷款业务管理不到位、委托贷款业务管理不到位、银团贷款业务管理不到位、计息管理规则执行不到位、违规设立绩效考评指标、浮利分费、违规收费",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274395&itemId=4114",
     "source": "nfra"
   },
   {
-    "case_name": "辽宁金融监管局对大家人寿保险股份有限公司辽宁分公司行政处罚案",
-    "penalty_org": "辽宁金融监管局",
+    "case_name": "上海金融监管局对曹明（时任太平人寿保险有限公司上海分公司个人业务部经理）行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "警告并罚款3万元",
+    "violation_summary": "编制虚假材料",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对前海人寿保险股份有限公司上海分公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "警告并罚款5000元",
+    "violation_summary": "代理人管理不到位",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对王俊（时任前海人寿保险股份有限公司上海分公司代理人）行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "禁止进入保险业10年",
+    "violation_summary": "合同诈骗",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对上海农村商业银行股份有限公司宝山支行行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "罚款180万元",
+    "violation_summary": "员工行为管理严重违反审慎经营规则、流动资金贷款管理严重违反审慎经营规则、分期业务严重违反审慎经营规则、个人贷款管理严重违反审慎经营规则",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对庄容（时任上海农村商业银行股份有限公司宝山支行市场二部客户经理）行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "禁止从事银行业工作10年",
+    "violation_summary": "员工行为管理严重违反审慎经营规则、流动资金贷款管理严重违反审慎经营规则",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对顾彦卿（时任上海农村商业银行股份有限公司宝山支行零售市场一部经理助理）行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "禁止从事银行业工作5年",
+    "violation_summary": "员工行为管理严重违反审慎经营规则、分期业务严重违反审慎经营规则、个人贷款管理严重违反审慎经营规则",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对复星联合健康保险股份有限公司上海分公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "罚款15万元",
+    "violation_summary": "编制虚假材料",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对百联集团财务有限责任公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "罚款20万元",
+    "violation_summary": "发放经营性物业贷款用于承接委托贷款",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对张卫总（时任鼎和财产保险股份有限公司上海分公司副总经理（主持工作））行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "警告并罚款7.5万元",
+    "violation_summary": "编制提供虚假的报表资料",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对东方汇理银行（中国）有限公司行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "罚款60万元",
+    "violation_summary": "生产环境安全管控不足、数据安全管控不足",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对中国农业银行股份有限公司上海浦东分行行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "罚款60万元",
+    "violation_summary": "押品管理严重违反审慎经营规则、个人贷款贷后管理严重违反审慎经营规则",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "上海金融监管局对中国银行股份有限公司上海市普陀支行行政处罚案",
+    "penalty_org": "上海金融监管局",
+    "penalty_date": "2026-10-08",
+    "penalty_result": "罚款50万元",
+    "violation_summary": "流动资金贷款管理严重违反审慎经营规则",
+    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1274060&itemId=4114",
+    "source": "nfra"
+  },
+  {
+    "case_name": "中国证监会对陈欢行政处罚案（〔2026〕45号）",
+    "penalty_org": "中国证券监督管理委员会",
+    "penalty_date": "2026-09-01",
+    "penalty_result": "对陈欢、周厚禄、李萍萍处以800万元的罚款。其中,由陈欢承担300万元、周厚禄承担200万元、李萍萍承担300万元。 鉴于当事人陈欢、周厚禄、李萍萍违法行为情节严重,依据《证券法》第二百二十一条和《证券市场禁入规定》(证监会令第185号)第三条第六项、第四条第一款第二项、第七条第二款的规定,对陈欢、李萍萍采取3年证券市场禁止交易措施,对周厚禄采取2年证券市场禁止交易措施,自我会宣布决定之日起,在禁入期间内,不得直接或者以化名、借他人名义在证券交易场所交易上市或者挂牌的所有证券。",
+    "violation_summary": " 2023年2月20日至2024年8月1日期间内,陈欢、周厚禄、李萍萍控制使用多个他人证券账户,通过集中资金优势、持股优势连续买卖、在自己实际控制的账户之间进行交易等手段,影响相关股票价格和交易量,相关交易无违法所得。 ",
+    "source_url": "https://www.csrc.gov.cn/csrc/c101928/c7661080/content.shtml",
+    "source": "csrc"
+  },
+  {
+    "case_name": "中国证监会对杨将行政处罚案（〔2026〕44号）",
+    "penalty_org": "中国证券监督管理委员会",
+    "penalty_date": "2026-09-01",
+    "penalty_result": "没收杨将违法所得2,156,230.61元,并处以6,468,691.83元罚款。 当事人应自收到本处罚决定书之日起15日内,将罚没款直接汇交国库。具体缴款方式见本处罚决定书所附说明。同时,须将注有当事人名称的付款凭证复印件送中国证券监督管理委员会行政处罚委员会办公室备案。",
+    "violation_summary": " 一、内幕信息情况 2025年2月22日,相关公司公告筹划以发行股份及支付现金的方式购买某公司控制权并募集配套资金,该重大资产重组事项属于《证券法》第八十条第二款第二项、第九项规定的重大事件,公开前属于《证券法》第五十二条第二款规定的内幕信息。该内幕信息形成于2024年10月9日,公开于2025年2月22日。 二、内幕交易情况 杨将在内幕信息敏感期内,与相关内幕信息知情人频繁联络接触。2024年10月11日至2025年2月21日期间,杨将控制使用多个证券账户买卖相关公司股票。经计算,盈利2,156,230.61元。 杨将买入相关公司股票时点与其和内幕信息知情人联络接触时点及内幕信息的形成发展过程高度吻合,存在使用新开立账户和长期空置账户买入该股、交易金额放大、突击转入资金等情形,交易行为明显异常且无正当理由。 ",
+    "source_url": "https://www.csrc.gov.cn/csrc/c101928/c7659511/content.shtml",
+    "source": "csrc"
+  },
+  {
+    "case_name": "中国证监会对翁宇轩行政处罚案（〔2026〕43号）",
+    "penalty_org": "中国证券监督管理委员会",
+    "penalty_date": "2026-09-01",
+    "penalty_result": "责令翁宇轩依法处理非法持有的证券,没收其违法所得312,555.81元,并处以500,000元罚款。 当事人应自收到本处罚决定书之日起15日内,将罚没款直接汇交国库。具体缴款方式见本处罚决定书所附说明。同时,须将注有当事人名称的付款凭证复印件送中国证券监督管理委员会行政处罚委员会办公室备案。",
+    "violation_summary": " 一、内幕信息情况 2025年2月22日,相关公司公告筹划以发行股份及支付现金的方式购买某公司控制权并募集配套资金,该重大资产重组事项属于《证券法》第八十条第二款第二项、第九项规定的重大事件,公开前属于《证券法》第五十二条第二款规定的内幕信息。该内幕信息形成于2024年10月9日,公开于2025年2月22日。 二、内幕交易情况 翁宇轩在内幕信息敏感期内,与相关内幕信息知情人存在联络接触。2025年2月13日至2月19日期间,翁宇轩控制使用多个证券账户买卖相关公司股票。经计算,盈利312,555.81元。 翁宇轩买入相关公司股票时点与其和内幕信息知情人联络接触时点及内幕信息的形成发展过程高度吻合,存在首次交易该股、卖出其他证券后买入、成交金额放大等情形,交易行为明显异常且无正当理由。 ",
+    "source_url": "https://www.csrc.gov.cn/csrc/c101928/c7659486/content.shtml",
+    "source": "csrc"
+  },
+  {
+    "case_name": "中国证监会对元道通信股份有限公司行政处罚案（〔2026〕42号）",
+    "penalty_org": "中国证券监督管理委员会",
+    "penalty_date": "2026-08-28",
+    "penalty_result": "对李晋采取5年证券市场禁入措施,对曹亚蕾采取4年证券市场禁入措施。自我会宣布决定之日起,在禁入期间内,除不得继续在原机构从事证券业务、证券服务业务或者担任原证券发行人的董事、监事、高级管理人员职务外,也不得在其他任何机构中从事证券业务、证券服务业务或者担任其他证券发行人的董事、监事、高级管理人员职务。",
+    "violation_summary": "2019年至2021年,元道通信通过虚构工作量确认单等方式虚增营业收入65,902,640.59元、160,688,291.80元、263,632,076.14元,分别占《招股说明书》披露的2019年度至2021年度营业收入的8.75%、13.12%、16.23%。元道通信在公告的证券发行文件中编造重大虚假内容。 二、元道通信2022年年度报告信息披露存在虚假记载 经查明,2022年元道通信通过虚构工作量确认单等方式虚增营业收入166,218,396.33元,占2022年年度报告披露营业收入的7.87%。 李晋时任元道通信董事长,在元道通信《招股说明书》、2022年年度报告等信息披露文件上签字,保证文件内容的真实、准确、完整。李晋全面负责元道通信经营管理,未对前述涉案事项进行审慎关注和有效监督。 燕某时任元道通信总经理,在元道通信《招股说明书》、2022年年度报告等信息披露文件上签字,保证文件内容的真实、准确、完整。燕某主持元道通信日常经营工作,参与元道通信虚增收入事项。 曹亚蕾时任元道通信副总经理、财务总监、董事会秘书,在元道通信《招股说明书》、2022年年度报告等信息披露文件上签字,保证文件内容的真实、准确、完整。曹亚蕾主管元道通信财务、融资和信息披露工作,安排元道通信虚增收入相关事项。 吴志锋时任元道通信董事、副总经理,在元道通信《招股说明书》、2022年年度报告等信息披露文件上签字,保证文件内容的真实、准确、完整。吴志锋分管主要涉案业务,未对前述涉案事项进行审慎关注。 ",
+    "source_url": "https://www.csrc.gov.cn/csrc/c101928/c7656663/content.shtml",
+    "source": "csrc"
+  },
+  {
+    "case_name": "中国证监会对大华会计师事务所(特殊普通合伙)行政处罚案（〔2026〕41号）",
+    "penalty_org": "中国证券监督管理委员会",
+    "penalty_date": "2026-08-25",
+    "penalty_result": " 一、对大华会计师事务所(特殊普通合伙)责令改正,没收审计业务收入5,207,547.16元,并处以950万元罚款。 二、对高世茂给予警告,并处以60万元罚款。 三、对霍耀俊给予警告,并处以70万元罚款。",
+    "violation_summary": "(以下简称《证券法》)有关规定,我会对大华所为东方集团股份有限公司(以下简称东方集团)提供审计服务未勤勉尽责行为进行了立案调查,依法向当事人告知了作出行政处罚的事实、理由、依据以及当事人依法享有的权利,应当事人大华所、高世茂、霍耀俊的要求举行了听证会,听取了当事人及其代理人的陈述和申辩。本案现已调查、办理终结。 经查明,大华所存在以下违法事实: 一、大华所为东方集团提供年报审计服务,出具的2020年至2023年年度审计报告存在虚假记载 经我会另案查明,2020年至2023年,东方集团通过人为增加业务环节或虚构业务链条等方式,长期开展农产品融资性贸易和空转循环贸易,虚增收入和成本,导致东方集团披露的2020年至2023年年度报告存在虚假记载。 大华所为东方集团2020年至2023年年度财务报表提供审计服务,其中2020年至2022年出具了标准无保留意见的审计报告,2023年出具了保留意见的审计报告,审计业务收入合计5,207,547.16元(不含增值税)。大华所在审计执业过程中未勤勉尽责,出具的审计报告存在虚假记载,高世茂是2021年至2023年年度审计报告的签字注册会计师,霍耀俊是20",
+    "source_url": "https://www.csrc.gov.cn/csrc/c101928/c7656661/content.shtml",
+    "source": "csrc"
+  },
+  {
+    "case_name": "中国证监会对陈广华行政处罚案（〔2026〕40号）",
+    "penalty_org": "中国证券监督管理委员会",
     "penalty_date": "2026-08-18",
-    "penalty_result": "罚款25万元",
-    "violation_summary": "业务财务数据不真实",
-    "source_url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1268420&itemId=4114",
-    "source": "nfra"
-  },
-  {
-    "case_name": "中国证监会对柳玉平行政处罚案（〔2026〕36号）",
-    "penalty_org": "中国证券监督管理委员会",
-    "penalty_date": "2026-08-18",
-    "penalty_result": "责令柳玉平、王叶兰依法处理非法持有的证券,没收违法所得98,396.03元,其中柳玉平承担49,198.02元,王叶兰承担49,198.01元;处以1,500,000元罚款,其中柳玉平承担750,000元,王叶兰承担750,000元。",
-    "violation_summary": " 一、内幕信息情况 2024年11月22日,相关公司发布关于筹划发行股份及支付现金购买资产并募集配套资金事项的停牌公告,该公告内容属于《证券法》第八十条第二款第二项、第九项规定的重大事件,公开前构成《证券法》第五十二条第二款规定的内幕信息。内幕信息不晚于2024年10月10日形成,公开于2024年11月22日。柳玉平为内幕信息知情人,不晚于2024年10月19日知悉内幕信息。 二、内幕交易情况 2024年11月1日至12日,柳玉平、王叶兰共同控制“王叶兰”证券账户买卖相关公司股票,获利98,396.03元。 ",
-    "source_url": "https://www.csrc.gov.cn/csrc/c101928/c7655161/content.shtml",
-    "source": "csrc"
-  },
-  {
-    "case_name": "中国证监会对中兴财光华会计师事务所(特殊普通合伙)行政处罚案（〔2026〕35号）",
-    "penalty_org": "中国证券监督管理委员会",
-    "penalty_date": "2026-08-17",
-    "penalty_result": " 一、对中兴财光华会计师事务所(特殊普通合伙)责令改正,没收审计业务收入4,905,660.36元,并处以14,716,981.08元罚款; 二、对张学福给予警告,并处以60万元罚款; 三、对胡蝶娜给予警告,并处以40万元罚款; 四、对王振伟给予警告,并处以30万元罚款。",
-    "violation_summary": ",涉案项目签字注册会计师。 胡蝶娜,女,涉案项目签字注册会计师。 王振伟,男,涉案项目签字注册会计师。 依据《中华人民共和国证券法》(以下简称《证券法》)的有关规定,我会对中兴财光华审计执业未勤勉尽责行为进行了立案调查,依法向当事人告知了作出行政处罚的事实、理由、依据及当事人依法享有的权利。应当事人中兴财光华、张学福、胡蝶娜、王振伟的要求,我会举行了听证会,听取了当事人及其代理人的陈述和申辩。本案现已调查、办理终结。 经查明,中兴财光华存在以下违法事实: 一、中兴财光华为九有股份提供年报审计服务,出具的2020年至2023年年度审计报告存在虚假记载 经我会另案查明,2020年,九有股份披露无偿受让相关公司90%股权,并将该笔交易记入营业外收入。该事项实质为九有股份关联自然人李某对九有股份的无偿赠与,构成关联交易,九有股份未按规定及时披露,也未在2020年年度报告中披露,2020年年度报告存在重大遗漏和虚假记载。2021年至2023年,九有股份子公司通过虚构互联网信息服务业务的方式虚增收入和利润。2022年,九有股份2家子公司通过虚构营销业务的方式虚增收入和利润。九有股份2021年至20",
-    "source_url": "https://www.csrc.gov.cn/csrc/c101928/c7655149/content.shtml",
-    "source": "csrc"
-  },
-  {
-    "case_name": "中国证监会对公茂江行政处罚案（〔2026〕33号）",
-    "penalty_org": "中国证券监督管理委员会",
-    "penalty_date": "2026-07-31",
-    "penalty_result": "没收公茂江违法所得607,237.75元,并处以1,821,713.25元罚款。",
-    "violation_summary": " 一、内幕信息情况 2025年1月17日,相关公司发布关于收到要约收购报告书的公告,该要约收购事项属于《证券法》第八十条第二款第八项、第九项规定的重大事件,公开前属于《证券法》第五十二条第二款规定的内幕信息。该内幕信息不晚于2024年12月16日形成,公开于2025年1月17日。公茂江不晚于2025年1月15日知悉内幕信息。 二、内幕交易情况 2025年1月16日、1月17日,公茂江控制使用多个证券账户买入相关公司股票,内幕信息公开后全部卖出,获利607,237.75元。 ",
-    "source_url": "https://www.csrc.gov.cn/csrc/c101928/c7650681/content.shtml",
-    "source": "csrc"
-  },
-  {
-    "case_name": "中国证监会对柳锡专行政处罚案（〔2026〕32号）",
-    "penalty_org": "中国证券监督管理委员会",
-    "penalty_date": "2026-07-21",
-    "penalty_result": "没收柳锡专违法所得3,090,448.12元,并处以9,271,344.36元罚款。",
-    "violation_summary": " 一、内幕信息情况 2025年5月14日,相关公司发布关于筹划发行股份及支付现金购买资产并募集配套资金暨关联交易事项的公告,该事项属于《证券法》第八十条第二款第二项、第三项、第九项规定的重大事件,公开前属于《证券法》第五十二条第二款规定的内幕信息。该内幕信息形成于2024年10月18日,公开于2025年5月14日。 二、内幕交易情况 柳锡专与内幕信息知情人系朋友关系。内幕信息敏感期内,二人存在多次联络接触。 2024年11月4日至2025年5月14日,柳锡专控制使用他人证券账户买入相关公司股票,获利3,090,448.12元。柳锡专于内幕信息敏感期内买入相关公司股票的时间与内幕信息的发展过程、公开时间高度吻合,相关交易行为明显异常,且无正当理由和正当信息来源。 ",
-    "source_url": "https://www.csrc.gov.cn/csrc/c101928/c7650677/content.shtml",
-    "source": "csrc"
-  },
-  {
-    "case_name": "中国证监会对吴凌玥行政处罚案（〔2026〕30号）",
-    "penalty_org": "中国证券监督管理委员会",
-    "penalty_date": "2026-07-17",
-    "penalty_result": "没收吴凌玥、韩佩佩违法所得22,562,372.92元,并处以67,687,118.76元罚款,违法所得及罚款合计90,249,491.68元,由吴凌玥承担45,124,745.84元,韩佩佩承担45,124,745.84元。",
-    "violation_summary": " 一、内幕信息情况 2024年9月29日,相关公司发布重大资产重组公告。该重大资产重组事项,属于《证券法》第八十条第二款第二、三、九项规定的重大事件,构成《证券法》第五十二条第二款规定的内幕信息。该内幕信息形成于2024年3月29日,公开于2024年9月29日。 二、共同内幕交易情况 内幕信息敏感期内,吴凌玥、韩佩佩共同控制使用“韩佩佩”证券账户买卖相关公司股票。内幕信息公开后全部卖出。二人交易及资金转入行为与其同内幕信息知情人的联络接触时间高度吻合,交易行为明显异常,且无正当理由和正当信息来源。经计算,违法所得金额为22,562,372.92元。 ",
-    "source_url": "https://www.csrc.gov.cn/csrc/c101928/c7655146/content.shtml",
-    "source": "csrc"
-  },
-  {
-    "case_name": "中国证监会对吴凌玥行政处罚案（〔2026〕29号）",
-    "penalty_org": "中国证券监督管理委员会",
-    "penalty_date": "2026-07-17",
-    "penalty_result": "没收吴凌玥、罗征违法所得15,577,694.08元,并处以46,733,082.24元罚款,违法所得及罚款合计62,310,776.32元,由吴凌玥承担60,615,923.2元,由罗征承担1,694,853.12元。",
-    "violation_summary": " 一、内幕信息情况 2024年9月29日,相关公司发布重大资产重组公告。该重大资产重组事项,属于《证券法》第八十条第二款第二、三、九项规定的重大事件,构成《证券法》第五十二条第二款规定的内幕信息。该内幕信息形成于2024年3月29日,公开于2024年9月29日。 二、共同内幕交易情况 内幕信息敏感期内,二人共同控制使用“罗征”证券账户买入相关公司股票。内幕信息公开后全部卖出。二人交易及资金转入行为与吴凌玥同内幕信息知情人的联络接触时间高度吻合,交易行为明显异常,且无正当理由和正当信息来源。经计算,违法所得金额为15,577,694.08元。 ",
-    "source_url": "https://www.csrc.gov.cn/csrc/c101928/c7655144/content.shtml",
+    "penalty_result": "对陈广华处以20万元罚款。",
+    "violation_summary": " 一、陈广华传播虚假信息 陈广华使用本人实名认证的某自媒体账号,粉丝数量超103万人(某自媒体认证:投资达人、财经博主),具有一定互联网传播影响力。陈广华于2026年2月3日使用上述自媒体账号发布含有税率调整内容的信息。经查,上述信息为虚假信息。 二、虚假信息扰乱证券市场 陈广华作为有影响力的自媒体人员,未履行必要的注意义务,在未曾考量及核实相关信息真实性的情况下即传播虚假信息,扰乱证券市场。陈广华在上述行为中没有违法所得。 ",
+    "source_url": "https://www.csrc.gov.cn/csrc/c101928/c7658121/content.shtml",
     "source": "csrc"
   }
 ]

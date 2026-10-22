@@ -66,3 +66,8 @@ wheels/*.whl
 
 # 会话级实时进度台（本地工具，非交付物）
 .workbuddy/live/
+
+# 运行日志与临时产物
+logs/
+.pytest-*.txt
+scripts/init_data/pending/
