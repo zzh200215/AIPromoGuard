@@ -74,12 +74,18 @@ def _highlight(content: str, query: str, window: int = 80) -> str:
 
 
 def search_semantic(query: str, domain: list[str] | None, top_k: int) -> list[dict]:
-    """向量语义召回，返回条款级结果（按相似度降序）。"""
+    """向量语义召回，返回条款级结果（按相似度降序）。
+
+    已废止/演示数据（status=deprecated）不参与召回——它们在语义上往往与查询很近
+    （实测演示法规在"承诺保本高收益"查询里排 Top-1），一旦被检索到就会被当成依据。
+    过滤后可能不足 top_k，因此上游多取几条候选再截断。
+    """
     store = get_vector_store()
     embedder = get_embedder()
     vec = embedder.embed([query])[0]
     where = {"domain": {"$in": domain}} if domain else None
-    results = store.query(_COLLECTION, vec, top_k=top_k, where=where)
+    results = store.query(_COLLECTION, vec, top_k=top_k + 5, where=where)
+    kept = [r for r in results if r["metadata"].get("status") != "deprecated"][:top_k]
     return [
         {
             "article_id": int(r["metadata"]["article_id"]),
@@ -91,7 +97,7 @@ def search_semantic(query: str, domain: list[str] | None, top_k: int) -> list[di
             "score": r["score"],
             "highlight": _highlight(r["document"], query),
         }
-        for r in results
+        for r in kept
     ]
 
 
@@ -110,6 +116,8 @@ def search_keyword(db: Session, query: str, domain: list[str] | None, top_k: int
     scored: list[tuple[float, Article, Regulation, str]] = []
     for article, regulation in rows:
         if domain and regulation.domain not in domain:
+            continue
+        if regulation.status == "deprecated":  # 废止/演示数据不进召回，与语义通道同口径
             continue
         score = 0.0
         first_hit = ""
@@ -253,23 +261,61 @@ def enrich_regulation_meta(db: Session, articles: list[dict]) -> list[dict]:
     return articles
 
 
+def _cap_per_regulation(items: list[dict], cap: int) -> list[dict]:
+    """按法规去重：同一部法规最多保留 cap 条（保留其在原排序中的靠前者）。
+
+    动机（2026-10-22 实测）：Top-K 名额常被同一部法规的多条近似条款占满——
+    一场理财直播材料召回 5 条里有 3 条来自《商业银行理财业务监督管理办法》，
+    而真正对口的《金融产品网络营销管理办法》排在第 6 位、进不了 Top-5。
+    审查场景需要"多部法规各出一条"，而非"一部法规出三条"。
+    """
+    if cap <= 0:
+        return items
+    picked: list[dict] = []
+    seen: dict[str, int] = {}
+    for item in items:
+        name = item.get("regulation_name") or ""
+        if seen.get(name, 0) >= cap:
+            continue
+        seen[name] = seen.get(name, 0) + 1
+        picked.append(item)
+    return picked
+
+
 def search_hybrid(db: Session, query: str, domain: list[str] | None, top_k: int) -> list[dict]:
-    """混合检索：语义 + 关键词 RRF 融合（量纲无关），可选 rerank 精排，生效法规优先。"""
+    """混合检索：语义 + 关键词 RRF 融合（量纲无关），可选 rerank 精排，生效法规优先。
+
+    `workflow.regulation_dedup_per_doc`（默认 0=关闭）：同一部法规最多保留 N 条。
+    开启时上游多取候选（top_k*3），去重后再截断，避免去重把名额截空。
+    """
+    cap = int(settings.app_config("workflow").get("regulation_dedup_per_doc", 0) or 0)
+    fetch_k = top_k * 3 if cap > 0 else top_k
     fused = _rrf_fuse(
         [
-            search_semantic(query, domain, top_k),
-            search_keyword(db, query, domain, top_k),
+            search_semantic(query, domain, fetch_k),
+            search_keyword(db, query, domain, fetch_k),
         ]
     )
     fused = _apply_rerank(query, fused)
     fused.sort(key=lambda item: (item.get("status") != "effective", -item.get("score", 0)))
+    fused = _cap_per_regulation(fused, cap)
     return enrich_regulation_meta(db, fused[:top_k])
 
 
-def fuse_route_lists(result_lists: list[list[dict]], top_k: int) -> list[dict]:
-    """多路检索结果 RRF 融合 + 生效法规优先排序（agentic 补检等场景的通用入口）。"""
+def fuse_route_lists(
+    result_lists: list[list[dict]], top_k: int, cap: int | None = None
+) -> list[dict]:
+    """多路检索结果 RRF 融合 + 生效法规优先排序（agentic 补检等场景的通用入口）。
+
+    与 `search_hybrid` 一样受 `workflow.regulation_dedup_per_doc` 约束：图谱/agentic
+    融合会把同法规的多条近似条款重新摊平，若只在混合检索处去重会被这一步抵消。
+    `cap` 显式传入可覆盖配置（测试/特殊场景用）。
+    """
     fused = _rrf_fuse(result_lists)
     fused.sort(key=lambda item: (item.get("status") != "effective", -item.get("score", 0)))
+    if cap is None:
+        cap = int(settings.app_config("workflow").get("regulation_dedup_per_doc", 0) or 0)
+    fused = _cap_per_regulation(fused, cap)
     return fused[:top_k]
 
 
@@ -293,3 +339,56 @@ def search(
     if search_type == "semantic":
         return enrich_regulation_meta(db, search_semantic(query, domain, top_k))
     return search_hybrid(db, query, domain, top_k)
+
+
+def annotate_citation_links(db: Session, results: list[dict]) -> list[dict]:
+    """补充检索结果的证据链注记：被 N 条规则引用 / 关联 N 起真实处罚案例。
+
+    - 规则引用：rule_regulation_links 按条款级（article_id）与法规级
+      （article_id 为空的关联）合并计数，去重到规则数；
+    - 处罚案例：penalty_cases.related_regulations（法规 id 数组，全表 ≤ 百量级
+      内存判断，避免 JSON 数组的方言相关查询）。
+    """
+    from sqlalchemy import or_
+
+    from src.models import PenaltyCase, RuleRegulationLink
+
+    article_ids = {r.get("article_id") for r in results if r.get("article_id")}
+    regulation_ids = {r.get("regulation_id") for r in results if r.get("regulation_id")}
+
+    art_rules: dict[int, set] = {}
+    reg_rules: dict[int, set] = {}
+    if article_ids or regulation_ids:
+        rows = (
+            db.query(
+                RuleRegulationLink.article_id,
+                RuleRegulationLink.regulation_id,
+                RuleRegulationLink.rule_id,
+            )
+            .filter(
+                or_(
+                    RuleRegulationLink.article_id.in_(article_ids),
+                    RuleRegulationLink.regulation_id.in_(regulation_ids),
+                )
+            )
+            .all()
+        )
+        for aid, rid, rule_id in rows:
+            if aid:
+                art_rules.setdefault(aid, set()).add(rule_id)
+            else:
+                reg_rules.setdefault(rid, set()).add(rule_id)
+
+    case_rows = db.query(PenaltyCase.id, PenaltyCase.related_regulations).all()
+    reg_cases: dict[int, list] = {}
+    for cid, regs in case_rows:
+        for rid in regs or []:
+            reg_cases.setdefault(rid, []).append(cid)
+
+    for r in results:
+        rules = art_rules.get(r.get("article_id"), set()) | reg_rules.get(
+            r.get("regulation_id"), set()
+        )
+        r["cited_rules"] = len(rules)
+        r["cited_cases"] = len(reg_cases.get(r.get("regulation_id"), []))
+    return results

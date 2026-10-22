@@ -243,5 +243,5 @@ def test_fuse_route_lists_effective_first_and_top_k():
     effective = _article(1)
     expired = _article(2, score=0.99)
     expired["status"] = "expired"
-    out = regulation_service.fuse_route_lists([[expired], [effective]], top_k=2)
+    out = regulation_service.fuse_route_lists([[expired], [effective]], top_k=2, cap=0)
     assert [a["article_id"] for a in out] == [1, 2]  # 生效法规优先于高分失效法规

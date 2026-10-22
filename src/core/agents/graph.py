@@ -5,7 +5,10 @@
     → human_review（interrupt 人工复核关卡，默认关闭直通）
     → risk_assess → report
 
-节点均经 _wrap 包装，记录各节点执行耗时到 state.stage_log（W14 状态追踪）。
+节点均经 _wrap 包装，记录各节点执行耗时到 state.stage_log（W14 状态追踪）；
+同时把节点增量结果里的过程明细经 _stage_detail 搬进 stage_log.detail
+（审查轨迹面板数据源——召回条款数 / 工具查证 token / 双引擎融合分布等，
+全部来自 state 已有数据，不新增计算；体积护栏：只留计数与 top-N 名称）。
 """
 
 import time
@@ -40,11 +43,106 @@ _NODES = [
 
 _observer = get_llm_observer()
 
+_TOP_ARTICLES = 3  # top-N 条款名截断（stage_log 落 MySQL JSON 列，控体积）
+
+
+def _stage_detail(name: str, result: dict) -> dict | None:
+    """从节点增量结果提取过程明细（前端审查轨迹面板消费）。
+
+    数据来源全部是各节点已经产出的 state 增量（result），这里只做形状整理：
+    无新计算、无 DB 查询、无副作用；异常安全（节点返回缺键时静默省略）。
+    """
+    if name == "classify":
+        return {"domain": result.get("domain")}
+
+    if name == "regulation_match":
+        articles = result.get("matched_articles") or []
+        detail: dict = {
+            "article_count": len(articles),
+            "top_articles": [
+                {
+                    "name": (a.get("regulation_name") or "")[:60],
+                    "article_no": a.get("article_no"),
+                }
+                for a in articles[:_TOP_ARTICLES]
+            ],
+        }
+        # P3 Agentic RAG（可选开启时才有）：补检轮次与新增条款数
+        meta = result.get("retrieval_meta") or {}
+        if meta.get("rounds"):
+            detail["agentic_rounds"] = meta.get("rounds")
+            detail["agentic_added"] = meta.get("added", 0)
+        return detail
+
+    if name == "rule_scan":
+        return {"hit_count": len(result.get("rule_hits") or [])}
+
+    if name == "llm_scan":
+        usage = result.get("llm_usage") or {}
+        return {
+            "finding_count": len(result.get("llm_findings") or []),
+            "tokens": usage.get("total_tokens"),
+            "failed_blocks": usage.get("failed_blocks"),
+            "model": usage.get("model"),
+        }
+
+    if name == "conflict_resolve":
+        merged = result.get("merged_findings") or []
+        by_source: dict[str, int] = {}
+        for f in merged:
+            src = f.get("source") or "unknown"
+            by_source[src] = by_source.get(src, 0) + 1
+        return {"merged_count": len(merged), "by_source": by_source}
+
+    if name == "human_review":
+        hr = result.get("human_review")
+        if not hr:
+            # 节点直通（关卡未启用/profile=loose）：标记未启用
+            return {"enabled": False}
+        return {
+            "enabled": True,
+            "required": bool(hr.get("required")),
+            "reviewed_count": hr.get("reviewed_count", 0),
+            "rejected_count": len(hr.get("rejected_indexes") or []),
+        }
+
+    if name == "risk_assess":
+        findings = result.get("merged_findings") or []
+        by_risk: dict[str, int] = {}
+        with_cases = 0
+        for f in findings:
+            level = f.get("risk_level") or "unknown"
+            by_risk[level] = by_risk.get(level, 0) + 1
+            if f.get("related_cases"):
+                with_cases += 1
+        return {"by_risk": by_risk, "with_cases": with_cases}
+
+    if name == "report":
+        summary = (result.get("report") or {}).get("summary") or {}
+        return {"total_violations": summary.get("total_violations")}
+
+    return None
+
+
+def _flush_stage(task_id, name: str, entry: dict) -> None:
+    """节点完成即增量落库（审查轨迹实时化，stage_sink）：任何失败静默。"""
+    if not task_id:
+        return
+    try:
+        from src.services.stage_sink import persist_stage
+
+        persist_stage(task_id, name, entry)
+    except Exception:
+        pass  # 侧信道绝不阻断审查主流程；完成时 _finalize_task 整体覆盖兜底
+
 
 def _wrap(node, name: str):
     """包装节点：记录执行耗时，写入 stage_log（并行分支由 reducer 合并）。
 
     耗时同步上报 Langfuse（未配置时 no-op），形成节点级调用链观测。
+    过程明细（detail）随 stage_log 落库，供前端审查轨迹面板展示；
+    每个节点成功完成即经 stage_sink 增量合并落库——运行中轨迹逐节点
+    可见（2026-10-15 实时化修复），完成后由 _finalize_task 整体覆盖定稿。
     """
 
     def wrapped(state):
@@ -62,7 +160,12 @@ def _wrap(node, name: str):
             )
             raise
         cost_ms = int((time.monotonic() - start) * 1000)
-        result["stage_log"] = {name: {"status": "completed", "cost_ms": cost_ms}}
+        entry: dict = {"status": "completed", "cost_ms": cost_ms}
+        detail = _stage_detail(name, result)
+        if detail is not None:
+            entry["detail"] = detail
+        result["stage_log"] = {name: entry}
+        _flush_stage(state.get("task_id"), name, entry)
         _observer.record_node(name, cost_ms, "completed", state.get("task_id"))
         return result
 

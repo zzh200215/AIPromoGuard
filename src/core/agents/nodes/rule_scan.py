@@ -4,6 +4,7 @@ W18：按 app.yaml rule_engine.min_confidence 过滤低置信命中，降低误�
 方向③调阈值杠杆：规则 rule_content.min_confidence 覆盖全局（只影响本规则）。
 """
 
+import re
 from dataclasses import asdict
 
 from src.core.agents.state import ReviewState
@@ -18,7 +19,21 @@ from src.utils.config import settings
 
 def _hit_to_dict(hit: RuleHit) -> dict:
     data = asdict(hit)
-    data["related_regulations"] = list(data.get("related_regulations") or [])
+    regs = list(data.get("related_regulations") or [])
+    data["related_regulations"] = regs
+    # 口径统一：LLM 侧产出的是 `regulation`（字符串），规则侧此前只填 `related_regulations`，
+    # 导致报告/接口里规则命中的"引用"字段为空，任何按 `regulation` 统计的引用支撑率
+    # 都会把规则检出误判为"无依据"（2026-10-22 实测：38%/47% → 合并口径 81%/84%）。
+    # 这里补一个主引用（取首条），保留完整列表，导出器与旧消费者都不受影响。
+    if not str(data.get("regulation") or "").strip():
+        if regs:
+            first = str(regs[0]).replace("《", "").replace("》", "").strip()
+            # 与 LLM 侧对齐成"法规名 第X条"（LLM 产出带空格）
+            data["regulation"] = re.sub(
+                r"(第[一二三四五六七八九十百零〇0-9]+条)", r" \1", first, count=1
+            ).strip()
+        else:
+            data["regulation"] = ""  # 键始终存在，消费方不必再判 None/缺键
     return data
 
 
