@@ -110,6 +110,17 @@ const routes: RouteRecordRaw[] = [
           menuOrder: 2,
         },
       },
+      {
+        path: 'insights',
+        name: 'compliance-insights',
+        component: () => import('@/views/insights/InsightsView.vue'),
+        meta: {
+          title: '合规洞察',
+          icon: 'DataAnalysis',
+          menuGroup: '合规运营',
+          menuOrder: 3,
+        },
+      },
       // ---- 知识库：法规 / 规则 / 检索 / 图谱 / 动态 ----
       {
         path: 'knowledge/regulations',

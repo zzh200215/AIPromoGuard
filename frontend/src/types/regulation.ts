@@ -68,4 +68,8 @@ export interface RegulationSearchHit {
   score: number
   /** 含 <em> 高亮标记，可安全渲染 */
   highlight: string
+  /** 证据链：被多少条审查规则引用（rule_regulation_links） */
+  cited_rules?: number
+  /** 证据链：关联多少起真实处罚案例（penalty_cases.related_regulations） */
+  cited_cases?: number
 }

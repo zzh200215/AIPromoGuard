@@ -54,6 +54,8 @@ export interface ViolationItem {
   result_id?: number
   regulation_id?: number | null
   article_id?: number | null
+  /** 证据核验（conflict_resolve 注入）：引用法规是否在召回上下文中；未引用/null 为不判定 */
+  evidence_supported?: boolean | null
 }
 
 /** LLM 用量与预估成本（成本归因，随报告落盘；无 LLM 调用时省略） */

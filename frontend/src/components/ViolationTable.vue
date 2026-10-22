@@ -9,46 +9,21 @@
     />
     <el-table
       ref="tableRef"
-      :data="violations"
+      :data="rows"
       :size="density"
+      row-key="_rowKey"
+      :expand-row-keys="expandedKeys"
       @selection-change="onSelectionChange"
+      @row-click="onRowClick"
     >
       <el-table-column v-if="selectable" type="selection" width="42" :selectable="rowSelectable" />
       <el-table-column type="expand">
         <template #default="{ row }">
-          <div class="violation-detail">
-            <p><b>规则：</b>{{ row.rule_name || '—' }}</p>
-            <p v-if="row.description"><b>说明：</b>{{ row.description }}</p>
-            <p v-if="row.suggestion"><b>建议：</b>{{ row.suggestion }}</p>
-            <p v-if="row.risk_reason"><b>风险依据：</b>{{ row.risk_reason }}</p>
-            <p v-if="row.related_regulations?.length">
-              <b>相关法规：</b>{{ row.related_regulations.join('；') }}
-              <router-link
-                v-if="row.regulation_id"
-                class="reg-jump"
-                :to="`/knowledge/regulations/${row.regulation_id}`"
-              >
-                查看法规 →
-              </router-link>
-            </p>
-            <p v-if="row.related_cases?.length">
-              <b>关联处罚案例：</b>
-              <span v-for="c in row.related_cases" :key="c.case_name" class="case-chip">
-                {{ c.case_name }}（相似度 {{ (c.similarity * 100).toFixed(0) }}%）
-              </span>
-            </p>
-            <el-button
-              v-if="rewriteable && row.result_id != null"
-              size="small"
-              type="primary"
-              plain
-              :icon="MagicStick"
-              class="rewrite-btn"
-              @click="emit('rewrite', row)"
-            >
-              AI 合规改写
-            </el-button>
-          </div>
+          <ViolationEvidence
+            :violation="row"
+            :rewriteable="rewriteable"
+            @rewrite="emit('rewrite', $event)"
+          />
         </template>
       </el-table-column>
 
@@ -109,8 +84,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { MagicStick } from '@element-plus/icons-vue'
 import TableToolbar from '@/components/TableToolbar.vue'
+import ViolationEvidence from '@/components/ViolationEvidence.vue'
 import { VIOLATION_SOURCE_LABELS } from '@/constants/enums'
 import { useTablePrefs } from '@/composables/tablePrefs'
 import type { HumanStatus, ViolationItem } from '@/types/report'
@@ -150,6 +125,34 @@ const colOn = (key: string) => visibleKeys.value.includes(key)
 
 const tableRef = ref()
 
+/** 行标识：优先 result_id，缺失时按下标——供整行展开用 */
+type Row = ViolationItem & { _rowKey: string }
+const rows = computed<Row[]>(() =>
+  props.violations.map((v, i) => ({
+    ...v,
+    _rowKey: v.result_id != null ? `r-${v.result_id}` : `i-${i}`,
+  })),
+)
+const expandedKeys = ref<string[]>([])
+
+/**
+ * 整行点击即展开/收起证据卡（2026-10-19 演示实操：展开箭头热区太小，现场易点空）。
+ * 行内按钮/链接/表单控件的点击不触发展开，避免误操作。
+ */
+function onRowClick(row: Row, _column: unknown, event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (
+    target?.closest(
+      'button, a, input, textarea, .el-button, .el-checkbox, .el-radio, .el-select, .el-switch',
+    )
+  ) {
+    return
+  }
+  const idx = expandedKeys.value.indexOf(row._rowKey)
+  if (idx >= 0) expandedKeys.value.splice(idx, 1)
+  else expandedKeys.value.push(row._rowKey)
+}
+
 /** 只有能关联到 results 记录的行才可批量判定 */
 function rowSelectable(row: ViolationItem) {
   return row.result_id != null
@@ -182,39 +185,9 @@ const hasHumanStatus = computed(() => props.violations.some((v) => v.human_statu
 </script>
 
 <style scoped>
-.violation-detail {
-  padding: 4px 16px;
-}
-
-.violation-detail p {
-  margin: 6px 0;
-  line-height: 1.6;
-  color: #606266;
-}
-
-.case-chip {
-  display: inline-block;
-  margin: 2px 4px 2px 0;
-  padding: 1px 8px;
-  background: var(--el-color-success-light-9);
-  border: 1px solid var(--el-color-success-light-7);
-  border-radius: 4px;
-  color: var(--el-color-success-dark-2);
-  font-size: 12px;
-}
-
-.reg-jump {
-  margin-left: 8px;
-  color: var(--el-color-primary);
-  font-size: 12px;
-  text-decoration: none;
-}
-
-.reg-jump:hover {
-  text-decoration: underline;
-}
-
-.rewrite-btn {
-  margin-top: 8px;
+/* expand 区由 ViolationEvidence 组件承载（证据卡样式在其内部） */
+/* 整行可点：给正文行一个手型光标，暗示可展开 */
+.violation-table :deep(.el-table__body > tbody > tr:not(.el-table__expanded-cell)) {
+  cursor: pointer;
 }
 </style>

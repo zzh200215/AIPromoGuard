@@ -148,6 +148,28 @@
             </div>
           </div>
         </el-card>
+
+        <!-- 飞轮动态：最近入库/发布（知识库"看起来在长"——数据飞轮可见化） -->
+        <el-card v-if="monitor?.recent_activity" class="flywheel-card">
+          <template #header><span class="card-title">飞轮动态</span></template>
+          <div class="flywheel-list">
+            <div v-if="latestReg" class="flywheel-item">
+              <el-tag size="small" effect="plain" type="primary" class="fw-tag">法规</el-tag>
+              <span class="fw-text" :title="latestReg.name">入库《{{ latestReg.name }}》</span>
+              <span class="fw-time">{{ shortDate(latestReg.created_at) }}</span>
+            </div>
+            <div v-if="latestRule" class="flywheel-item">
+              <el-tag size="small" effect="plain" type="success" class="fw-tag">规则</el-tag>
+              <span class="fw-text" :title="latestRule.name">{{ latestRule.name }}</span>
+              <span class="fw-time">{{ shortDate(latestRule.updated_at) }}</span>
+            </div>
+            <div v-if="latestCase" class="flywheel-item">
+              <el-tag size="small" effect="plain" type="warning" class="fw-tag">罚单</el-tag>
+              <span class="fw-text" :title="latestCase.name">{{ shortCaseName(latestCase.name) }}</span>
+              <span class="fw-time">{{ latestCase.penalty_date ?? '' }}</span>
+            </div>
+          </div>
+        </el-card>
       </div>
     </div>
   </div>
@@ -184,6 +206,19 @@ const auth = useAuthStore()
 const recentTasks = ref<TaskOut[]>([])
 const tasksLoading = ref(false)
 const monitor = ref<SystemMonitor | null>(null)
+
+// ---- 飞轮动态（最近入库/发布，每类取最新一条） ----
+const latestReg = computed(() => monitor.value?.recent_activity?.regulations?.[0])
+const latestRule = computed(() => monitor.value?.recent_activity?.rules?.[0])
+const latestCase = computed(() => monitor.value?.recent_activity?.penalty_cases?.[0])
+
+function shortDate(s?: string | null): string {
+  return s ? s.slice(0, 10) : ''
+}
+
+function shortCaseName(name: string): string {
+  return name.length > 24 ? `${name.slice(0, 24)}…` : name
+}
 const overview = ref<ImpactOverview | null>(null)
 const overviewLoading = ref(false)
 
@@ -641,6 +676,40 @@ onActivated(() => {
     font-size: 16px;
     color: var(--el-text-color-primary);
   }
+}
+
+/* ---- 飞轮动态 ---- */
+.flywheel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.flywheel-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  min-width: 0;
+}
+
+.fw-tag {
+  flex-shrink: 0;
+}
+
+.fw-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--el-text-color-regular);
+}
+
+.fw-time {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 @media (max-width: 1100px) {

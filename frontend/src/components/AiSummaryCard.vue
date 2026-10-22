@@ -24,8 +24,10 @@
     </div>
 
     <template v-else-if="summary?.text">
-      <div class="summary-text">{{ summary.text }}</div>
-      <div class="meta">
+      <div class="summary-text">
+        {{ displayText }}<span v-if="typing" class="type-cursor">▌</span>
+      </div>
+      <div v-if="!typing" class="meta">
         AI 生成，仅供参考 · 模型 {{ summary.model }} · {{ summary.generated_at }}
         <span v-if="summary.stale"> · 结论已变化，点击右上角重新生成</span>
       </div>
@@ -41,6 +43,7 @@
 import { onMounted, ref, watch } from 'vue'
 import { MagicStick } from '@element-plus/icons-vue'
 import { summarizeTask, type SummaryResponse } from '@/api/ai'
+import { useTypewriter } from '@/composables/useTypewriter'
 
 const props = defineProps<{
   taskId: number | null
@@ -48,6 +51,8 @@ const props = defineProps<{
 
 const summary = ref<SummaryResponse | null>(null)
 const loading = ref(false)
+/** 打字机（伪流式）：主动生成时逐字呈现"AI 在说话"；缓存回看直接显示 */
+const { text: displayText, typing, start: typewrite, set: setText } = useTypewriter()
 /** 综述跟随任务：换任务即失效重新拉取（服务端按报告持久化，未过期不重复调用） */
 let loadedFor: number | null = null
 
@@ -55,8 +60,16 @@ async function generate(force = false) {
   if (props.taskId == null || loading.value) return
   loading.value = true
   try {
-    summary.value = await summarizeTask(props.taskId, force)
+    const res = await summarizeTask(props.taskId, force)
+    summary.value = res
     loadedFor = props.taskId
+    if (force) {
+      // 用户主动生成/重新生成 → 逐字呈现
+      typewrite(res.text ?? '')
+    } else {
+      // 自动加载（缓存命中回看）→ 直接显示，不做打字机
+      setText(res.text ?? '')
+    }
   } catch {
     // 静默请求：失败（如 AI 服务未配置）不弹全局提示，界面保持可手动重试
   } finally {
@@ -69,6 +82,7 @@ watch(
   () => props.taskId,
   (id) => {
     if (id != null && loadedFor !== id) {
+      setText('')
       summary.value = null
       void generate(false)
     }
@@ -106,6 +120,13 @@ onMounted(() => {
     color: var(--el-text-color-primary);
   }
 
+  .type-cursor {
+    display: inline-block;
+    margin-left: 1px;
+    color: var(--el-color-primary);
+    animation: ai-cursor-blink 1s step-end infinite;
+  }
+
   .meta {
     margin-top: 10px;
     font-size: 12px;
@@ -114,6 +135,16 @@ onMounted(() => {
 
   .placeholder {
     padding: 4px 0;
+  }
+}
+
+@keyframes ai-cursor-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
   }
 }
 </style>

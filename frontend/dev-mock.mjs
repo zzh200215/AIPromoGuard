@@ -17,10 +17,39 @@ const TASK = (i, status, progress, extra = {}) => ({
   status,
   progress,
   stages: {
-    classify: { status: 'completed', cost_ms: 120 },
-    regulation_match: { status: 'completed', cost_ms: 430 },
-    rule_scan: { status: 'completed', cost_ms: 65 },
-    llm_scan: { status: 'completed', cost_ms: 3200 },
+    classify: { status: 'completed', cost_ms: 120, detail: { domain: 'fund' } },
+    regulation_match: {
+      status: 'completed',
+      cost_ms: 430,
+      detail: {
+        article_count: 5,
+        top_articles: [
+          { name: '公开募集证券投资基金销售机构监督管理办法', article_no: '第二十四条' },
+        ],
+      },
+    },
+    rule_scan: { status: 'completed', cost_ms: 65, detail: { hit_count: 3 } },
+    llm_scan: {
+      status: 'completed',
+      cost_ms: 3200,
+      detail: { finding_count: 4, tokens: 18432, failed_blocks: 0, model: 'qwen-plus' },
+    },
+    conflict_resolve: {
+      status: 'completed',
+      cost_ms: 30,
+      detail: { merged_count: 8, by_source: { rule: 3, llm: 4, hybrid: 1 } },
+    },
+    human_review: {
+      status: 'completed',
+      cost_ms: 5,
+      detail: { enabled: true, required: true, reviewed_count: 2, rejected_count: 1 },
+    },
+    risk_assess: {
+      status: 'completed',
+      cost_ms: 800,
+      detail: { by_risk: { high: 2, medium: 2, low: 1 }, with_cases: 3 },
+    },
+    report: { status: 'completed', cost_ms: 90, detail: { total_violations: 5 } },
   },
   created_at: '2026-09-11 10:24:00',
   ...extra,
@@ -328,6 +357,20 @@ const routes = {
       timestamp: '2026-09-12 10:00:00',
       tasks: { last_24h: 12, completed: 9, running: 1, pending: 2, avg_duration_seconds: 42.5 },
       database: { ok: true, knowledge_base: { regulations: 48, rules: 82, users: 6 } },
+      recent_activity: {
+        regulations: [
+          { id: 48, name: '互联网保险业务监管办法', created_at: '2026-09-10T09:12:00' },
+          { id: 47, name: '保险经纪人监管规定', created_at: '2026-09-08T15:40:00' },
+        ],
+        rules: [
+          { id: 85, name: '禁止承诺保本保收益（挖掘）', status: 'active', updated_at: '2026-09-11T10:30:00' },
+          { id: 84, name: '历史业绩披露不完整', status: 'draft', updated_at: '2026-09-09T17:05:00' },
+        ],
+        penalty_cases: [
+          { id: 68, name: '国家金融监督管理总局安徽监管局对某保险公司中心支公司行政处罚案', penalty_date: '2026-08-28' },
+          { id: 67, name: '中国证监会某证监局对某基金销售机构行政处罚案', penalty_date: '2026-08-15' },
+        ],
+      },
       vector_store: { legal_articles: 809, legal_penalty_cases: 68 },
       graph: {
         available: true,
@@ -486,11 +529,19 @@ const routes = {
       ],
       total: 42,
     }),
+  'GET /api/v1/regulations/2/articles': () =>
+    ok({
+      items: [
+        { id: 21, article_no: '第二十四条', chapter_no: '第四章', section_no: '', content: '基金销售机构宣传推介基金时，不得有下列行为：（一）虚假记载、误导性陈述或者重大遗漏；（二）预测基金的投资业绩；（三）承诺收益或者承担损失。', vector_id: 'vec_021' },
+        { id: 22, article_no: '第二十五条', chapter_no: '第四章', section_no: '', content: '基金销售机构应当向投资人充分揭示投资风险，根据投资人的风险承担能力销售不同风险等级的基金产品。', vector_id: 'vec_022' },
+      ],
+      total: 58,
+    }),
   'POST /api/v1/regulations/search': () =>
     ok({
       results: [
-        { article_id: 2, regulation_name: '关于加强金融产品网络营销管理的通知', article_no: '第十二条', content: '不得利用宣传材料承诺保本保收益或者暗示收益区间。', highlight: '不得利用宣传材料<em>承诺保本保收益</em>或者暗示收益区间。', status: 'effective', score: 0.923 },
-        { article_id: 5, regulation_name: '公开募集证券投资基金销售机构监督管理办法', article_no: '第二十四条', content: '禁止预测基金投资业绩或者承诺收益。', highlight: '禁止预测基金投资业绩或者<em>承诺收益</em>。', status: 'effective', score: 0.887 },
+        { article_id: 2, regulation_name: '关于加强金融产品网络营销管理的通知', article_no: '第十二条', content: '不得利用宣传材料承诺保本保收益或者暗示收益区间。', highlight: '不得利用宣传材料<em>承诺保本保收益</em>或者暗示收益区间。', status: 'effective', score: 0.923, cited_rules: 3, cited_cases: 2 },
+        { article_id: 5, regulation_name: '公开募集证券投资基金销售机构监督管理办法', article_no: '第二十四条', content: '禁止预测基金投资业绩或者承诺收益。', highlight: '禁止预测基金投资业绩或者<em>承诺收益</em>。', status: 'effective', score: 0.887, cited_rules: 1, cited_cases: 5 },
       ],
       total: 2,
     }),

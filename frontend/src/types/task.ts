@@ -9,10 +9,44 @@ export type TaskStatus =
   | 'failed'
   | 'cancelled'
 
-/** stages 结构：{ 节点名: {status, cost_ms} }（W14 状态追踪，见 src/core/agents/graph.py） */
+/** stages 结构：{ 节点名: {status, cost_ms, detail?} }
+ * （W14 状态追踪 + 审查轨迹明细，见 src/core/agents/graph.py _stage_detail） */
 export interface TaskStageDetail {
   status: string
   cost_ms: number
+  /** 节点过程明细（审查轨迹面板数据源；enrich 上线前的旧任务无此字段） */
+  detail?: StageNodeDetail
+}
+
+/** 各节点的过程明细字段（按节点名选用；全部来自 state 已有数据） */
+export interface StageNodeDetail {
+  /** classify */
+  domain?: string | null
+  /** regulation_match */
+  article_count?: number
+  top_articles?: Array<{ name: string; article_no?: string | null }>
+  agentic_rounds?: number
+  agentic_added?: number
+  /** rule_scan */
+  hit_count?: number
+  /** llm_scan */
+  finding_count?: number
+  tokens?: number | null
+  failed_blocks?: number | null
+  model?: string | null
+  /** conflict_resolve */
+  merged_count?: number
+  by_source?: Record<string, number>
+  /** human_review */
+  enabled?: boolean
+  required?: boolean
+  reviewed_count?: number
+  rejected_count?: number
+  /** risk_assess */
+  by_risk?: Record<string, number>
+  with_cases?: number
+  /** report */
+  total_violations?: number | null
 }
 
 /** 审查策略：strict=对外投放(全量人工复核) / standard=常规 / loose=内部预检 */

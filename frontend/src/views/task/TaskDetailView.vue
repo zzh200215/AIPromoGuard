@@ -139,6 +139,32 @@
                 </div>
               </el-card>
 
+              <!-- 审查轨迹（stage_log.detail）：节点级过程明细，审查过程的永久记录 -->
+              <el-card shadow="never" class="section-card">
+                <template #header>
+                  <div class="card-header">
+                    <span class="card-title">
+                      审查轨迹（{{ stageSummary.count }} 个节点 · {{ stageSummary.seconds }}s）
+                    </span>
+                    <el-button
+                      size="small"
+                      text
+                      type="primary"
+                      @click="traceExpanded = !traceExpanded"
+                    >
+                      {{ traceExpanded ? '收起' : '展开' }}
+                    </el-button>
+                  </div>
+                </template>
+                <TaskProgressBar
+                  v-show="traceExpanded"
+                  :status="task.status"
+                  :progress="100"
+                  :task="task"
+                  :show-progress="false"
+                />
+              </el-card>
+
               <AiSummaryCard :task-id="taskId" />
 
               <el-card shadow="never" class="section-card">
@@ -334,6 +360,14 @@ const { task, error: pollError, start, stop } = useTaskPolling(taskId)
 const isRunning = computed(() => {
   const s = task.value?.status
   return s === 'pending' || s === 'running' || s === 'processing'
+})
+
+// ---- 审查轨迹（报告页回看）：节点数与总耗时（stage_log 由后端各节点写入） ----
+const traceExpanded = ref(false)
+const stageSummary = computed(() => {
+  const stages = Object.values(task.value?.stages ?? {})
+  const seconds = stages.reduce((sum, s) => sum + (s.cost_ms ?? 0), 0) / 1000
+  return { count: stages.length, seconds: seconds.toFixed(1) }
 })
 
 // ---- 失败重试：复位重新入队后恢复轮询；文档缺失时接口会明确报错 ----
