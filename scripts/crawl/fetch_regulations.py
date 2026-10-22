@@ -30,6 +30,7 @@ import tempfile
 import time
 from datetime import date
 from pathlib import Path
+from urllib.parse import urljoin
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -111,6 +112,11 @@ def _norm_title(title: str) -> str:
     """标题归一：去书名号/空白/标点，便于《通知》标题与法规名对齐。"""
     t = re.sub(r"[《》\s（）()【】、，,。.:：;；\"'“”]", "", title or "")
     return t.lower()
+
+
+def _safe_filename(name: str) -> str:
+    """Windows 文件名非法字符（<>:"/\\|?*）替换为下划线，防止写盘 PermissionError。"""
+    return re.sub(r'[<>:"/\\|?*]', "_", name or "")
 
 
 def title_score(watch: str, candidate: str) -> float:
@@ -417,13 +423,26 @@ def _attachment_text(attachments) -> str:
     return ""
 
 
+def _clob_text(clob: str) -> str:
+    """Word 导出 HTML → 正文。
+
+    坑：docClob 里每个词常被包成独立内联元素，`get_text("\\n")` 会把
+    "第二条" 拆成 "第\\n二\\n条"，行首锚点全失效、条款切出 0 条。
+    按 <p> 段落取文本再拼行，既保留段落边界又不碎词。
+    """
+    soup = BeautifulSoup(clob, "lxml")
+    paras = [p.get_text("", strip=True) for p in soup.find_all("p")]
+    paras = [p for p in paras if p]
+    return "\n".join(paras) if paras else soup.get_text("\n", strip=True)
+
+
 def nfra_fetch(doc_id: int) -> tuple[str, str | None]:
     """详情 docClob（Word 导出全文 HTML）为主，附件为兜底；返回 (正文, 文号)。"""
     data = (_get(NFRA_DETAIL.format(doc_id=doc_id)).json() or {}).get("data") or {}
     text = ""
     clob = data.get("docClob") or ""
     if clob:
-        text = BeautifulSoup(clob, "lxml").get_text("\n", strip=True)
+        text = _clob_text(clob)
     if len(text.strip()) < 500:
         text = _attachment_text(data.get("attachmentInfoVOList")) or text
     return text, _clean(data.get("documentNo") or "") or None
@@ -450,20 +469,64 @@ def csrc_list_items() -> list[dict]:
     return items
 
 
+def _docx_text(url: str) -> str:
+    """下载 .docx 并取段落文本（CSRC 规章页提供"下载文字版"，比网页正文干净）。"""
+    resp = _get(url)
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+        f.write(resp.content)
+        tmp = f.name
+    try:
+        import docx  # python-docx
+
+        doc = docx.Document(tmp)
+        paras = [p.text.strip() for p in doc.paragraphs]
+        return "\n".join(p for p in paras if p)
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+
+
+def _csrc_web_text(soup) -> str:
+    """网页正文兜底：取含"第X条"最密的块，剥掉页头噪声行。"""
+    best, best_hits = None, -1
+    for node in soup.find_all(["div", "td"]):
+        t = node.get_text("\n", strip=True)
+        hits = len(re.findall(r"第[一二三四五六七八九十百零〇0-9]+条", t))
+        if hits > best_hits and len(t) > 500:
+            best, best_hits = t, hits
+    text = best or ""
+    noise = ("中国证券监督管理委员会规章", "下载图片版", "下载文字版", "打印本页", "关闭窗口")
+    lines = [ln for ln in text.split("\n") if ln.strip() and ln.strip() not in noise]
+    return "\n".join(lines)
+
+
 def csrc_fetch(url: str) -> tuple[str, str | None]:
     resp = _get(url)
     resp.encoding = resp.charset_encoding or "utf-8"
     soup = BeautifulSoup(resp.text, "lxml")
-    node = soup.select_one(".content") or soup.select_one(".detail-content")
-    text = node.get_text("\n", strip=True) if node else ""
-    # 规章全文常以附件发布：正文过短时下载 .doc/.pdf 兜底
+    text = ""
+    # 1) 优先"下载文字版"（.docx/.doc）：段落边界干净，条款锚点可靠
+    docx_url = None
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if not re.search(r"\.(docx?|wps)$", href, re.IGNORECASE):
+            continue
+        if "文字版" in (a.get_text() or "") or docx_url is None:
+            docx_url = urljoin(url, href)
+            if "文字版" in (a.get_text() or ""):
+                break
+    if docx_url and docx_url.lower().endswith(".docx"):
+        try:
+            text = _docx_text(docx_url)
+        except Exception as exc:  # noqa: BLE001
+            print(f"  ! CSRC 文字版解析失败 {type(exc).__name__}: {docx_url[-40:]}")
+            text = ""
+    # 2) 网页正文兜底
     if len(text.strip()) < 500:
-        atts = [
-            a["href"]
-            for a in soup.find_all("a", href=True)
-            if re.search(r"\.(pdf|docx?|wps)$", a["href"], re.IGNORECASE)
-        ]
-        text = _attachment_text([{"fileUrl": atts[0]}]) if atts else ""
+        text = _csrc_web_text(soup)
+    # 文号：优先"证监会令第N号"（规章口径），避免被"2021年3月18日证监会令第182号"截断成半句
+    m = re.search(r"证监会令第\s*\d+\s*号", text[:2000])
+    if m:
+        return text, _clean(m.group(0))
     m = re.search(r"[^\s]{2,20}[〔\[]\d{4}[〕\]]\s*\d+\s*号", text[:2000])
     return text, (_clean(m.group(0)) if m else None)
 
@@ -520,8 +583,8 @@ def validate_regulation(reg: dict) -> list[str]:
 
 # ---------- 主流程 ----------
 
-def _load_watchlist() -> list[dict]:
-    with WATCHLIST_PATH.open(encoding="utf-8") as f:
+def _load_watchlist(path: Path | None = None) -> list[dict]:
+    with (path or WATCHLIST_PATH).open(encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -663,9 +726,11 @@ def _extract_doc_no(text: str, title: str) -> str | None:
     return None
 
 
-def _finish(entry: dict, text: str, doc_no: str | None, meta: dict, llm) -> dict | None:
+def _finish(
+    entry: dict, text: str, doc_no: str | None, meta: dict, llm, min_articles: int = 5
+) -> dict | None:
     articles, method = text_to_articles(text, llm)
-    if len(articles) < 5:
+    if len(articles) < min_articles:
         print(f"  ! 条款切分不足({len(articles)})，放弃: {entry['regulation_name']}")
         return None
     meta["extraction"] = method
@@ -689,16 +754,28 @@ def main() -> None:
     parser.add_argument(
         "--out-dir", default=str(DEFAULT_OUT_DIR), help="草稿输出目录（pending）"
     )
+    parser.add_argument(
+        "--watchlist",
+        default="",
+        help="改用指定 watchlist 文件（默认 scripts/crawl/regulation_watchlist.json）",
+    )
     parser.add_argument("--dry-run", action="store_true", help="不落盘，只打印抓取结果")
+    parser.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="禁用 LLM 结构化兜底（配额受限时用；切分质量不达标的条目会直接判未命中）",
+    )
     args = parser.parse_args()
 
     from src.core.llm.client import get_llm
 
-    llm = get_llm()
-    if llm is None:
+    llm = None if args.no_llm else get_llm()
+    if args.no_llm:
+        print("  --no-llm：仅确定性切分（不吃 LLM 配额）")
+    elif llm is None:
         print("  未配置 DASHSCOPE_API_KEY：LLM 结构化兜底不可用，仅确定性切分")
 
-    watchlist = _load_watchlist()
+    watchlist = _load_watchlist(Path(args.watchlist) if args.watchlist else None)
     targets = [t for t in args.targets.split(",") if t.strip()]
     if targets:
         watchlist = [w for w in watchlist if any(t in w["regulation_name"] for t in targets)]
@@ -737,7 +814,8 @@ def main() -> None:
         for p in reg["_meta"]["problems"]:
             print(f"    ! 校验: {p}")
         if not args.dry_run:
-            out = out_dir / f"{reg['domain']}-{_norm_title(reg['regulation_name'])[:40]}.json"
+            stem = _safe_filename(_norm_title(reg["regulation_name"]))[:40]
+            out = out_dir / f"{reg['domain']}-{stem}.json"
             out.write_text(json.dumps(reg, ensure_ascii=False, indent=2), encoding="utf-8")
             print(f"  → {out.name}")
 

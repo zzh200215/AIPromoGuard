@@ -127,6 +127,7 @@ def search_regulations(
     results = regulation_service.search(
         db, body.query, body.search_type, body.domain, body.top_k
     )
+    results = regulation_service.annotate_citation_links(db, results)
     return ok({"total": len(results), "results": results})
 
 
