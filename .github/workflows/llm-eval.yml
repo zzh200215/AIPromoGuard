@@ -1,0 +1,85 @@
+# LLM 引擎语义回归门禁：held-out 变体集（保义改写绕开全部字面规则）跑全链路，
+# 召回/误报跌破阈值即红。补齐「规则引擎有 CI 门禁、LLM 引擎没有」的缺口。
+#
+# 与 eval-gate.yml 的分工：
+#   eval-gate = 规则引擎指标门禁（确定性、零 LLM key、每次 push 必跑）
+#   llm-eval  = LLM 语义引擎回归（需真实调用、有成本，手动/周度跑，不随 push 触发）
+#
+# 启用方式（一次性）：仓库 Settings → Secrets and variables → Actions →
+#   新增 secret DASHSCOPE_API_KEY（或任何 OpenAI 兼容网关的 key，
+#   若网关非 DashScope 需同时配 LLM_BASE_URL/LLM_MODEL secret 并在 env 段透传）。
+# 未配置 key 时本 workflow 显示 skipped（诚实状态，不假装在跑）。
+#
+# 阈值口径：变体集全链路基线为召回 100% / 误报 0%（docs/benchmark.md），
+# 门禁放宽到 0.95 / 0.05 留模型漂移余量——跌破说明 LLM 引擎行为回归，红。
+name: llm-eval
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 21 * * 0"  # 每周一 05:00 北京时间
+
+jobs:
+  llm-eval:
+    if: ${{ secrets.DASHSCOPE_API_KEY != '' }}
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root123
+          MYSQL_DATABASE: compliance_review
+          TZ: Asia/Shanghai
+        ports:
+          - "3306:3306"
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -proot123 --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: 3306
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root123
+      MYSQL_DATABASE: compliance_review
+      DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          pip install -e ".[dev]"
+
+      - name: Init schema (Alembic)
+        run: python -m alembic upgrade head
+
+      - name: Seed rules + regulations (LLM 引擎检索上下文所需)
+        run: |
+          python scripts/init_data/import_rules.py
+          python scripts/init_data/import_regulations.py
+
+      - name: Build article vector index
+        run: python scripts/init_data/index_articles.py
+
+      - name: Run LLM-engine eval on held-out variant set (gated)
+        run: |
+          set -o pipefail
+          mkdir -p scripts/evaluate/reports
+          python scripts/evaluate/evaluate.py --engine full \
+            --cases scripts/evaluate/variant_cases.json \
+            --min-recall 0.95 --max-fpr 0.05 \
+            | tee scripts/evaluate/reports/llm-eval-variant.txt
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-eval-report
+          path: scripts/evaluate/reports/
+          retention-days: 30
