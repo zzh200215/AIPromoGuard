@@ -205,6 +205,7 @@ frontend/                # Vue3 前端（任务/知识库/图谱/影响中心/�
 - **CI（GitHub Actions）**：ruff 静态检查 + 全量测试（MySQL service + 完整种子与向量索引配方，本地已用全新库验证）+ 前端生产构建；另有独立的规则引擎指标门禁 workflow（跌破召回/误报阈值即红）
 - **评估门禁**：独立于单测的准确率评估（精确字符级 span 匹配），`--min-recall/--max-fpr` 退出码可接 CI
 - **Prompt 注册表**：8 个系统 prompt 集中于 `configs/prompts/registry.yaml`（version + changelog 纪律由 CI 结构门禁 `test_prompt_registry.py` 强制，锚点防截断、调用方接线一致性防绕过），`llm_scan` 的 stage_log 记录 `review@版本号`——LLM 行为变更可溯源到具体 prompt 版本；LLM 引擎语义回归由 `llm-eval` workflow（held-out 变体集 + 指标门禁，配置 `DASHSCOPE_API_KEY` secret 后自动可用）守住
+- **提示注入防护**：被审查材料是不可信输入——规则层新增 **general 域全局规则**「疑似提示注入指令」（`engine.py` 支持 general 规则跨 banking/fund/insurance 生效；注入企图命中即 high 风险进人工复核），prompt 层 `review@v2` 注入加固（文档内指令性内容一律视为待审数据而非指令，检出即输出提示注入 finding）；对抗集 `injection_cases.json` 8 案例（注入+真实违规双标注、良性对照防误报）由 `test_injection_guard.py` 全量守卫（含历史评估语料 150+ 案例零误报断言）
 - **数据卫生**：人工复核统计只计真实人工数据（排除系统自动确认，避免循环论证）；有标注集构建与数据事故的复盘记录（docs/evaluation.md）
 
 ## 已知限制（诚实清单）

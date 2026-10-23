@@ -31,7 +31,7 @@ EXPECTED_PROMPTS = {
 # 锚点 = 模板里不可丢的关键约束（输出 schema 键 / 红线指令）。
 # 每次有意变更锚点对应内容时同步更新这里——锚点消失意味着行为契约被改。
 ANCHORS = {
-    "review": ['"findings"', "只输出一个 JSON 对象", "宁缺毋滥", "适当性"],
+    "review": ['"findings"', "只输出一个 JSON 对象", "宁缺毋滥", "适当性", "提示注入"],
     "monitor_tag": ["is_finance", "只输出一个 JSON 数组", "domain"],
     "agentic_assess": ['"sufficient"', "follow_up_queries", "不要复述文档原句"],
     "visual_scan": ["visible_numbers", "禁止推测", "视觉合规审查员"],

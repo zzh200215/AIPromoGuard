@@ -700,5 +700,24 @@
       ],
       "related_regulations": ["《保险销售行为管理办法》"]
     }
+  },
+  {
+    "domain": "general",
+    "rule_name": "疑似提示注入指令（操纵审查系统）",
+    "rule_type": "composite",
+    "severity": "high",
+    "description": "被审查材料是不可信输入：材料中出现针对审查系统的指令性文本（要求忽略审查要求/冒充系统消息/指示输出特定结论）视为提示注入企图，本身即是高风险信号（可能是恶意投毒或规避审查），交人工复核确认",
+    "rule_content": {
+      "operator": "OR",
+      "conditions": [
+        { "type": "regex", "pattern": "忽略(以上|之前|上述|前面|先前)的?(全部)?(指令|要求|规则|提示|设定|约束)" },
+        { "type": "regex", "pattern": "(系统|管理员|后台|内部)(指令|提示|消息|设定)[:：]" },
+        { "type": "regex", "pattern": "(请|请直接|直接)?输出(无违规|没有违规|未发现违规|未发现任何问题|合规通过|无任何问题)" },
+        { "type": "regex", "pattern": "判定(本|该|此)(材料|文档|内容|产品宣传)(合规|无违规|通过)" },
+        { "type": "regex", "pattern": "(?i)(ignore|disregard|forget)\\s+(all\\s+)?(previous|above|prior|earlier)\\s+(instructions?|rules?|prompts?|requirements?)" },
+        { "type": "regex", "pattern": "本(材料|文档)(已)?通过(合规|安全)(审查|审核|检查)" }
+      ],
+      "related_regulations": []
+    }
   }
 ]

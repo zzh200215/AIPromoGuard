@@ -47,10 +47,14 @@ class RuleScanner:
     ) -> list[RuleHit]:
         """按领域过滤 active 规则后扫描文档块。
 
-        domain 为 None 时不过滤（用于跨领域或分类未定的场景）。
+        domain 为 None 时不过滤（用于跨领域或分类未定的场景）；
+        domain 为 "general" 的规则是全局规则（如提示注入防护），对任意领域生效。
         """
         if domain:
-            rules = [r for r in rules if getattr(r, "domain", None) == domain]
+            rules = [
+                r for r in rules
+                if getattr(r, "domain", None) in (domain, "general")
+            ]
         hits: list[RuleHit] = []
         for block in blocks:
             for rule in rules:
