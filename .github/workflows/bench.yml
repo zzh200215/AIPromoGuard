@@ -44,7 +44,6 @@ jobs:
       MYSQL_PASSWORD: root123
       MYSQL_DATABASE: compliance_review
       DASHSCOPE_API_KEY: ""
-      PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
 
     steps:
       - uses: actions/checkout@v4

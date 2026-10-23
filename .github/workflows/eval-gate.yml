@@ -7,7 +7,6 @@
 # 说明:
 # - runner 工作目录是 ASCII 路径，不受本地 buildx 中文路径 bug 影响
 #   （docker/buildx#3972，本地构建 workaround 见 docker/docker-compose.yml 顶部注释）。
-# - 仓库当前未推送（无 remote），此 workflow 在首次 push 后才会生效。
 # - 真实复核回流（方向③）：scripts/evaluate/reflow_labels.py 把人工确认/误报批量生成
 #   带标注样本写回 scripts/evaluate/registry.json（只增不减）并产出 gate_cases.json；
 #   test_eval_gate.py 存在 gate_cases.json 时优先用它跑门禁——提交回流产物即让 CI
@@ -16,18 +15,21 @@
 name: eval-gate
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "src/**"
       - "scripts/**"
       - "configs/**"
       - "tests/**"
+      - ".github/workflows/eval-gate.yml"
   pull_request:
     paths:
       - "src/**"
       - "scripts/**"
       - "configs/**"
       - "tests/**"
+      - ".github/workflows/eval-gate.yml"
 
 jobs:
   rule-eval-gate:
@@ -52,7 +54,6 @@ jobs:
       MYSQL_USER: root
       MYSQL_PASSWORD: root123
       MYSQL_DATABASE: compliance_review
-      PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
     steps:
       - uses: actions/checkout@v4
 
