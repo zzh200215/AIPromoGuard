@@ -60,7 +60,7 @@ jobs:
       - name: Init schema (Alembic)
         run: python -m alembic upgrade head
 
-      - name: Seed data (minimal: rules / regulations / admin)
+      - name: "Seed data (minimal: rules / regulations / admin)"
         run: |
           python scripts/init_data/import_rules.py
           python scripts/init_data/import_regulations.py
@@ -73,7 +73,7 @@ jobs:
         run: |
           python scripts/bench/bench_retrieval_latency.py --json bench-out/retrieval.json
 
-      - name: Review throughput bench (offline: LLM 降级)
+      - name: "Review throughput bench (offline: LLM 降级)"
         run: |
           python scripts/bench/bench_review_throughput.py \
             --levels "${{ github.event.inputs.levels }}" \
