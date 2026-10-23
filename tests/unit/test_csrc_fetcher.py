@@ -22,7 +22,9 @@ def _soup(html: str):
 def test_csrc_web_text_strips_page_noise():
     """页头噪声行（独立成行）必须被剥掉，正文首行仍是条款。"""
     paras = "<p>中国证券监督管理委员会规章</p><p>下载图片版</p><p>下载文字版</p>"
-    body = "".join(f"<p>第{i}条 为了规范上市公司信息披露行为，制定本办法。</p>" for i in range(1, 40))
+    body = "".join(
+        f"<p>第{i}条 为了规范上市公司信息披露行为，制定本办法。</p>" for i in range(1, 40)
+    )
     text = _csrc_web_text(_soup(f"<div>{paras}{body}</div>"))
     assert "下载文字版" not in text
     assert "中国证券监督管理委员会规章" not in text

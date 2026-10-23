@@ -128,7 +128,7 @@ def main() -> None:
 
     secs = [r["s"] for r in rows]
     comps = [r["c"] for r in rows]
-    print("\n汇总（重复 %d 次）:" % len(rows))
+    print(f"\n汇总（重复 {len(rows)} 次）:")
     p90 = sorted(secs)[max(int(len(secs) * 0.9) - 1, 0)]
     print(f"  耗时   中位数 {statistics.median(secs)}s | p90 {p90}s | "
           f"区间 {min(secs)}-{max(secs)}s | 波动 {max(secs) / max(min(secs), 0.1):.1f}×")

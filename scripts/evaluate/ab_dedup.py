@@ -1,4 +1,5 @@
 import time
+
 import src.utils.config as cfg
 
 orig = cfg._load_yaml

@@ -31,6 +31,7 @@ def _admin_headers() -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+@pytest.mark.skipif(not _db_ready(), reason="数据库不可用")
 def test_monitor_requires_permission():
     """非管理员（viewer）无 monitor 权限。"""
     client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin123"})
