@@ -17,6 +17,7 @@ import re
 from pathlib import Path
 
 from src.core.llm.client import extract_findings
+from src.core.llm.prompts.registry import get_prompt
 from src.utils.config import settings
 from src.utils.logger import get_logger
 
@@ -24,22 +25,8 @@ logger = get_logger(__name__)
 
 _MIME = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "bmp": "image/bmp"}
 
-_VLM_SYSTEM = (
-    "你是金融营销材料的视觉合规审查员。给定宣传图片与其中识别出的文字（OCR），"
-    "只审查视觉层风险，文字内容的违规由其他引擎负责，不要重复报告：\n"
-    "1) 收益/利率数字的放大、变色、居中等视觉强调；\n"
-    "2) '保本''稳赚''零风险'等文字的视觉强化（大字/红色/图形底衬）；\n"
-    "3) 图形符号暗示（盾牌=保障、上升箭头=收益承诺、钱袋金币=保本兜底）；\n"
-    "4) 风险提示的视觉弱化（字号远小于收益宣传、置于角落、浅色低对比度）或缺失；\n"
-    "5) 名人/专家/权威机构形象的收益背书暗示。\n"
-    "同时逐字读出图中出现的**关键数字**（利率/收益率/金额/期限/日期类，"
-    "不含产品编号与嵌在名称里的序号），用于与文字材料交叉校验是否被篡改。\n"
-    '只输出 JSON 对象：{"findings": [{"issue": "问题短标题", "reason": "判定依据", '
-    '"original_text": "对应的OCR文字片段或视觉元素描述", "severity": "high|medium|low", '
-    '"confidence": 0到1的小数, "suggestion": "整改建议"}], '
-    '"visible_numbers": [{"value": "数字本身不带单位", "context": "紧邻标签(10字内)"}]}。'
-    '没有视觉层问题时 findings 输出 []；严格只报图中真实可见的数字，禁止推测。'
-)
+_VLM = get_prompt("visual_scan")
+_VLM_SYSTEM = _VLM.template
 
 
 def _data_url(image_path: str | Path) -> str | None:

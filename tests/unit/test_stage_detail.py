@@ -65,9 +65,18 @@ def test_llm_scan_detail_with_usage():
 
 
 def test_llm_scan_detail_degraded_no_key():
-    # 无 API Key 降级：usage=None 不崩，字段保留 None（前端显示"未启用"）
+    # 无 API Key 降级：usage=None 不崩，字段保留 None（前端显示"未启用"）；
+    # prompt 版本号来自注册表（随版本演进自动同步）
+    from src.core.llm.prompts.registry import get_prompt
+
     d = _stage_detail("llm_scan", {"llm_findings": [], "llm_usage": None})
-    assert d == {"finding_count": 0, "tokens": None, "failed_blocks": None, "model": None}
+    assert d == {
+        "finding_count": 0,
+        "tokens": None,
+        "failed_blocks": None,
+        "model": None,
+        "prompt": f"review@{get_prompt('review').version}",
+    }
 
 
 def test_conflict_resolve_detail_by_source():

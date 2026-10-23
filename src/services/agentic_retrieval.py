@@ -20,20 +20,13 @@ import re
 from sqlalchemy.orm import Session
 
 from src.core.llm.client import merge_usage
+from src.core.llm.prompts.registry import get_prompt
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-_ASSESS_SYSTEM = (
-    "你是法规检索质量评估员。给定金融产品营销文档片段和当前召回的法规条款，"
-    "判断这些条款是否足以支撑对该文档的全面合规审查。"
-    "只有当前条款已覆盖文档涉及的主要监管主题（如收益承诺、风险揭示、投资者适当性、"
-    "信息披露、宣传方式等）时才判定充分；不要因为条款数量多就判定充分。"
-    "判定不充分时，给出 1-3 个补充检索查询：使用监管术语或法规主题词"
-    "（如\"销售适当性管理\"\"风险提示义务\"），不要复述文档原句。"
-    '只输出一个 JSON 对象：{"sufficient": true, "reason": "一句话理由", '
-    '"follow_up_queries": ["查询1", "查询2"]}。'
-)
+_ASSESS = get_prompt("agentic_assess")
+_ASSESS_SYSTEM = _ASSESS.template
 
 _ASSESS_DOC_CHARS = 600      # 评估用文档片段截断
 _ASSESS_ARTICLE_CHARS = 60   # 评估用条款内容截断

@@ -204,6 +204,7 @@ frontend/                # Vue3 前端（任务/知识库/图谱/影响中心/�
 - **单元 + 集成测试**：689 个用例（规则引擎 / LangGraph 工作流与人工复核 / 领域路由 / LLM 输出校验与工具查证 / 检索融合 / 爬虫解析 / API 层 / MCP stdio 协议级集成 / 影响中心全链路与整改复测闭环 / MySQL checkpointer 原语与跨重启恢复 / 孤儿任务自愈），`pytest tests/ --basetemp=.pytest-tmp`
 - **CI（GitHub Actions）**：ruff 静态检查 + 全量测试（MySQL service + 完整种子与向量索引配方，本地已用全新库验证）+ 前端生产构建；另有独立的规则引擎指标门禁 workflow（跌破召回/误报阈值即红）
 - **评估门禁**：独立于单测的准确率评估（精确字符级 span 匹配），`--min-recall/--max-fpr` 退出码可接 CI
+- **Prompt 注册表**：8 个系统 prompt 集中于 `configs/prompts/registry.yaml`（version + changelog 纪律由 CI 结构门禁 `test_prompt_registry.py` 强制，锚点防截断、调用方接线一致性防绕过），`llm_scan` 的 stage_log 记录 `review@版本号`——LLM 行为变更可溯源到具体 prompt 版本；LLM 引擎语义回归由 `llm-eval` workflow（held-out 变体集 + 指标门禁，配置 `DASHSCOPE_API_KEY` secret 后自动可用）守住
 - **数据卫生**：人工复核统计只计真实人工数据（排除系统自动确认，避免循环论证）；有标注集构建与数据事故的复盘记录（docs/evaluation.md）
 
 ## 已知限制（诚实清单）

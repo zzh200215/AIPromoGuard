@@ -20,6 +20,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from src.core.llm.client import get_llm
+from src.core.llm.prompts.registry import get_prompt
 from src.core.report.markdown import render_markdown
 from src.models import Article, Regulation, ReviewResult, ReviewTask, Rule
 from src.services.regulation_service import search_hybrid
@@ -41,34 +42,17 @@ _HUMAN_LABEL = {
 }
 _RISK_LABEL = {"high": "高", "medium": "中", "low": "低"}
 
-_ASK_SYSTEM = (
-    "你是金融营销材料合规审查助手。基于给定的审查上下文回答用户问题，要求："
-    "1) 直接、简洁、结论先行；2) 每个合规结论必须标注依据的法规名称与条款号；"
-    "3) 上下文不足以回答时明确说明，不要编造法规条款；"
-    '4) 只输出一个 JSON 对象：{"answer": "回答文本", "refs": '
-    '[{"regulation_id": 法规ID或null, "name": "法规名", "article_no": "条款号或null", '
-    '"quote": "支撑你的法规原文摘句或null"}]}。'
-)
+_ASK = get_prompt("copilot_ask")
+_ASK_SYSTEM = _ASK.template
 
-_REWRITE_SYSTEM = (
-    "你是金融营销文案合规专家。把违规表述改写为合规文案，要求：保留原有营销意图与吸引力、"
-    "消除全部违规点、符合给出的法规要求、语句通顺到可直接替换原文。"
-    '只输出一个 JSON 对象：{"rewritten": "改写后的文案", "changes": ["改动说明1", "改动说明2"]}。'
-)
+_REWRITE = get_prompt("copilot_rewrite")
+_REWRITE_SYSTEM = _REWRITE.template
 
-_SUMMARY_SYSTEM = (
-    "你是合规审查报告撰写人。基于给定的审查任务与违规清单，写一份 150 字以内的风险综述："
-    "概述整体风险水平、主要违规主题、高优先级事项与整改方向。面向合规负责人，直接给结论，"
-    '不要逐条罗列细节。只输出一个 JSON 对象：{"summary": "综述文本"}。'
-)
+_SUMMARY = get_prompt("copilot_summary")
+_SUMMARY_SYSTEM = _SUMMARY.template
 
-_ADVICE_SYSTEM = (
-    "你是金融合规审查辅助判定员。根据给定的违规信息判断该检出是否成立："
-    "confirmed = 违规成立；false_positive = 误报（如表述实际合规、规则误匹配或证据不足）。"
-    "基于给出的证据判断；不确定时倾向 confirmed，并说明人工需要补充核实的点。"
-    '只输出一个 JSON 对象：{"suggested_verdict": "confirmed 或 false_positive", '
-    '"confidence": 0到1的小数, "reasons": ["理由1", "理由2"]}。'
-)
+_ADVICE = get_prompt("copilot_advice")
+_ADVICE_SYSTEM = _ADVICE.template
 
 
 def _parse_object(content: str) -> dict | None:

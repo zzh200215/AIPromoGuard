@@ -26,6 +26,7 @@ from src.core.agents.nodes.risk_assess import risk_assess
 from src.core.agents.nodes.rule_scan import rule_scan
 from src.core.agents.state import ReviewState
 from src.core.llm.observability import get_llm_observer
+from src.core.llm.prompts.registry import get_prompt
 from src.utils.config import settings
 
 _GRAPH = None
@@ -84,6 +85,8 @@ def _stage_detail(name: str, result: dict) -> dict | None:
             "tokens": usage.get("total_tokens"),
             "failed_blocks": usage.get("failed_blocks"),
             "model": usage.get("model"),
+            # prompt 版本审计：审查结论可溯源到 prompt 注册表的具体版本
+            "prompt": f"review@{get_prompt('review').version}",
         }
 
     if name == "conflict_resolve":
