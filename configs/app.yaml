@@ -90,6 +90,12 @@ workflow:
   # 零 LLM 成本（本地 embedding 召回）；关闭后 llm_scan prompt 与无记忆版逐字节一致
   precedent_memory: true
   precedent_top_k: 3             # 每个扫描单元注入的先例数上限
+  # Verifier 独立复核（第 3 批生成-验证对偶）：对 LLM 单独命中做机器侧批量验证（每任务 +1 次调用）。
+  # rejected 且验证置信度达标才剔除（宁少杀不错杀）；降级只压 confidence 保留人工可见。
+  # 缺省关（与 agentic_retrieval 同先例：LLM 成本类增强显式开启）
+  verifier: false
+  verifier_max_findings: 20      # 单次批量验证的判定条数上限（成本护栏）
+  verifier_reject_min_confidence: 0.75  # 剔除所需的最低验证置信度
   # 人审分流（方向②）：规则引擎/双引擎高置信命中自动确认，纯 LLM 一律进人工队列。
   # confirmed_by=0 标识系统自动确认；反馈统计只计人工复核（confirmed_by>0），保证精调数据干净。
   auto_confirm:

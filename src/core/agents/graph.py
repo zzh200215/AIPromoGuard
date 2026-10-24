@@ -24,6 +24,7 @@ from src.core.agents.nodes.regulation_match import regulation_match
 from src.core.agents.nodes.report import report
 from src.core.agents.nodes.risk_assess import risk_assess
 from src.core.agents.nodes.rule_scan import rule_scan
+from src.core.agents.nodes.verify import verify
 from src.core.agents.state import ReviewState
 from src.core.llm.observability import get_llm_observer
 from src.core.llm.prompts.registry import get_prompt
@@ -37,6 +38,7 @@ _NODES = [
     ("rule_scan", rule_scan),
     ("llm_scan", llm_scan),
     ("conflict_resolve", conflict_resolve),
+    ("verify", verify),
     ("human_review", human_review),
     ("risk_assess", risk_assess),
     ("report", report),
@@ -99,6 +101,15 @@ def _stage_detail(name: str, result: dict) -> dict | None:
             by_source[src] = by_source.get(src, 0) + 1
         return {"merged_count": len(merged), "by_source": by_source}
 
+    if name == "verify":
+        meta = result.get("verification_meta") or {}
+        if not meta:
+            return {}
+        detail = {"verified": meta.get("verified", 0)}
+        for k in ("upheld", "downgraded", "rejected_dropped", "failed"):
+            if meta.get(k):
+                detail[k] = meta[k]
+        return detail or None
     if name == "human_review":
         hr = result.get("human_review")
         if not hr:
@@ -182,7 +193,8 @@ def build_graph(checkpointer=None):
 
     classify 之后按 domain 用 add_conditional_edges 路由到独立领域子图
     （真·多 Agent 分工），每个子图内含 regulation_match → (rule_scan ∥ llm_scan)
-    → conflict_resolve；领域无关的 human_review/risk_assess/report 作为共享
+    → conflict_resolve → verify（可选 verifier 独立复核）；领域无关的
+    human_review/risk_assess/report 作为共享
     汇合链保持线性（保证 HIL interrupt/resume 可达）。classify 识别失败
     （domain=None）或未知领域走 domain_general 兜底子图。
 
@@ -212,7 +224,7 @@ def build_graph(checkpointer=None):
 
     builder = StateGraph(ReviewState)
     # 领域无关的共享节点注册在主图最外层（只一次，避免子图/主图重名冲突）
-    for name in ("classify", "human_review", "risk_assess", "report"):
+    for name in ("classify", "verify", "human_review", "risk_assess", "report"):
         builder.add_node(name, _wrap(node_map[name], name))
     # 兜底 + 各领域子图
     builder.add_node("domain_general", _build_domain_subgraph())
@@ -227,9 +239,10 @@ def build_graph(checkpointer=None):
          **{f"domain_{d}": f"domain_{d}" for d in domain_names}},
     )
     # 共享汇合链：所有领域子图 → human_review → risk_assess → report → END（严格线性）
-    builder.add_edge("domain_general", "human_review")
+    builder.add_edge("domain_general", "verify")
     for d in domain_names:
-        builder.add_edge(f"domain_{d}", "human_review")
+        builder.add_edge(f"domain_{d}", "verify")
+    builder.add_edge("verify", "human_review")
     builder.add_edge("human_review", "risk_assess")
     builder.add_edge("risk_assess", "report")
     builder.add_edge("report", END)

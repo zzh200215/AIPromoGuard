@@ -60,6 +60,8 @@ class ReviewState(TypedDict, total=False):
     # LLM token 用量/调用统计（成本观测，随报告落盘）；reducer 累加多节点用量
     llm_usage: Annotated[dict[str, Any], _merge_llm_usage]
     merged_findings: list[dict[str, Any]]
+    # verifier 独立复核元数据（第 3 批生成-验证对偶）：upheld/downgraded/rejected 计数
+    verification_meta: dict[str, Any]
     human_review: dict[str, Any]  # 人工复核关卡结果（interrupt 决策记录，未启用时无此键）
     diff_changes: list[dict[str, Any]]  # 对比审查变更片段（普通任务不存在）
     report: dict[str, Any]

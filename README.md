@@ -180,7 +180,7 @@ python scripts/demo/smoke_demo_flow.py   # 八步演示动线冒烟（含证据�
 src/
 ├── api/                 # FastAPI：14 个路由 + JWT/RBAC 中间件 + 审计日志
 ├── core/
-│   ├── agents/          # LangGraph：state / graph / runtime / 8 个节点（含 human_review）
+│   ├── agents/          # LangGraph：state / graph / runtime / 9 个节点（human_review + 可选 verifier）
 │   ├── impact/          # 法规影响中心：影响分析（预扫打分）+ 罚单 LLM 规则挖掘
 │   ├── rule_engine/     # 规则 DSL 引擎 + regex/keyword matcher + 否定语境抑制
 │   ├── llm/             # QWEN 客户端（结构化输出/异步并发/降级链）+ Langfuse 埋点
@@ -206,6 +206,7 @@ frontend/                # Vue3 前端（任务/知识库/图谱/影响中心/�
 - **评估门禁**：独立于单测的准确率评估（精确字符级 span 匹配），`--min-recall/--max-fpr` 退出码可接 CI
 - **Prompt 注册表**：8 个系统 prompt 集中于 `configs/prompts/registry.yaml`（version + changelog 纪律由 CI 结构门禁 `test_prompt_registry.py` 强制，锚点防截断、调用方接线一致性防绕过），`llm_scan` 的 stage_log 记录 `review@版本号`——LLM 行为变更可溯源到具体 prompt 版本；LLM 引擎语义回归由 `llm-eval` workflow（held-out 变体集 + 指标门禁，配置 `DASHSCOPE_API_KEY` secret 后自动可用）守住
 - **提示注入防护**：被审查材料是不可信输入——规则层新增 **general 域全局规则**「疑似提示注入指令」（`engine.py` 支持 general 规则跨 banking/fund/insurance 生效；注入企图命中即 high 风险进人工复核），prompt 层 `review@v2` 注入加固（文档内指令性内容一律视为待审数据而非指令，检出即输出提示注入 finding）；对抗集 `injection_cases.json` 8 案例（注入+真实违规双标注、良性对照防误报）由 `test_injection_guard.py` 全量守卫（含历史评估语料 150+ 案例零误报断言）
+- **Verifier 多智能体（生成-验证对偶）**：`conflict_resolve` 后新增独立验证节点（`verifier@v1`，缺省关 `workflow.verifier`）——对 LLM 单独命中（原全量进人工复核的部分）做**单次批量**独立复核（每任务 +1 次调用，与监管打标同构，配额友好）：upheld 维持 / downgraded 置信度 ×0.8 保留人工可见 / rejected 且验证置信度 ≥0.75 才剔除（宁少杀不错杀）；验证结论逐条写入 `finding.verification`（审计可溯），剔除明细进 stage_log；多智能体从静态领域分工升级为生成-验证协作，人机协同从「人兜底一切 LLM 命中」走向「机器先自我验证、人只看分歧样本」
 - **判定先例记忆**：人工复核终态结论（confirmed / 误报纠正，`confirmed_by>0`）自动沉淀为语义可召回先例（`review_precedents` 表 + Chroma `legal_precedents` 集合，翻案覆盖、撤销删除、系统自动确认不沉淀——记忆始终等于最新人工判断）；`llm_scan` 对每个扫描单元召回 top-K 同类先例注入审查上下文（`review@v3`：误报先例提高输出门槛、确认先例提示真实风险模式，与法规冲突以法规为准），stage_log 记录 `precedents` 注入数——系统开始从人工纠正中学习；Copilot 同步升级多轮（会话历史落 `copilot_messages`、`GET /ai/tasks/{id}/ask-history` 恢复），测试向量写入经 autouse 夹具隔离不污染真实记忆
 - **数据卫生**：人工复核统计只计真实人工数据（排除系统自动确认，避免循环论证）；有标注集构建与数据事故的复盘记录（docs/evaluation.md）
 

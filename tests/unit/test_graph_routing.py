@@ -64,9 +64,14 @@ def test_graph_shared_chain_is_linear_after_conflict():
     assert ("report", "__end__") in edges
 
 
-def test_all_domain_subgraphs_converge_to_human_review():
-    """每个领域子图 + 兜底都无条件汇聚到 human_review（共享汇合链）。"""
+def test_all_domain_subgraphs_converge_to_verify_then_human_review():
+    """每个领域子图 + 兜底都汇聚到 verify（可选 verifier），再进共享汇合链。
+
+    verify 缺省关闭时节点直通（返回空更新），拓扑上仍保持
+    domain_* → verify → human_review 的单一汇合路径（HIL resume 可达性不变）。
+    """
     edges = _edges()
     seen = {t for s, t in edges if s in (
         "domain_banking", "domain_fund", "domain_insurance", "domain_general")}
-    assert seen == {"human_review"}
+    assert seen == {"verify"}
+    assert ("verify", "human_review") in edges

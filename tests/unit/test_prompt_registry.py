@@ -26,6 +26,7 @@ EXPECTED_PROMPTS = {
     "copilot_rewrite",
     "copilot_summary",
     "copilot_advice",
+    "verifier",
 }
 
 # 锚点 = 模板里不可丢的关键约束（输出 schema 键 / 红线指令）。
@@ -39,6 +40,7 @@ ANCHORS = {
     "copilot_rewrite": ['"rewritten"', "changes", "消除全部违规点"],
     "copilot_summary": ['"summary"', "150 字以内"],
     "copilot_advice": ["suggested_verdict", "false_positive", "不确定时倾向 confirmed"],
+    "verifier": ['"verdicts"', "upheld|downgraded|rejected", "独立复核"],
 }
 
 
