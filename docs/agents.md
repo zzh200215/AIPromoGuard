@@ -95,7 +95,7 @@ Schema、何时交接、失败与降级、是否允许自动通过、用什么�
 
 | 组件 | 职责 | 工具/数据 | 输出 | 失败与降级 |
 |---|---|---|---|---|
-| 混合检索（`regulation_match`） | 条款级召回：语义+关键词 RRF 融合，生效法规优先，可选 rerank | ChromaDB+fastembed / 规则匹配 | `matched_articles[{article_id, regulation_name, article_no, content, status, 文号/发布/生效日期}]` | 混合失败→纯关键词回退 |
+| 混合检索（`regulation_match`） | 条款级召回：语义+关键词 RRF 融合，生效法规优先，可选 rerank；**第四路同义扩展**（营销话术→监管术语映射，确定性零 LLM，`workflow.synonym_expansion`）——2026-10-24 诊断检索相关性 0.413 且缺失主题集中于核心监管主题，根因是口语与书面语零词面重叠（"稳赚"全库 0 命中）；机制验证：最差 5 例中 4 例正主条款进 Top-5 且主题锚定 | ChromaDB+fastembed / 规则匹配 / `MARKETING_SYNONYMS` 映射表（库内命中由测试守护） | `matched_articles[{article_id, regulation_name, article_no, content, status, 文号/发布/生效日期}]` | 混合失败→纯关键词回退；同义路失败静默跳过（不阻断） |
 | 图谱召回（P2 GraphRAG，`graph_service`） | "违规模式→条款"多跳：规则引擎实扫命中的模式经条款级 VIOLATES 边展开为第三路 | Neo4j | 图谱条款列表（RRF 并入） | Neo4j 未启用/失败→跳过图谱路 |
 | 处罚案例佐证（`risk_assess` → Neo4j） | 相似历史罚单检索 | Neo4j 案例网络 | `similar_cases[{case_name, penalty_org, similarity, ...}]` | 图谱未启用→无佐证不阻塞 |
 

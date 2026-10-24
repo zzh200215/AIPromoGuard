@@ -73,3 +73,6 @@ wheels/*.whl
 logs/
 .pytest-*.txt
 scripts/init_data/pending/
+
+# 评测产物（judge/对照报告，本地数据不入库）
+scripts/evaluate/reports/
