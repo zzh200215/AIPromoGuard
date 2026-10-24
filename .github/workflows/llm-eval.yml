@@ -5,11 +5,12 @@
 #   eval-gate = 规则引擎指标门禁（确定性、零 LLM key、每次 push 必跑）
 #   llm-eval  = LLM 语义引擎回归（需真实调用、有成本，手动/周度跑，不随 push 触发）
 #
-# 启用方式（一次性）：仓库 Settings → Secrets and variables → Actions →
-#   新增 secret DASHSCOPE_API_KEY（或任何 OpenAI 兼容网关的 key，
-#   若网关非 DashScope 需同时配 LLM_BASE_URL/LLM_MODEL secret 并在 env 段透传）。
-# 未配置 key 时本 workflow 显示 skipped（诚实状态，不假装在跑）。
-#
+# 启用方式（一次性，两处都配）：
+#   1) Settings → Secrets and variables → Actions → Secrets → 新增 DASHSCOPE_API_KEY
+#      （或任何 OpenAI 兼容网关 key；网关非 DashScope 时同步配 LLM_BASE_URL/LLM_MODEL secret）
+#   2) 同页 Variables → 新增 LLM_EVAL_ENABLED = true
+#   说明：job 级 if 不支持 secrets 上下文（actionlint 校验约束），故用 vars 做显式开关；
+#   未开开关时本 workflow 显示 skipped（诚实状态，不假装在跑）。
 # 阈值口径：变体集全链路基线为召回 100% / 误报 0%（docs/benchmark.md），
 # 门禁放宽到 0.95 / 0.05 留模型漂移余量——跌破说明 LLM 引擎行为回归，红。
 name: llm-eval
@@ -21,7 +22,7 @@ on:
 
 jobs:
   llm-eval:
-    if: ${{ secrets.DASHSCOPE_API_KEY != '' }}
+    if: vars.LLM_EVAL_ENABLED == 'true'
     runs-on: ubuntu-latest
     services:
       mysql:

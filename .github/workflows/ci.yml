@@ -105,6 +105,12 @@ jobs:
           python scripts/init_data/index_articles.py
           python scripts/init_data/index_cases.py
 
+      - name: Init test database (fcr_test 测试隔离库)
+        # tests/conftest.py 把全部测试流量切到 fcr_test（根治测试污染真库）；
+        # 该库在 runner 上从未创建——缺此步则 DB 用例批量报 Unknown database、
+        # 带 skipif 守卫的用例（如指标门禁）空转假绿
+        run: python scripts/dev/init_test_db.py
+
       - name: Run full test suite
         run: python -m pytest tests/ -v --basetemp=.pytest-tmp
 
