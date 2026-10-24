@@ -7,7 +7,8 @@
 #
 # 启用方式（一次性，两处都配）：
 #   1) Settings → Secrets and variables → Actions → Secrets → 新增 DASHSCOPE_API_KEY
-#      （或任何 OpenAI 兼容网关 key；网关非 DashScope 时同步配 LLM_BASE_URL/LLM_MODEL secret）
+#      （或任何 OpenAI 兼容网关 key；网关非默认时同步配 LLM_BASE_URL / LLM_MODEL
+#        secret——env 里已接线，未配置时回退下方与 Settings 一致的默认值）
 #   2) 同页 Variables → 新增 LLM_EVAL_ENABLED = true
 #   说明：job 级 if 不支持 secrets 上下文（actionlint 校验约束），故用 vars 做显式开关；
 #   未开开关时本 workflow 显示 skipped（诚实状态，不假装在跑）。
@@ -45,6 +46,10 @@ jobs:
       MYSQL_PASSWORD: root123
       MYSQL_DATABASE: compliance_review
       DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+      # 网关非默认时用 secret 覆盖；secret 未设置时 GitHub 注入空串，|| 回退默认值
+      # （Settings.llm_base_url/llm_model 对空串不设防，此处必须兜底）
+      LLM_BASE_URL: ${{ secrets.LLM_BASE_URL || 'https://token.sensenova.cn/v1' }}
+      LLM_MODEL: ${{ secrets.LLM_MODEL || 'deepseek-v4-flash' }}
     steps:
       - uses: actions/checkout@v4
 
