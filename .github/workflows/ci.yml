@@ -112,7 +112,17 @@ jobs:
         run: python scripts/dev/init_test_db.py
 
       - name: Run full test suite
-        run: python -m pytest tests/ -v --basetemp=.pytest-tmp
+        run: |
+          set -o pipefail
+          code=0
+          python -m pytest tests/ --basetemp=.pytest-tmp -q > pytest.log 2>&1 || code=$?
+          # 失败摘要写入 step summary（运行页可见，免查日志定位失败用例）
+          echo '# pytest 结果（尾部 80 行）' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -n 80 pytest.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat pytest.log | tail -n 40
+          exit $code
 
   frontend-build:
     runs-on: ubuntu-latest
