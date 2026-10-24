@@ -42,7 +42,8 @@ flowchart TD
     M --> L["llm_scan LLM 语义审查<br/>真 Function Calling：主动调检索工具查证<br/>并发全块 + 幻觉抑制三重校验"]
     R --> F["conflict_resolve 信任分级融合<br/>rule 采信 / llm 建议关注 / hybrid 交叉确认"]
     L --> F
-    F --> H["human_review 人工复核关卡（可选）<br/>interrupt() 暂停 + checkpoint 续跑"]
+    F --> V["verify 独立复核（可选 workflow.verifier）<br/>批量质疑式验证 LLM 单独命中：维持/降级/剔除"]
+    V --> H["human_review 人工复核关卡（可选）<br/>interrupt() 暂停 + checkpoint 续跑"]
     H --> K["risk_assess 风险定级<br/>+ Neo4j 相似处罚案例佐证（可选）"]
     K --> REP["report 报告生成<br/>JSON + Markdown + PDF"]
 ```

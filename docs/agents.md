@@ -1,6 +1,6 @@
 # Agent 与组件合约（Agent Registry）
 
-本系统是**基于 LangGraph 的受控多 Agent 合规审查工作流**：专业审查 Agent 负责语义判断，
+本系统是**基于 LangGraph 的受控多 Agent 合规审查工作流**：专业审查 Agent 负责语义判断（生成者与验证者对抗协作），
 确定性工具负责字面检测与溯源，协作控制节点负责路由、融合与人工交接。本文按五类组件
 给出职责合约——每项组件明确七件事：负责什么/不负责什么、输入、可调用的工具、输出
 Schema、何时交接、失败与降级、是否允许自动通过、用什么指标衡量。
@@ -15,11 +15,11 @@ Schema、何时交接、失败与降级、是否允许自动通过、用什么�
 | 合约项 | 内容 |
 |---|---|
 | 职责边界 | 负责：变体化/语义化违规的识别（换说法的保本承诺、夸大宣传、适当性误导、披露缺失）；不负责：字面红线（规则引擎已覆盖）、产品设计与投资策略评价 |
-| 输入 | 文档块（blocks）、召回法规条款（matched_articles，含文号/日期）、领域 |
-| 工具 | 真 Function Calling：审查中主动调 `search_regulations` 查证再判定（成本护栏：调用次数上限） |
+| 输入 | 文档块（blocks）、召回法规条款（matched_articles，含文号/日期）、领域、同类材料判定先例（precedent_memory 召回注入，零 LLM 成本） |
+| 工具 | 真 Function Calling：审查中主动调 `search_regulations` 查证再判定（成本护栏：调用次数上限）；深查通道（deep）升格为 4 工具箱——`search_regulations` / `search_penalty_cases`（真实罚单）/ `search_precedents`（判定先例）/ `get_document_context`（跨块取证），回合 6/调用 8 |
 | 输出 Schema | `{type(禁止性/限制性/披露性), issue, original_text(原文摘录), regulation(法规名+条款号), reason, suggestion, severity, confidence}`；非法枚举/缺失关键字段自动丢弃（幻觉抑制） |
 | 交接条件 | 输出经 conflict_resolve 与规则命中做 span 重叠：交叉命中→hybrid（升级高置信），单独命中→llm（"建议关注"） |
-| 失败与降级 | LLM 无 Key/调用失败→空 findings 继续走规则路；模型 fallback 链；输出不合法自纠错重试一次 |
+| 失败与降级 | LLM 无 Key/调用失败→空 findings 继续走规则路；模型 fallback 链；输出不合法自纠错重试一次；light 通道（零风险信号短文本）直接跳过 LLM 只走规则路 |
 | 自动通过 | 不允许（纯 llm 一律进人工复核） |
 | 评估指标 | Judge 结论判分精度 **95.7%**、span 口径召回 100%（71 例变体集）；基线对照见 [benchmark.md](benchmark.md) |
 
@@ -35,6 +35,23 @@ Schema、何时交接、失败与降级、是否允许自动通过、用什么�
 | 失败与降级 | LLM 未配置/失败→保持基础召回；轮次/查询数/无新增三重护栏 |
 | 自动通过 | 不适用（检索子流程） |
 | 评估指标 | judge 检索相关性 48.7%（观察口径，未进门禁） |
+
+### 独立验证 Agent（`verify` 节点，可选 `workflow.verifier`，缺省关）
+
+生成-验证对偶的验证侧：与生成者（llm_scan）相互独立，在融合后、人工复核前
+以质疑者视角对 LLM 单独命中做批量复核。人机协同从「人兜底一切 LLM 命中」
+升级为「机器先自我验证、人只看分歧样本」。
+
+| 合约项 | 内容 |
+|---|---|
+| 职责边界 | 负责：对 source=llm 的判定做独立复核（原文/判定/法规三者是否自洽、是否合规披露误报）；不负责：rule/hybrid（确定性/已交叉确认）与 vlm 通道 |
+| 输入 | merged_findings 中 source=llm 的判定（上限 `verifier_max_findings`=20） |
+| 工具 | 无外部工具——**单次批量调用**（全部判定一次 LLM 复核，每任务固定 +1 次调用，与监管打标同构，配额墙下可运转） |
+| 输出 Schema | `verification_meta = {verified, upheld, downgraded, rejected_dropped, rejected_kept, failed, dropped[], prompt}`；逐条 `finding.verification = {verdict, confidence, reason}`（审计可溯） |
+| 交接条件 | upheld→维持原判定；downgraded→confidence×0.8 保留人工可见；rejected 且验证置信度≥0.75→**剔除**（明细进 stage_log），低置信驳回按降级处理（宁少杀不错杀） |
+| 失败与降级 | 功能关/LLM 未配置→节点直通；调用失败/输出不可解析→判定原样保留，failed 计数 |
+| 自动通过 | 不适用（不改变自动确认语义，只做机器侧过滤与置信校准） |
+| 评估指标 | stage_log 复核漏斗（验证 N/维持/降级/剔除）；行为层效果（人工负载下降幅度）待 llm-eval 真实数据 |
 
 ## 二、确定性工具（零 LLM，可解释可复现）
 
@@ -70,6 +87,9 @@ Schema、何时交接、失败与降级、是否允许自动通过、用什么�
 |---|---|---|
 | 解析器（parsers：txt/docx/pdf/ocr） | 材料→文本块+位置 | 块结构；OCR 质量列入已知限制 |
 | 影响分析（`src/core/impact/analysis`） | 新规→受影响规则定位+存量材料风险预扫打分 | 结构化影响评估；全程无 LLM 参与决策 |
+| 判定先例记忆（`src/services/precedent_memory`） | 人工终态结论（confirmed/误报纠正，confirmed_by>0）沉淀为语义先例并召回注入 llm_scan 上下文 | `review_precedents` 表 + Chroma `legal_precedents`；三纪律：翻案覆盖/撤销删除/自动确认不沉淀；stage_log 记 `precedents` 注入数 |
+| 执行强度分级（`classify._scan_intensity`） | 确定性复杂度打分：light（≤120 字且零风险信号词→只走规则引擎）/ standard / deep（`workflow.deep_scan` 开且长文多段→多工具深查） | `scan_intensity` 进 state、`channel` 进 stage_log；保义改写必含风险语言→变体集进不了 light（有测试钉死） |
+| 提示注入防护（规则层） | 被审材料中的指令性文本（忽略要求/冒充系统/指示输出结论）按 general 域全局规则检出 | 高置信 high 风险进人工复核；历史评估语料 150+ 案例零误报（`test_injection_guard.py`） |
 
 ## 三、RAG 工具与子流程
 
@@ -83,8 +103,9 @@ Schema、何时交接、失败与降级、是否允许自动通过、用什么�
 
 | 节点 | 职责 | 交接/分流 |
 |---|---|---|
-| `classify` | 领域识别（配置驱动关键词打分） | 条件路由到 banking/fund/insurance 子图，general 兜底 |
-| `conflict_resolve` | 信任分级融合：rule 采信 / llm 建议关注 / hybrid 交叉确认；证据核验交接 | merged_findings → human_review |
+| `classify` | 领域识别（配置驱动关键词打分）+ 执行强度分级（确定性，零 LLM） | 条件路由到 banking/fund/insurance 子图，general 兜底；输出 scan_intensity（light/standard/deep） |
+| `conflict_resolve` | 信任分级融合：rule 采信 / llm 建议关注 / hybrid 交叉确认；证据核验交接 | merged_findings → verify → human_review |
+| `verify` | 独立验证关卡（可选，缺省关）：批量质疑式复核 LLM 单独命中，见「一」节 Agent 合约 | 三态应用后 → human_review |
 | `human_review` | 人工复核关卡：`interrupt()` 暂停 + MySQL checkpoint 续跑；auto-confirm 分流（高置信 rule/hybrid 自动确认 `confirmed_by=0`，其余 pending） | 高风险/意见分歧/证据不可支撑→人工裁决；人可确认/驳回/翻案（全程审计留痕） |
 | `risk_assess` | 风险定级打分卡（类型×来源×置信度，经验权重，已知限制） | 定级结果进报告与台账 |
 | `report` | JSON/Markdown/PDF 报告生成落盘 | `evidence_supported=False` 在报告中可见 |
