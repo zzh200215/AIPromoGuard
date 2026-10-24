@@ -124,8 +124,13 @@ def regulation_match(state: ReviewState) -> dict:
     usage = retrieval_meta.get("usage")
     usage_delta = {**usage, "model": retrieval_model} if usage else None
 
+    # 同义扩展留痕：未触发不带键（retrieval_meta 保持无触发时与历史形状一致）
+    meta_out = dict(retrieval_meta)
+    if synonym_terms:
+        meta_out["synonym_terms"] = synonym_terms
+
     return {
         "matched_articles": articles,
-        "retrieval_meta": {**retrieval_meta, "synonym_terms": synonym_terms},
+        "retrieval_meta": meta_out,
         "llm_usage": usage_delta,
     }
