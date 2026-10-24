@@ -37,6 +37,12 @@ jobs:
         run: |
           mkdir -p models_cache data/chroma
 
+      # staging-api 的 env_file: ../.env 是硬依赖（compose 缺文件直接拒绝起容器，
+      # 表现为 staging-api "No such container"）——runner 无 .env，用公开模板补位；
+      # 模板内 LLM key 为空正好匹配冒烟口径（无 LLM 路径），MYSQL_* 由 compose environment 覆盖
+      - name: Provide env file from public template
+        run: cp .env.example .env
+
       - name: Build API image
         run: docker build -f docker/Dockerfile.api -t financial-compliance-review-api .
 
