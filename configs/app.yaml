@@ -96,6 +96,14 @@ workflow:
   verifier: false
   verifier_max_findings: 20      # 单次批量验证的判定条数上限（成本护栏）
   verifier_reject_min_confidence: 0.75  # 剔除所需的最低验证置信度
+  # 执行强度分级（第 4 批）：light=零风险信号短文本只走规则引擎；deep=多工具深查（显式开启）
+  scan_intensity: true
+  light_max_chars: 120         # 轻量通道的文档总字数上限（且须零风险信号词）
+  deep_scan: false             # 深查通道总开关（长文档多工具 ReAct，配额敏感显式开启）
+  deep_min_chars: 3000         # 深查触发阈值：文档总字数
+  deep_min_blocks: 40          # 深查触发阈值：段落数（满足其一即可）
+  deep_tool_rounds: 6          # 深查工具循环回合上限（覆盖 llm.tool_calling 默认 2）
+  deep_tool_calls: 8           # 深查工具累计调用上限（覆盖默认 4）
   # 人审分流（方向②）：规则引擎/双引擎高置信命中自动确认，纯 LLM 一律进人工队列。
   # confirmed_by=0 标识系统自动确认；反馈统计只计人工复核（confirmed_by>0），保证精调数据干净。
   auto_confirm:

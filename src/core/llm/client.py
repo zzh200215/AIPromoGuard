@@ -354,6 +354,7 @@ class QwenClient:
         tools: list | None = None,
         execute_tool: object | None = None,
         domain: str | None = None,
+        tool_budget: dict | None = None,
     ) -> tuple[list, dict]:
         """异步结构化输出：返回 (findings 列表, 累计 usage)。
 
@@ -380,8 +381,14 @@ class QwenClient:
         if tool_list is None:
             tool_list, execute = self._default_tool_config()
         tool_choice = cfg.get("tool_choice", "auto")
-        max_rounds = int(cfg.get("max_tool_rounds", 2))
-        max_calls = int(cfg.get("max_tool_calls_total", 4))
+        # 深查通道（第 4 批）经 tool_budget 覆盖默认护栏；其余调用维持全局配置
+        budget = {
+            "max_tool_rounds": int(cfg.get("max_tool_rounds", 2)),
+            "max_tool_calls_total": int(cfg.get("max_tool_calls_total", 4)),
+            **(tool_budget or {}),
+        }
+        max_rounds = budget["max_tool_rounds"]
+        max_calls = budget["max_tool_calls_total"]
 
         cur_messages = list(messages)
         call_count = 0

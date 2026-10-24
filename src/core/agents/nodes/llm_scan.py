@@ -105,7 +105,7 @@ def _parse_raw(content: str) -> list:
 
 async def _scan_block(
     llm, block: dict, articles: list[dict], domain: str | None = None,
-    precedents: list[dict] | None = None,
+    precedents: list[dict] | None = None, deep_tools: tuple | None = None,
 ) -> tuple[list[dict], int, dict]:
     """审查单个文档块：结构化调用 + 逐条校验，返回 (findings, 丢弃数, usage, tool_articles)。
 
@@ -120,10 +120,22 @@ async def _scan_block(
     )
     tc_cfg = (settings.app_config("llm") or {}).get("tool_calling") or {}
     use_tools = bool(tc_cfg.get("enabled", True))
+    # 深查通道（第 4 批）：注入 4 工具箱 + 升格预算（受限多工具 ReAct）；
+    # deep_tools 为 (schemas, execute) 元组，由 llm_scan 按通道一次性构建
+    kwargs = {}
+    if deep_tools is not None:
+        from src.core.llm.deep_tools import deep_tool_budget
+
+        kwargs = {
+            "tools": deep_tools[0],
+            "execute_tool": deep_tools[1],
+            "tool_budget": deep_tool_budget(),
+        }
     data, usage, tool_articles = await llm.achat_json(
         messages,
         enable_tool_calls=use_tools,
         domain=domain,
+        **kwargs,
     )
     findings = []
     for item in data:
@@ -191,7 +203,19 @@ def llm_scan(state: ReviewState) -> dict:
     llm = get_llm()
     if llm is None:
         logger.info("未配置 DASHSCOPE_API_KEY，跳过 LLM 语义审查")
-        return {"llm_findings": [], "llm_usage": None}
+        return {"llm_findings": [], "llm_usage": None, "scan_meta": {"channel": "none"}}
+
+    # 执行强度分级（第 4 批）：light 只走规则引擎——短文本且零风险信号词，
+    # 语义违规必然承载风险性语言（见 classify._scan_intensity 的护栏说明），
+    # 纯口号类内容由确定性引擎覆盖即可，配额留给真正需要语义审查的材料
+    intensity = state.get("scan_intensity") or "standard"
+    if intensity == "light":
+        logger.info("轻量通道：零风险信号短文本，跳过 LLM 语义审查（规则引擎结果为准）")
+        return {
+            "llm_findings": [],
+            "llm_usage": None,
+            "scan_meta": {"channel": "light", "skipped": "light"},
+        }
 
     articles = state.get("matched_articles", [])
     domain = state.get("domain")
@@ -212,6 +236,13 @@ def llm_scan(state: ReviewState) -> dict:
     precedent_top_k = int(workflow_cfg.get("precedent_top_k", 3))
     task_id = state.get("task_id")
 
+    # 深查通道工具箱：一次构建、全部扫描单元共用（同一文档的 blocks）
+    deep_tools_cfg = None
+    if intensity == "deep":
+        from src.core.llm.deep_tools import deep_tool_config
+
+        deep_tools_cfg = deep_tool_config(blocks)
+
     async def _run() -> list:
         sem = asyncio.Semaphore(concurrency)
 
@@ -227,7 +258,8 @@ def llm_scan(state: ReviewState) -> dict:
                             exclude_task_id=task_id,
                         )
                     found, dropped_cnt, usage, tool_arts = await _scan_block(
-                        llm, unit, articles, domain, precedents=precedents
+                        llm, unit, articles, domain, precedents=precedents,
+                        deep_tools=deep_tools_cfg,
                     )
                     parts = unit.get("_parts") or [unit]
                     return (
@@ -279,4 +311,6 @@ def llm_scan(state: ReviewState) -> dict:
         "tool_articles": tool_articles,
         # 先例记忆元数据（stage_log 可观测：本任务注入了多少条历史判定先例）
         "precedent_meta": {"units": len(units), "injected": precedents_injected},
+        # 执行通道元数据（第 4 批）：standard / deep（light/none 在函数前部早退）
+        "scan_meta": {"channel": intensity},
     }

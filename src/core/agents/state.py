@@ -43,6 +43,10 @@ class ReviewState(TypedDict, total=False):
     text: str
     blocks: list[dict[str, Any]]
     domain: str | None
+    # 执行强度分级（第 4 批）：light 只走规则引擎 / standard 现状 / deep 多工具深查
+    scan_intensity: str
+    # llm_scan 通道元数据（stage_log 可观测）：channel 与跳过原因
+    scan_meta: dict[str, Any]
     # 审查策略（strict/standard/loose，None=standard），human_review 节点据此覆盖配置
     profile: str | None
     matched_articles: list[dict[str, Any]]

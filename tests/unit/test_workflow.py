@@ -20,7 +20,8 @@ def test_detect_domain_banking():
 
 def test_classify_node_returns_domain():
     state = {"text": "保险产品 保费 理赔 投保"}
-    assert classify(state) == {"domain": "insurance"}
+    # 第 4 批：classify 同时输出确定性执行强度（短文本零风险信号词 → light）
+    assert classify(state) == {"domain": "insurance", "scan_intensity": "light"}
 
 
 def test_conflict_resolve_rule_priority():

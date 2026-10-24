@@ -46,6 +46,45 @@ def _detect_domain(text: str) -> str | None:
     return best
 
 
+# 轻量通道的风险信号词：出现任一即不得进轻量通道。这不是检测规则（不判定违规），
+# 只是路由护栏——语义违规必然承载风险性语言（保义改写的"本金毫发无损"含"本金"），
+# 纯口号（"让金融更美好"）零信号词才允许只走规则引擎，变体集召回因此不受影响。
+_DEFAULT_RISK_KEYWORDS = [
+    "保本", "保息", "稳赚", "承诺", "收益", "本金", "杠杆", "无风险", "担保",
+    "首付贷", "年化", "净值", "返现", "补贴", "内部测算",
+]
+
+
+def _scan_intensity(text: str, blocks: list) -> str:
+    """执行强度分级（第 4 批）：light / standard / deep，确定性打分零 LLM。
+
+    - light：短文本且零风险信号词 → 只走规则引擎（省配额；语义风险是零信号词
+      表述的定义域之外）；
+    - deep：workflow.deep_scan 开启且文档规模越阈 → 深查通道（多工具 ReAct，
+      见 src/core/llm/deep_tools.py）；
+    - standard：其余（现状行为）。
+    """
+    workflow = settings.app_config("workflow") or {}
+    if not workflow.get("scan_intensity", True):
+        return "standard"
+    total_chars = sum(len(b.get("text") or "") for b in blocks) or len(text)
+    if total_chars <= int(workflow.get("light_max_chars", 120)):
+        risk_words = workflow.get("light_risk_keywords") or _DEFAULT_RISK_KEYWORDS
+        if not any(w in text for w in risk_words):
+            return "light"
+    if workflow.get("deep_scan", False):
+        if (
+            total_chars >= int(workflow.get("deep_min_chars", 3000))
+            or len(blocks) >= int(workflow.get("deep_min_blocks", 40))
+        ):
+            return "deep"
+    return "standard"
+
+
 def classify(state: ReviewState) -> dict:
-    domain = _detect_domain(state.get("text", ""))
-    return {"domain": domain}
+    text = state.get("text", "")
+    blocks = state.get("blocks") or []
+    return {
+        "domain": _detect_domain(text),
+        "scan_intensity": _scan_intensity(text, blocks),
+    }

@@ -77,6 +77,7 @@ def test_llm_scan_detail_degraded_no_key():
         "model": None,
         "prompt": f"review@{get_prompt('review').version}",
         "precedents": 0,
+        "channel": "standard",
     }
 
 
