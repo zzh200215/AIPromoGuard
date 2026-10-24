@@ -72,7 +72,7 @@
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import { askTask, type AskResponse, type CopilotRef } from '@/api/ai'
+import { askTask, askTaskHistory, type AskResponse, type CopilotRef } from '@/api/ai'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -105,6 +105,22 @@ function onOpen() {
   if (messages.value.length && loading.value) return
 }
 
+/** 从服务端恢复当前任务的持久化问答历史（多轮记忆的可见落点） */
+async function restoreHistory(taskId: number) {
+  try {
+    const res = await askTaskHistory(taskId)
+    messages.value = res.messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+      refs: m.refs?.length ? m.refs : undefined,
+    }))
+  } catch {
+    // 历史拉取失败静默降级为空会话（问答功能不受影响）
+    messages.value = []
+  }
+  await scrollToBottom()
+}
+
 async function send(text: string) {
   const question = text.trim()
   if (!question || loading.value || props.taskId == null) return
@@ -133,12 +149,17 @@ async function scrollToBottom() {
   scrollRef.value?.scrollTo({ top: scrollRef.value.scrollHeight })
 }
 
-// 切换任务时清空会话：问答始终对应当前任务的报告上下文
+// 切换任务时从服务端恢复该任务的持久化会话（历史随任务落库，关抽屉不丢）
 watch(
   () => props.taskId,
-  () => {
-    messages.value = []
+  (id) => {
+    if (id != null) {
+      void restoreHistory(id)
+    } else {
+      messages.value = []
+    }
   },
+  { immediate: true },
 )
 </script>
 

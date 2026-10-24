@@ -22,6 +22,18 @@ export interface RewriteResponse {
 export const askTask = (taskId: number, question: string) =>
   request<AskResponse>({ url: `/ai/tasks/${taskId}/ask`, method: 'post', data: { question } })
 
+export interface HistoryMessage {
+  id: number
+  role: 'user' | 'assistant'
+  content: string
+  refs: CopilotRef[]
+  created_at: string | null
+}
+
+/** 任务问答历史（时间正序）：抽屉打开时恢复服务端持久化会话 */
+export const askTaskHistory = (taskId: number) =>
+  request<{ messages: HistoryMessage[] }>({ url: `/ai/tasks/${taskId}/ask-history`, method: 'get', silent: true })
+
 /** 单条违规的合规改写：返回改写文案与逐条修改说明 */
 export const rewriteResult = (resultId: number) =>
   request<RewriteResponse>({ url: `/ai/results/${resultId}/rewrite`, method: 'post' })

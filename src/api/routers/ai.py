@@ -13,6 +13,7 @@ from src.infrastructure.database.mysql import get_db
 from src.models import ReviewResult, ReviewTask, User
 from src.services.review_copilot import (
     ask_review_question,
+    load_copilot_history,
     rewrite_compliant,
     summarize_report,
     verdict_advice,
@@ -30,12 +31,26 @@ def ask_task_question(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("view_report")),
 ) -> dict:
-    """围绕任务审查报告的自由问答，回答附法规引用（可溯源）。"""
+    """围绕任务审查报告的自由问答，回答附法规引用（可溯源）；多轮会话历史随任务落库。"""
     task = db.get(ReviewTask, task_id)
     if task is None:
         raise AppError(ErrorCode.TASK_NOT_FOUND)
     ensure_task_access(db, task, current_user)
     return ok(ask_review_question(db, task, body.question.strip()))
+
+
+@router.get("/tasks/{task_id}/ask-history")
+def get_ask_history(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("view_report")),
+) -> dict:
+    """任务问答历史（时间正序，refs 已反序列化）——Copilot 抽屉打开时恢复会话。"""
+    task = db.get(ReviewTask, task_id)
+    if task is None:
+        raise AppError(ErrorCode.TASK_NOT_FOUND)
+    ensure_task_access(db, task, current_user)
+    return ok({"messages": load_copilot_history(db, task_id)})
 
 
 @router.post("/results/{result_id}/rewrite")

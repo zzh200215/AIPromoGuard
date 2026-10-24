@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from src.core.llm.client import get_llm
 from src.core.llm.prompts.registry import get_prompt
 from src.core.report.markdown import render_markdown
-from src.models import Article, Regulation, ReviewResult, ReviewTask, Rule
+from src.models import Article, CopilotMessage, Regulation, ReviewResult, ReviewTask, Rule
 from src.services.regulation_service import search_hybrid
 from src.services.report_service import refresh_report
 from src.utils.errors import AppError, ErrorCode
@@ -34,6 +34,8 @@ _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.S)
 _MAX_VIOLATIONS = 8
 _ORIGINAL_MAX = 80
 _ARTICLE_MAX = 300
+# 多轮上下文携带的历史消息条数（user/assistant 各算一条，10 条 ≈ 5 轮追问）
+_HISTORY_TURNS = 10
 
 _HUMAN_LABEL = {
     "pending_confirm": "待复核",
@@ -99,7 +101,12 @@ def _violations_context(db: Session, task: ReviewTask) -> str:
 
 
 def ask_review_question(db: Session, task: ReviewTask, question: str) -> dict:
-    """任务审查问答：报告上下文 + 混合检索 → 带法规引用的回答。"""
+    """任务审查问答：报告上下文 + 混合检索 → 带法规引用的回答（多轮）。
+
+    会话记忆（第 2 批）：最近 _HISTORY_TURNS 条历史随任务落 copilot_messages，
+    每轮携带进上下文——回答可正确解析"上一条说的第 3 条违规"这类指代；
+    回答成功后本轮 user/assistant 双双落库，失败不落（保持成对干净数据）。
+    """
     llm = _require_llm()
 
     domain = [task.domain] if getattr(task, "domain", None) else None
@@ -121,8 +128,10 @@ def ask_review_question(db: Session, task: ReviewTask, question: str) -> dict:
         f"## {_violations_context(db, task)}\n\n"
         f"## 检索到的法规条款\n" + ("\n".join(article_lines) or "（无）")
     )
+    history_rows = load_copilot_history(db, task.id, limit=_HISTORY_TURNS)
     messages = [
         {"role": "system", "content": _ASK_SYSTEM},
+        *[{"role": h["role"], "content": h["content"]} for h in history_rows],
         {"role": "user", "content": f"{context}\n\n## 用户问题\n{question}"},
     ]
     try:
@@ -133,11 +142,13 @@ def ask_review_question(db: Session, task: ReviewTask, question: str) -> dict:
 
     data = _parse_object(completion.content)
     if not data or not isinstance(data.get("answer"), str):
-        return {
+        result = {
             "answer": (completion.content or "").strip() or "（AI 未返回内容）",
             "refs": [],
             "usage": completion.usage,
         }
+        _persist_turn(db, task.id, question, result)
+        return result
 
     # 引用校验：regulation_id 必须来自本次检索结果，防模型张冠李戴
     valid_ids = {a.get("regulation_id") for a in articles}
@@ -157,11 +168,62 @@ def ask_review_question(db: Session, task: ReviewTask, question: str) -> dict:
                 "quote": str(ref.get("quote") or "")[:200] or None,
             }
         )
-    return {
+    result = {
         "answer": str(data["answer"])[:4000],
         "refs": refs[:8],
         "usage": completion.usage,
     }
+    _persist_turn(db, task.id, question, result)
+    return result
+
+
+def load_copilot_history(db: Session, task_id: int, limit: int = 50) -> list[dict]:
+    """任务的问答历史（时间正序），refs 已从 JSON 反序列化。"""
+    rows = (
+        db.query(CopilotMessage)
+        .filter(CopilotMessage.task_id == task_id)
+        .order_by(CopilotMessage.id.desc())
+        .limit(limit)
+        .all()
+    )
+    out: list[dict] = []
+    for r in reversed(rows):
+        refs = None
+        if r.refs_json:
+            try:
+                refs = json.loads(r.refs_json)
+            except json.JSONDecodeError:
+                refs = None
+        out.append(
+            {
+                "id": r.id,
+                "role": r.role,
+                "content": r.content,
+                "refs": refs or [],
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+        )
+    return out
+
+
+def _persist_turn(db: Session, task_id: int, question: str, result: dict) -> None:
+    """回答成功后落 user/assistant 一对（失败调用不落，保持成对干净数据）。"""
+    try:
+        db.add(CopilotMessage(task_id=task_id, role="user", content=question[:2000]))
+        db.add(
+            CopilotMessage(
+                task_id=task_id,
+                role="assistant",
+                content=result["answer"][:4000],
+                refs_json=json.dumps(result.get("refs") or [], ensure_ascii=False)
+                if result.get("refs")
+                else None,
+            )
+        )
+        db.commit()
+    except Exception as exc:  # noqa: BLE001 —— 历史落库失败不阻断回答返回
+        db.rollback()
+        logger.warning("问答历史落库失败（不影响回答）task=%s: %s", task_id, exc)
 
 
 def rewrite_compliant(db: Session, result: ReviewResult) -> dict:
