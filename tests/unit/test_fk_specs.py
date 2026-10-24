@@ -43,8 +43,26 @@ def _cleanup_script():
 
 
 def _migration_specs() -> set[tuple[str, str, str, str, str]]:
-    mod = _migration_module()
-    return {(f[0], f[1], f[2], f[3], f[4]) for f in mod.FKS}
+    """聚合全部迁移的外键注册表（FKS）——PR-7 冻结副本 + 后续迁移各自登记。
+
+    新迁移建外键时在迁移文件内导出同格式 FKS（与 orphan_cleanup 的
+    FK_SPECS 同一张图），三方一致性锁对后续演进开放。
+    """
+    specs: set[tuple[str, str, str, str, str]] = set()
+    for entry in _all_migration_fks():
+        specs.add((entry[0], entry[1], entry[2], entry[3], entry[4]))
+    assert specs, "未聚合到任何外键注册表"
+    return specs
+
+
+def _all_migration_fks() -> list[tuple]:
+    """遍历全部迁移文件收集 FKS（纯建表无 FK 的迁移无 FKS 属性，跳过）。"""
+    out: list[tuple] = []
+    for f in sorted((ROOT / "migrations" / "versions").glob("*.py")):
+        mod = _load_module(f"fkreg_{f.stem}", f)
+        out.extend(getattr(mod, "FKS", ()))
+    assert out, "未找到任何 FKS 注册表"
+    return out
 
 
 def _cleanup_specs() -> set[tuple[str, str, str, str, str]]:
@@ -88,8 +106,11 @@ def test_orm_declares_every_fk():
 
 def test_fk_names_match_migration():
     """外键名必须与迁移一致（Alembic 按名对比约束，名字漂移=每次 drift 报 diff）。"""
-    mod = _migration_module()
-    mig = {f[5]: f for f in mod.FKS}
+    entries = _all_migration_fks()
+    names = [e[5] for e in entries]
+    dupes = sorted({n for n in names if names.count(n) > 1})
+    assert len(names) == len(set(names)), f"外键名重复：{dupes}"
+    mig = dict(zip(names, entries, strict=True))
     orm = _orm_specs()
     assert set(mig) == set(orm), (
         f"外键名不一致：迁移独有 {sorted(set(mig) - set(orm))}；"
@@ -109,10 +130,14 @@ def test_polymorphic_columns_have_no_fk():
 
 
 def test_fk_count_and_rules():
-    """数量与删除规则快照（21 条；CASCADE 强从属 / SET NULL 弱引用 / RESTRICT 审计）。"""
+    """数量与删除规则快照（26 条；CASCADE 强从属 / SET NULL 弱引用 / RESTRICT 审计）。
+
+    21 条为 PR-7 基线；a7c4f1e9b3d2（先例记忆）+5：CASCADE×3（先例→结论/任务、
+    Copilot 会话→任务）、SET NULL×2（先例 rule_id / confirmed_by 弱引用）。
+    """
     mig = _migration_specs()
-    assert len(mig) == 21
+    assert len(mig) == 26
     rules = {}
     for _child, _col, _parent, _pcol, rule in mig:
         rules[rule] = rules.get(rule, 0) + 1
-    assert rules == {"CASCADE": 6, "SET NULL": 14, "RESTRICT": 1}
+    assert rules == {"CASCADE": 9, "SET NULL": 16, "RESTRICT": 1}

@@ -12,6 +12,7 @@ from src.api.middleware.auth import ensure_task_access, require_permission
 from src.api.schemas.rule import RuleOut
 from src.infrastructure.database.mysql import get_db
 from src.models import Article, AuditLog, Regulation, ReviewResult, ReviewTask, Rule, User
+from src.services.precedent_memory import sync_after_verdict
 from src.services.result_trail import build_trail
 from src.services.rule_tuning import apply_suggestion, build_rule_suggestions
 from src.utils.errors import AppError, ErrorCode
@@ -245,6 +246,8 @@ def confirm_result(
     )
     db.commit()
     db.refresh(result)
+    # 判定先例记忆（第 2 批）：人工终态结论沉淀为可召回先例（失败不阻塞判定）
+    sync_after_verdict(db, result)
     return ok(
         {
             "result_id": result.id,
@@ -269,6 +272,7 @@ def bulk_confirm_results(
     """
     unique_ids = list(dict.fromkeys(body.result_ids))
     skipped: list[dict] = []
+    touched: list[ReviewResult] = []  # 判定成功条目（提交后沉淀先例用）
     updated = 0
     now = datetime.now()
     for rid in unique_ids:
@@ -313,7 +317,11 @@ def bulk_confirm_results(
             )
         )
         updated += 1
+        touched.append(result)
     db.commit()
+    # 批量判定同样沉淀先例（sync_after_verdict 内部自带失败降级）
+    for result in touched:
+        sync_after_verdict(db, result)
     return ok({"updated": updated, "skipped": skipped})
 
 
@@ -338,6 +346,7 @@ def revert_results(
     """
     unique_ids = list(dict.fromkeys(body.result_ids))
     skipped: list[dict] = []
+    reverted: list[ReviewResult] = []  # 撤销成功条目（提交后清理先例用）
     updated = 0
     for rid in unique_ids:
         result = db.get(ReviewResult, rid)
@@ -381,7 +390,11 @@ def revert_results(
             )
         )
         updated += 1
+        reverted.append(result)
     db.commit()
+    # 撤销复核 = 回到待定状态，先例随之删除（记忆始终等于最新人工判断）
+    for result in reverted:
+        sync_after_verdict(db, result)
     return ok({"updated": updated, "skipped": skipped})
 
 

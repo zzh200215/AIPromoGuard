@@ -51,6 +51,8 @@ class ReviewState(TypedDict, total=False):
     llm_findings: list[dict[str, Any]]
     # 工具查证检索到的条款（function calling 模式）——并入证据核验集（2026-10-16）
     tool_articles: list[dict[str, Any]]
+    # 先例记忆元数据（第 2 批）：llm_scan 召回注入的先例统计（units/injected）
+    precedent_meta: dict[str, Any]
     vlm_findings: list[dict[str, Any]]  # 视觉层审查 findings（VLM，图片文档专用，仅初始态写入）
     # 方案 A：解析脱敏时采集的敏感命中元数据（PII 检测的数据源——
     # 脱敏后文本正则扫不出敏感信息；仅初始态写入）

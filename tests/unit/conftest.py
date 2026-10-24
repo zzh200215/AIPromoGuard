@@ -15,6 +15,21 @@ from src.infrastructure.database.mysql import SessionLocal
 from src.models import ProductMaterial
 
 
+@pytest.fixture(autouse=True)
+def _isolated_precedent_vectors(tmp_path, monkeypatch):
+    """先例记忆向量隔离：单测中的先例写入/召回一律落到临时 Chroma 目录。
+
+    先例集合（legal_precedents）是真实审查的召回源——confirm 端点测试等
+    任何触发 sync_after_verdict 的用例若直写 data/chroma，垃圾向量会进入
+    真实审查的记忆。DB 行随 results 级联清理，但向量没有 FK，必须在此截断。
+    """
+    from src.infrastructure.vectorstore.chroma import ChromaVectorStore
+    from src.services import precedent_memory as pm
+
+    store = ChromaVectorStore(persist_dir=str(tmp_path / "precedents-chroma"))
+    monkeypatch.setattr(pm, "get_vector_store", lambda: store)
+
+
 @pytest.fixture()
 def isolated_materials():
     """影响分析类测试隔离：临时归档既有在用材料台账，结束后恢复。

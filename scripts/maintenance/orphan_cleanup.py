@@ -49,7 +49,7 @@ class FkSpec:
     orphan_action: str = "null"  # delete / null
 
 
-# ---- 外键图（9 张子表 / 21 条约束）----
+# ---- 外键图（11 张子表 / 26 条约束）----
 # 说明：多态列不建 FK——review_batches.source_id（source_type 决定指向）、
 # audit_logs.resource_id（varchar 多态）、product_materials.document_id（指向文件非表）。
 FK_SPECS: tuple[FkSpec, ...] = (
@@ -86,6 +86,16 @@ FK_SPECS: tuple[FkSpec, ...] = (
     FkSpec("notifications", "user_id", "users", ondelete="CASCADE", orphan_action="delete"),
     # 审计日志：用户弱引用（留痕优先，删除用户不删日志）
     FkSpec("audit_logs", "user_id", "users"),
+    # 判定先例记忆（a7c4f1e9b3d2）：先例强从属于结论与任务；规则/复核人弱引用
+    FkSpec("review_precedents", "result_id", "review_results",
+           ondelete="CASCADE", orphan_action="delete"),
+    FkSpec("review_precedents", "task_id", "review_tasks",
+           ondelete="CASCADE", orphan_action="delete"),
+    FkSpec("review_precedents", "rule_id", "rules"),
+    FkSpec("review_precedents", "confirmed_by", "users"),
+    # Copilot 多轮会话：强从属于任务
+    FkSpec("copilot_messages", "task_id", "review_tasks",
+           ondelete="CASCADE", orphan_action="delete"),
 )
 
 

@@ -87,6 +87,8 @@ def _stage_detail(name: str, result: dict) -> dict | None:
             "model": usage.get("model"),
             # prompt 版本审计：审查结论可溯源到 prompt 注册表的具体版本
             "prompt": f"review@{get_prompt('review').version}",
+            # 先例记忆可观测：本任务注入的历史人工判定先例数（0=无记忆可用）
+            "precedents": (result.get("precedent_meta") or {}).get("injected", 0),
         }
 
     if name == "conflict_resolve":

@@ -86,6 +86,10 @@ workflow:
                               # 合规场景不能用召回换速度，故默认关闭；需要批量跑成本优先的场景可临时开启。
   llm_max_chunks: 0          # LLM 审查块数上限：0 = 审查全部块（默认，长文档不漏审）；>0 为显式成本护栏
   llm_confidence_threshold: 0.5   # LLM 输出置信度下限，低于则丢弃（幻觉抑制）
+  # 判定先例记忆（第 2 批）：人工复核终态结论沉淀为可召回先例，审查时注入 LLM 上下文。
+  # 零 LLM 成本（本地 embedding 召回）；关闭后 llm_scan prompt 与无记忆版逐字节一致
+  precedent_memory: true
+  precedent_top_k: 3             # 每个扫描单元注入的先例数上限
   # 人审分流（方向②）：规则引擎/双引擎高置信命中自动确认，纯 LLM 一律进人工队列。
   # confirmed_by=0 标识系统自动确认；反馈统计只计人工复核（confirmed_by>0），保证精调数据干净。
   auto_confirm:

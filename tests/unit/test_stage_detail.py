@@ -66,7 +66,7 @@ def test_llm_scan_detail_with_usage():
 
 def test_llm_scan_detail_degraded_no_key():
     # 无 API Key 降级：usage=None 不崩，字段保留 None（前端显示"未启用"）；
-    # prompt 版本号来自注册表（随版本演进自动同步）
+    # prompt 版本号来自注册表（随版本演进自动同步）；precedents=无记忆时 0
     from src.core.llm.prompts.registry import get_prompt
 
     d = _stage_detail("llm_scan", {"llm_findings": [], "llm_usage": None})
@@ -76,7 +76,17 @@ def test_llm_scan_detail_degraded_no_key():
         "failed_blocks": None,
         "model": None,
         "prompt": f"review@{get_prompt('review').version}",
+        "precedents": 0,
     }
+
+
+def test_llm_scan_detail_precedents_observed():
+    # 先例记忆可观测：precedent_meta.injected 透传进 stage_log（前端轨迹可见）
+    d = _stage_detail(
+        "llm_scan",
+        {"llm_findings": [], "llm_usage": None, "precedent_meta": {"units": 4, "injected": 7}},
+    )
+    assert d["precedents"] == 7
 
 
 def test_conflict_resolve_detail_by_source():

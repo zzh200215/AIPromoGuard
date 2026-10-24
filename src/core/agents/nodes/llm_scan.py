@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from src.core.agents.state import ReviewState
 from src.core.llm.client import extract_findings, get_llm, merge_usage
 from src.core.llm.prompts.review import build_review_messages
+from src.services.precedent_memory import recall_precedents
 from src.utils.config import settings
 from src.utils.logger import get_logger
 
@@ -103,16 +104,20 @@ def _parse_raw(content: str) -> list:
 
 
 async def _scan_block(
-    llm, block: dict, articles: list[dict], domain: str | None = None
+    llm, block: dict, articles: list[dict], domain: str | None = None,
+    precedents: list[dict] | None = None,
 ) -> tuple[list[dict], int, dict]:
     """审查单个文档块：结构化调用 + 逐条校验，返回 (findings, 丢弃数, usage, tool_articles)。
 
     enable_tool_calls=True 时启用真 function calling：LLM 主动调 search_regulations
     查证法规再判定（configs/app.yaml llm.tool_calling 控制护栏与开关），domain 透传给检索。
     tool_articles 为工具查证检索到的条款（并入证据核验集）。
+    precedents 为召回的同类判定先例（None/空 = 不注入，prompt 与历史版本一致）。
     _FakeLLM.achat_json 签名 (messages, temperature=None) 兼容新增关键字参数。
     """
-    messages = build_review_messages(block.get("text", ""), articles)
+    messages = build_review_messages(
+        block.get("text", ""), articles, precedents=precedents
+    )
     tc_cfg = (settings.app_config("llm") or {}).get("tool_calling") or {}
     use_tools = bool(tc_cfg.get("enabled", True))
     data, usage, tool_articles = await llm.achat_json(
@@ -201,14 +206,28 @@ def llm_scan(state: ReviewState) -> dict:
     if max_chunks > 0:
         units = units[:max_chunks]
 
+    # 判定先例记忆（第 2 批）：按扫描单元召回同类历史人工判定注入审查上下文。
+    # 零 LLM 成本（本地 embedding 查询）；失败/无先例降级为无先例审查，主路径不受影响。
+    memory_on = bool(workflow_cfg.get("precedent_memory", True))
+    precedent_top_k = int(workflow_cfg.get("precedent_top_k", 3))
+    task_id = state.get("task_id")
+
     async def _run() -> list:
         sem = asyncio.Semaphore(concurrency)
 
         async def _guarded(unit: dict):
             async with sem:
                 try:
+                    precedents = None
+                    if memory_on and precedent_top_k > 0:
+                        precedents = recall_precedents(
+                            unit.get("text") or "",
+                            domain=domain,
+                            top_k=precedent_top_k,
+                            exclude_task_id=task_id,
+                        )
                     found, dropped_cnt, usage, tool_arts = await _scan_block(
-                        llm, unit, articles, domain
+                        llm, unit, articles, domain, precedents=precedents
                     )
                     parts = unit.get("_parts") or [unit]
                     return (
@@ -216,10 +235,11 @@ def llm_scan(state: ReviewState) -> dict:
                         dropped_cnt,
                         usage,
                         tool_arts,
+                        len(precedents or []),
                     )
                 except Exception:  # 单块失败不影响整体，降级跳过
                     logger.exception("LLM 审查块失败，降级跳过")
-                    return [], 0, None, []
+                    return [], 0, None, [], 0
 
         return await asyncio.gather(*(_guarded(u) for u in units))
 
@@ -230,10 +250,12 @@ def llm_scan(state: ReviewState) -> dict:
     failed = 0
     usages: list[dict] = []
     tool_articles: list[dict] = []
-    for block_findings, block_dropped, usage, block_tool_articles in results:
+    precedents_injected = 0
+    for block_findings, block_dropped, usage, block_tool_articles, unit_precedents in results:
         findings.extend(block_findings)
         dropped += block_dropped
         tool_articles.extend(block_tool_articles or [])
+        precedents_injected += unit_precedents
         if usage is None:
             failed += 1
         else:
@@ -251,4 +273,10 @@ def llm_scan(state: ReviewState) -> dict:
         logger.warning("LLM 审查全部 %d 块调用失败，降级为空结果", len(blocks))
     if dropped:
         logger.info("LLM 审查丢弃 %s 条无效/低置信度判定", dropped)
-    return {"llm_findings": findings, "llm_usage": usage_summary, "tool_articles": tool_articles}
+    return {
+        "llm_findings": findings,
+        "llm_usage": usage_summary,
+        "tool_articles": tool_articles,
+        # 先例记忆元数据（stage_log 可观测：本任务注入了多少条历史判定先例）
+        "precedent_meta": {"units": len(units), "injected": precedents_injected},
+    }

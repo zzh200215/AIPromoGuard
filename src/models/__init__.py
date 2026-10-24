@@ -1,11 +1,13 @@
 from src.models.article import Article
 from src.models.audit_log import AuditLog
 from src.models.batch import ReviewBatch
+from src.models.copilot_message import CopilotMessage
 from src.models.impact import ImpactAssessment
 from src.models.llm_cache import LlmCache
 from src.models.material import ProductMaterial
 from src.models.notification import Notification
 from src.models.penalty_case import PenaltyCase
+from src.models.precedent import ReviewPrecedent
 from src.models.regulation import Regulation
 from src.models.regulation_update import RegulationUpdate
 from src.models.result import ReviewResult
@@ -34,4 +36,6 @@ __all__ = [
     "LlmCache",
     "Notification",
     "TaskSignOff",
+    "ReviewPrecedent",
+    "CopilotMessage",
 ]
