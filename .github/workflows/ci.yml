@@ -75,6 +75,9 @@ jobs:
       MYSQL_PASSWORD: root123
       MYSQL_DATABASE: compliance_review
       DASHSCOPE_API_KEY: ""
+      # 无 .env 的环境必须显式给 JWT_SECRET：默认值会被 security.create_access_token
+      # 的非默认值守卫拒绝（登录发 token 即 RuntimeError，12+ API 用例连锁失败）
+      JWT_SECRET: ci-unit-test-secret-not-for-production
     steps:
       - uses: actions/checkout@v4
 
