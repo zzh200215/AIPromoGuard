@@ -50,9 +50,6 @@ jobs:
           ruff check src/ tests/ scripts/
 
   unit-tests:
-    # ci-debug-logs 分支推送需要（失败诊断日志，临时机制）
-    permissions:
-      contents: write
     runs-on: ubuntu-latest
     services:
       mysql:
@@ -137,19 +134,6 @@ jobs:
           fi
           cat pytest.log | tail -n 40
           exit $code
-
-      - name: 失败时把 pytest 日志推到 ci-debug-logs 分支（临时诊断机制）
-        if: failure()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config user.name "ci-debug" && git config user.email "ci-debug@users.noreply.github.com"
-          git checkout -q --orphan "ci-debug-$GITHUB_RUN_ID"
-          git rm -rf -q . 2>/dev/null || true
-          cp pytest.log pytest-ci.log
-          git add pytest-ci.log
-          git commit -qm "ci debug log run $GITHUB_RUN_ID"
-          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/zzh200215/AIPromoGuard.git" "HEAD:refs/heads/ci-debug-logs"
 
   frontend-build:
     runs-on: ubuntu-latest
