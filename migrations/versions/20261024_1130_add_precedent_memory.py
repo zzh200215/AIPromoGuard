@@ -15,12 +15,18 @@ Create Date: 2026-10-24 11:30:00.000000
 
 回滚对称：downgrade 直接 drop 两表（先例/会话为可再生数据，
 源数据 review_results.review_tasks 保留）。
+
+既有库兼容（同题见 1d7ed1680920::_align_column_types）：dev 库父表主键为
+init_mysql.sql 时代的 BIGINT UNSIGNED、迁移链全新库为 BIGINT。本迁移建表时
+内联 FK，子列按父列实际类型声明（_fk_col_type），否则 dev 库报 errno 3780；
+全新库两侧一致，helper 返回 BigInteger，DDL 与原版逐字相同。
 """
 
 from typing import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import mysql
 
 # revision identifiers, used by Alembic.
 revision: str = "a7c4f1e9b3d2"
@@ -45,20 +51,39 @@ FKS: tuple[tuple[str, str, str, str, str, str, str | None], ...] = (
 )
 
 
+def _fk_col_type(bind, parent_table: str):
+    """FK 子列类型跟随父表主键实际 COLUMN_TYPE（dev 库 unsigned / 全新库 signed）。"""
+    t = bind.execute(
+        sa.text(
+            "SELECT COLUMN_TYPE FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = 'id'"
+        ),
+        {"t": parent_table},
+    ).scalar()
+    if t and "unsigned" in t.lower():
+        return mysql.BIGINT(unsigned=True)
+    return sa.BigInteger()
+
+
 def upgrade() -> None:
+    bind = op.get_bind()
+    t_results = _fk_col_type(bind, "review_results")
+    t_tasks = _fk_col_type(bind, "review_tasks")
+    t_rules = _fk_col_type(bind, "rules")
+    t_users = _fk_col_type(bind, "users")
     op.create_table(
         "review_precedents",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
-        sa.Column("result_id", sa.BigInteger(), nullable=False),
-        sa.Column("task_id", sa.BigInteger(), nullable=False),
+        sa.Column("result_id", t_results, nullable=False),
+        sa.Column("task_id", t_tasks, nullable=False),
         sa.Column("verdict", sa.String(length=16), nullable=False),
         sa.Column("violation_type", sa.String(length=16), nullable=False),
-        sa.Column("rule_id", sa.BigInteger(), nullable=True),
+        sa.Column("rule_id", t_rules, nullable=True),
         sa.Column("original_text", sa.Text(), nullable=False),
         sa.Column("issue", sa.Text(), nullable=False),
         sa.Column("document_name", sa.String(length=255), nullable=True),
         sa.Column("domain", sa.String(length=32), nullable=True),
-        sa.Column("confirmed_by", sa.BigInteger(), nullable=True),
+        sa.Column("confirmed_by", t_users, nullable=True),
         sa.Column("confirmed_at", sa.DateTime(), nullable=True),
         sa.Column("note", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
@@ -84,7 +109,7 @@ def upgrade() -> None:
     op.create_table(
         "copilot_messages",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
-        sa.Column("task_id", sa.BigInteger(), nullable=False),
+        sa.Column("task_id", t_tasks, nullable=False),
         sa.Column("role", sa.String(length=16), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column("refs_json", sa.Text(), nullable=True),
