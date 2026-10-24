@@ -37,8 +37,20 @@ _SEEDERS = [
 def main() -> None:
     reset = "--reset" in sys.argv
 
-    # 1) 建库（服务器级连接，不带库名；注意 str(engine.url) 会掩码密码，必须用 URL 对象）
-    server = create_engine(engine.url.set(database=None))
+    # 1) 建库（服务器级连接，不带库名）。
+    # 版本兼容：SQLAlchemy 2.1 起 URL.set(database=None) 不再清除库名（2.0 语义），
+    # 用 URL.create 显式构造无库名 URL，两个大版本行为一致。
+    from sqlalchemy import URL as SaURL
+
+    server = create_engine(
+        SaURL.create(
+            drivername=engine.url.drivername,
+            username=engine.url.username,
+            password=engine.url.password,
+            host=engine.url.host,
+            port=engine.url.port,
+        )
+    )
     with server.connect() as conn:
         conn.execute(
             text(
