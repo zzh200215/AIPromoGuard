@@ -41,7 +41,11 @@ jobs:
       # 表现为 staging-api "No such container"）——runner 无 .env，用公开模板补位；
       # 模板内 LLM key 为空正好匹配冒烟口径（无 LLM 路径），MYSQL_* 由 compose environment 覆盖
       - name: Provide env file from public template
-        run: cp .env.example .env
+        # 模板的 JWT_SECRET 是 change-me 默认值，会被 create_access_token 的
+        # 非默认值守卫拒绝（登录即 500）——追加覆盖为冒烟专用值（env_file 后行生效）
+        run: |
+          cp .env.example .env
+          echo "JWT_SECRET=staging-smoke-ci-secret-not-for-production" >> .env
 
       - name: Build API image
         run: docker build -f docker/Dockerfile.api -t financial-compliance-review-api .
