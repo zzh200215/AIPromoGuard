@@ -175,3 +175,65 @@ def test_hybrid_search_enriches_evidence_chain():
                 assert r[key] is None or len(r[key]) == 10  # ISO 日期串或 None
     finally:
         db.close()
+
+
+# ---- 同义扩展第四路（营销话术→监管术语，2026-10-24）----
+
+def test_regulatory_synonym_terms_hit_and_dedupe():
+    """触发词命中→监管术语收集（去重保序）；干净文本不触发。"""
+    terms = regulation_service.regulatory_synonym_terms("本产品保本稳赚，年化收益上不封顶")
+    assert terms  # 保本/稳赚/年化/上不封顶至少触发一组
+    assert len(terms) == len(set(terms))
+    assert any("承诺" in t or "保本" in t for t in terms)
+    assert regulation_service.regulatory_synonym_terms("今天天气不错") == []
+
+
+def test_regulatory_synonym_terms_cap():
+    """触发面过宽时封顶 _SYNONYM_TERM_CAP（防长文把扩展路变成全库扫描）。"""
+    text = ("保本 保息 稳赚 无风险 承诺 翻倍 暴涨 上不封顶 年化 业绩比较基准 "
+            "限时 限量 抢购 返现 荐股 牛股")
+    terms = regulation_service.regulatory_synonym_terms(text)
+    assert len(terms) == regulation_service._SYNONYM_TERM_CAP
+
+
+def _kb_rich(min_articles: int = 500) -> bool:
+    """知识库规模护栏：映射表守护只在富库环境有效。
+
+    fcr_test 只播 10 部法规种子（~45 条），映射目标未必在内——0 命中属种子
+    覆盖问题而非映射漂移，跳过；dev 库（2951 条）与全量种子环境才执行守护。
+    """
+    try:
+        from sqlalchemy import text as sql_text
+
+        db = SessionLocal()
+        n = db.execute(sql_text("SELECT COUNT(*) FROM articles")).scalar()
+        db.close()
+        return (n or 0) >= min_articles
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(
+    not (_ready() and _kb_rich()), reason="富库环境不可用（fcr_test 种子库不执行映射守护）",
+)
+def test_synonym_targets_hit_kb():
+    """映射表防漂移守护：每个监管术语在库内必须仍有命中（否则该路白跑）。"""
+    db = SessionLocal()
+    try:
+        all_terms = {t for terms in regulation_service.MARKETING_SYNONYMS.values() for t in terms}
+        for term in sorted(all_terms):
+            hits = regulation_service.search_keyword(db, term, None, 3)
+            assert hits, f"同义映射目标 [{term}] 在库内 0 命中——映射表与知识库漂移"
+    finally:
+        db.close()
+
+
+@pytest.mark.skipif(not _ready(), reason="数据库或向量库不可用")
+def test_regulation_match_records_synonym_terms():
+    """节点级集成：营销话术文档 → 第四路触发且 fusion 后条款非空，meta 留痕。"""
+    from src.core.agents.nodes.regulation_match import regulation_match
+
+    result = regulation_match({"text": "限时抢购！本产品保本稳赚，年化收益翻倍", "domain": "fund"})
+    meta = result.get("retrieval_meta") or {}
+    assert meta.get("synonym_terms"), "营销触发词在场却未记录同义扩展术语"
+    assert result.get("matched_articles")

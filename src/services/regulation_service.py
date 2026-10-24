@@ -36,6 +36,45 @@ _LONG_QUERY_CHARS = 40
 _EXTRACT_MAX_CHARS = 4000  # 关键词抽取的扫描上限，防超大文档拖慢检索
 _KEYWORD_LIMIT = 8
 
+# 营销话术 → 监管术语同义扩展表（检索第四路，确定性零 LLM）。
+# 诊断来源（2026-10-24 judge_ctx 30 例）：检索相关性 0.413，缺失主题集中于收益承诺/
+# 适当性/营销宣传规范——营销口语与监管书面语无词面重叠（"稳赚"全库 0 命中），
+# 语义嵌入也桥接不足，正主条款进不了 Top-K。触发词保持保守（对应 classify 风险词表
+# 的强信号子集），映射目标均已验证在库内有命中；映射目标与库漂移由
+# test_synonym_targets_hit_kb 守护。
+MARKETING_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "保本": ("承诺保本", "保本保收益"),
+    "保息": ("保本保收益", "承诺收益"),
+    "稳赚": ("承诺收益", "保本保收益"),
+    "无风险": ("风险揭示", "承诺收益"),
+    "承诺": ("承诺收益",),
+    "翻倍": ("夸大", "预期收益率"),
+    "暴涨": ("夸大",),
+    "上不封顶": ("夸大", "预期收益率"),
+    "年化": ("预期收益率", "业绩比较基准"),
+    "业绩比较基准": ("业绩比较基准",),
+    "限时": ("诱导", "营销宣传"),
+    "限量": ("诱导", "营销宣传"),
+    "抢购": ("诱导",),
+    "返现": ("诱导", "营销宣传"),
+    "荐股": ("证券投资咨询",),
+    "牛股": ("证券投资咨询",),
+}
+_SYNONYM_TERM_CAP = 6  # 同义词路最多注入的监管术语数（防长文触发面过宽）
+
+
+def regulatory_synonym_terms(text: str) -> list[str]:
+    """按营销触发词收集监管术语（去重保序，封顶 _SYNONYM_TERM_CAP）。"""
+    out: list[str] = []
+    for trigger, terms in MARKETING_SYNONYMS.items():
+        if trigger in text:
+            for t in terms:
+                if t not in out:
+                    out.append(t)
+                    if len(out) >= _SYNONYM_TERM_CAP:
+                        return out
+    return out
+
 # 高频虚词二元组：无领域区分度，粗滤避免挤占领域关键词名额
 _STOP_BIGRAMS = frozenset(
     {

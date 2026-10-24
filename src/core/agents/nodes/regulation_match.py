@@ -39,6 +39,36 @@ def regulation_match(state: ReviewState) -> dict:
             logger.exception("混合检索失败，回退关键词检索")
             articles = regulation_service.search_keyword(db, text, domain_list, top_k)
 
+        # 确定性第四路：营销话术→监管术语同义扩展（零 LLM；诊断见
+        # regulation_service.MARKETING_SYNONYMS 注释）。逐术语精确短语检索后
+        # RRF 融合——桥接"稳赚/翻倍"类营销口语与"承诺收益"类监管书面语的词面鸿沟。
+        synonym_terms: list[str] = []
+        if cfg.get("synonym_expansion", True):
+            synonym_terms = regulation_service.regulatory_synonym_terms(text)
+            if synonym_terms:
+                try:
+                    term_lists = [
+                        regulation_service.search_keyword(db, t, domain_list, top_k)
+                        for t in synonym_terms
+                    ]
+                    term_lists = [lst for lst in term_lists if lst]
+                    if term_lists:
+                        syn_articles = (
+                            regulation_service.fuse_route_lists(term_lists, top_k)
+                            if len(term_lists) > 1
+                            else term_lists[0]
+                        )
+                        articles = regulation_service.fuse_route_lists(
+                            [articles, syn_articles], top_k
+                        )
+                        logger.info(
+                            "同义扩展路召回 %s 条款（触发术语：%s）",
+                            len(syn_articles), synonym_terms,
+                        )
+                except Exception:
+                    logger.exception("同义扩展检索失败，跳过该路")
+                    synonym_terms = []
+
         # P3 Agentic RAG（可选）：充分性自评 + 按需补检；未配置 key / 失败时保持基础召回
         retrieval_meta: dict = {}
         retrieval_model: str | None = None
@@ -96,6 +126,6 @@ def regulation_match(state: ReviewState) -> dict:
 
     return {
         "matched_articles": articles,
-        "retrieval_meta": retrieval_meta,
+        "retrieval_meta": {**retrieval_meta, "synonym_terms": synonym_terms},
         "llm_usage": usage_delta,
     }

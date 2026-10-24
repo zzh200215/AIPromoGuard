@@ -75,6 +75,10 @@ domains:
 # 审查工作流（LangGraph，W3 启用）
 workflow:
   regulation_top_k: 5        # 每个 chunk 召回法规条款数
+  synonym_expansion: true    # 检索第四路：营销话术→监管术语同义扩展（确定性零 LLM）。
+                             # 2026-10-24 judge 诊断：30 例检索相关性 0.413，"稳赚/翻倍"类
+                             # 口语与"承诺收益"类书面语无词面重叠、语义桥接不足，正主条款
+                             # 进不了 Top-K；映射表见 regulation_service.MARKETING_SYNONYMS
   regulation_dedup_per_doc: 1   # 同一部法规最多保留几条召回（0=关闭，保持历史行为）。
                                 # 设为 1：多部法规各出一条，避免 Top-K 被同一部法规的近似条款占满
                                 # （2026-10-22 实测：理财直播材料 Top5 有 3 条来自同一部办法，

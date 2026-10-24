@@ -75,6 +75,9 @@ def _stage_detail(name: str, result: dict) -> dict | None:
         if meta.get("rounds"):
             detail["agentic_rounds"] = meta.get("rounds")
             detail["agentic_added"] = meta.get("added", 0)
+        # 同义扩展第四路（确定性）：命中的监管术语（空=未触发）
+        if meta.get("synonym_terms"):
+            detail["synonym_terms"] = meta.get("synonym_terms")
         return detail
 
     if name == "rule_scan":
@@ -195,7 +198,7 @@ def build_graph(checkpointer=None):
 
     classify 之后按 domain 用 add_conditional_edges 路由到独立领域子图
     （真·多 Agent 分工），每个子图内含 regulation_match → (rule_scan ∥ llm_scan)
-    → conflict_resolve → verify（可选 verifier 独立复核）；领域无关的
+    → conflict_resolve → verify（可选 verifier 独立复核）；领域无关的
     human_review/risk_assess/report 作为共享
     汇合链保持线性（保证 HIL interrupt/resume 可达）。classify 识别失败
     （domain=None）或未知领域走 domain_general 兜底子图。
