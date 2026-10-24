@@ -15,13 +15,13 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
 from sqlalchemy import func
 
-from src.infrastructure.database.mysql import SessionLocal
-from src.models import ReviewPrecedent, ReviewResult
-from src.services.precedent_memory import sync_after_verdict
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from src.infrastructure.database.mysql import SessionLocal  # noqa: E402
+from src.models import ReviewPrecedent, ReviewResult  # noqa: E402
+from src.services.precedent_memory import sync_after_verdict  # noqa: E402
 
 
 def main() -> int:
