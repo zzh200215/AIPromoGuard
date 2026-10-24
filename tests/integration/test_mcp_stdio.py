@@ -8,6 +8,7 @@
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -39,9 +40,18 @@ def test_stdio_full_roundtrip():
             command=sys.executable,
             args=["-m", "src.mcp_server.server"],
             cwd=str(REPO_ROOT),
-            # MCP 客户端默认只继承白名单环境变量（不含 PYTHONUTF8），
-            # 中文 Windows 上子进程 stdio 会退化为 GBK——显式补上
-            env={"PYTHONUTF8": "1"},
+            # MCP 客户端默认只继承白名单环境变量：不含 PYTHONUTF8（中文 Windows
+            # 子进程 stdio 退化为 GBK）也不含 MYSQL_*（Linux 上 server 子进程
+            # 连不上测试库，工具异常文本破坏 JSON 协议）——两者都显式补上
+            env={
+                "PYTHONUTF8": "1",
+                **{
+                    k: os.environ[k]
+                    for k in ("MYSQL_HOST", "MYSQL_PORT", "MYSQL_USER",
+                              "MYSQL_PASSWORD", "MYSQL_DATABASE")
+                    if k in os.environ
+                },
+            },
         )
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:

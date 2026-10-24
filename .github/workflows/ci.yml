@@ -84,6 +84,11 @@ jobs:
           pip install -r requirements.txt
           pip install -e ".[dev]"
 
+      - name: Install CJK font (PDF 报告测试依赖)
+        # ubuntu runner 无中文字体，pdf.py 的字体候选全部落空 → 报告 PDF 用例 500；
+        # 生产镜像由 Dockerfile.api 装 fonts-wqy-zenhei，此处对齐
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends fonts-noto-cjk
+
       - name: Init schema (Alembic)
         run: python -m alembic upgrade head
 
