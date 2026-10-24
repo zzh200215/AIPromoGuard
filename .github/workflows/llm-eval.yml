@@ -50,6 +50,11 @@ jobs:
       # （Settings.llm_base_url/llm_model 对空串不设防，此处必须兜底）
       LLM_BASE_URL: ${{ secrets.LLM_BASE_URL || 'https://token.sensenova.cn/v1' }}
       LLM_MODEL: ${{ secrets.LLM_MODEL || 'deepseek-v4-flash' }}
+      # 免费网关限流墙（rpm exhausted，实测有效 RPM≈5）：默认 2 次重试扛不住
+      # 71 例全链路的持续 429，需与本地一致的 5 级梯子（3s→6s→…→48s）
+      LLM_RATE_LIMIT_RETRIES: "5"
+      # 工具循环（ReAct 法规查证）单次往返可达 35~65s，默认 120s 偏紧（见 .env.example）
+      LLM_TIMEOUT: "240"
     steps:
       - uses: actions/checkout@v4
 
