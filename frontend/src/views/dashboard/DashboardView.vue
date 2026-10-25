@@ -49,6 +49,28 @@
       </div>
     </template>
 
+    <!-- P2-2 合规态势图表行：30 天检出趋势 / 风险分布 / 引擎来源 -->
+    <div v-if="insight" class="charts-row">
+      <el-card class="chart-card">
+        <template #header>
+          <div class="card-header"><span class="card-title">近 30 天检出趋势</span></div>
+        </template>
+        <EChartBase :option="trendOption" height="240px" />
+      </el-card>
+      <el-card class="chart-card">
+        <template #header>
+          <div class="card-header"><span class="card-title">风险分布</span></div>
+        </template>
+        <EChartBase :option="riskOption" height="240px" />
+      </el-card>
+      <el-card class="chart-card">
+        <template #header>
+          <div class="card-header"><span class="card-title">引擎来源分布</span></div>
+        </template>
+        <EChartBase :option="sourceOption" height="240px" />
+      </el-card>
+    </div>
+
     <!-- 主区：进行中 / 最近任务 -->
     <div class="main-grid">
       <div class="main-col">
@@ -191,6 +213,10 @@ import {
   UploadFilled,
 } from '@element-plus/icons-vue'
 import { impactOverview } from '@/api/impact'
+import { insightsOverview } from '@/api/insights'
+import EChartBase from '@/components/charts/EChartBase.vue'
+import { CHART_COLORS } from '@/components/charts/colors'
+import type { InsightOverview } from '@/types/insights'
 import { systemMonitor } from '@/api/monitor'
 import { listTasks } from '@/api/tasks'
 import { formatTime } from '@/composables/useFormat'
@@ -206,6 +232,83 @@ const auth = useAuthStore()
 const recentTasks = ref<TaskOut[]>([])
 const tasksLoading = ref(false)
 const monitor = ref<SystemMonitor | null>(null)
+const insight = ref<InsightOverview | null>(null)
+
+const RISK_LABELS: Record<string, string> = { high: '高风险', medium: '中风险', low: '低风险', unknown: '未定级' }
+const SOURCE_LABELS: Record<string, string> = {
+  rule: '规则引擎', llm: '语义审查', hybrid: '双引擎交叉', vlm: '视觉层', unknown: '其他',
+}
+
+const trendOption = computed(() => ({
+  backgroundColor: 'transparent',
+  tooltip: { trigger: 'axis' },
+  grid: { left: 36, right: 12, top: 16, bottom: 24 },
+  xAxis: {
+    type: 'category',
+    data: (insight.value?.trend ?? []).map((d) => d.date.slice(5)),
+    axisLabel: { fontSize: 10, interval: 6 },
+  },
+  yAxis: { type: 'value', minInterval: 1, axisLabel: { fontSize: 10 } },
+  series: [
+    {
+      name: '检出结论',
+      type: 'line',
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 5,
+      data: (insight.value?.trend ?? []).map((d) => d.count),
+      lineStyle: { color: CHART_COLORS.accent, width: 2 },
+      itemStyle: { color: CHART_COLORS.accent },
+      areaStyle: { color: CHART_COLORS.accent, opacity: 0.12 },
+    },
+  ],
+}))
+
+const riskOption = computed(() => ({
+  backgroundColor: 'transparent',
+  tooltip: { trigger: 'item', formatter: '{b}：{c} 条（{d}%）' },
+  legend: { bottom: 0, textStyle: { fontSize: 11 } },
+  series: [
+    {
+      name: '风险分布',
+      type: 'pie',
+      radius: ['42%', '68%'],
+      center: ['50%', '44%'],
+      label: { show: false },
+      data: (insight.value?.risk ?? []).map((r) => ({
+        name: RISK_LABELS[r.key] ?? r.key,
+        value: r.count,
+        itemStyle: {
+          color:
+            ({ high: CHART_COLORS.danger, medium: CHART_COLORS.warning, low: CHART_COLORS.success } as Record<string, string>)[
+              r.key
+            ] ?? CHART_COLORS.info,
+        },
+      })),
+    },
+  ],
+}))
+
+const sourceOption = computed(() => ({
+  backgroundColor: 'transparent',
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+  grid: { left: 64, right: 16, top: 12, bottom: 24 },
+  xAxis: { type: 'value', minInterval: 1, axisLabel: { fontSize: 10 } },
+  yAxis: {
+    type: 'category',
+    data: (insight.value?.sources ?? []).map((s) => SOURCE_LABELS[s.key] ?? s.key).reverse(),
+    axisLabel: { fontSize: 11 },
+  },
+  series: [
+    {
+      name: '检出结论',
+      type: 'bar',
+      barMaxWidth: 16,
+      data: (insight.value?.sources ?? []).map((s) => s.count).reverse(),
+      itemStyle: { color: CHART_COLORS.accentDeep, borderRadius: [0, 4, 4, 0] },
+    },
+  ],
+}))
 
 // ---- 飞轮动态（最近入库/发布，每类取最新一条） ----
 const latestReg = computed(() => monitor.value?.recent_activity?.regulations?.[0])
@@ -360,6 +463,12 @@ async function loadDashboard() {
     // 拦截器已提示
   } finally {
     tasksLoading.value = false
+  }
+
+  try {
+    insight.value = await insightsOverview()
+  } catch {
+    // 静默：图表数据不可用时整行隐藏
   }
 
   if (auth.hasPermission('monitor')) {
@@ -537,6 +646,17 @@ onActivated(() => {
 }
 
 // ---- 主区两栏 ----
+.charts-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.chart-card :deep(.el-card__body) {
+  padding: 12px 16px;
+}
+
 .main-grid {
   display: grid;
   // 320px：保证快捷入口 13px×4 字标签在卡片 24px 内边距下不换行

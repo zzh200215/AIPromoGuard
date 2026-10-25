@@ -44,6 +44,10 @@
     </el-card>
 
     <template v-if="result">
+      <el-card v-if="result.total_matched > 0" class="force-card">
+        <template #header><span>图谱关联视图</span></template>
+        <GraphForceChart :result="result" />
+      </el-card>
       <el-row :gutter="12" class="result-row">
         <el-col :span="8">
           <el-card class="panel-card">
@@ -130,6 +134,7 @@ defineOptions({ name: 'graph' })
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { graphStats, queryGraph, recommendCases } from '@/api/graph'
+import GraphForceChart from '@/components/charts/GraphForceChart.vue'
 import { DOMAIN_LABELS, DOMAIN_OPTIONS } from '@/constants/enums'
 import type { Domain, Severity } from '@/types/api'
 import type { GraphCase, GraphQueryResult, GraphStats } from '@/types/graph'
@@ -217,6 +222,10 @@ onMounted(async () => {
 
 .graph-alert {
   margin-top: 12px;
+}
+
+.force-card {
+  margin-bottom: 16px;
 }
 
 .result-row {
