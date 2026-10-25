@@ -27,6 +27,23 @@ export const signOffTask = (taskId: number, body: { decision: 'released' | 'reje
     created_at: string
   }>({ url: `/tasks/${taskId}/sign-off`, method: 'post', data: body })
 
+/** 人工复核决策提交（HIL 续跑）：rejected_indexes = 标记为误报的 finding 下标 */
+export const submitHumanReview = (taskId: number, rejectedIndexes: number[]) =>
+  request<{ task_id: number; status: string; total_violations?: number }>({
+    url: `/tasks/${taskId}/human-review`,
+    method: 'post',
+    data: { rejected_indexes: rejectedIndexes },
+  })
+
+/** 查询任务当前有效签发结论（最新一次），无则 data 为 null */
+export const getSignOff = (taskId: number) =>
+  request<{
+    decision: 'released' | 'rejected'
+    username: string
+    note?: string | null
+    created_at: string
+  } | null>({ url: `/tasks/${taskId}/sign-off`, method: 'get' })
+
 /** 文档解析原文块（带页/段位置，已脱敏；供复核对照视图） */
 export interface DocumentBlock {
   text: string

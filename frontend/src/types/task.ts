@@ -16,6 +16,14 @@ export interface TaskStageDetail {
   cost_ms: number
   /** 节点过程明细（审查轨迹面板数据源；enrich 上线前的旧任务无此字段） */
   detail?: StageNodeDetail
+  /** human_review 节点：awaiting 时的待复核结论清单（interrupt payload 原样） */
+  pending?: {
+    index: number
+    source?: string
+    severity?: string
+    description?: string
+    original_text?: string
+  }[]
 }
 
 /** 各节点的过程明细字段（按节点名选用；全部来自 state 已有数据） */

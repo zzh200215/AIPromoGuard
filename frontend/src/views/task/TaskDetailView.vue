@@ -38,6 +38,35 @@
       <TaskProgressBar :status="task.status" :progress="task.progress" :task="task" />
     </el-card>
 
+    <!-- P1-3 存量端点接通：HIL 人工复核决策卡（此前只能 curl 提交，UI 无法推进） -->
+    <el-card v-if="task?.status === 'awaiting_review' && pendingReview.length" class="hil-card">
+      <template #header>
+        <div class="hil-head">
+          <span class="hil-title">人工复核决策（{{ pendingReview.length }} 条待定）</span>
+          <span class="hil-sub">勾选"驳回"的结论将按误报剔除后生成最终报告；未勾选视为确认成立</span>
+        </div>
+      </template>
+      <div v-for="item in pendingReview" :key="item.index" class="hil-item">
+        <el-checkbox v-model="hilRejected[item.index]">
+          <span class="hil-reject-label">驳回（误报）</span>
+        </el-checkbox>
+        <div class="hil-item-body">
+          <div class="hil-item-text">"{{ item.original_text }}"</div>
+          <div v-if="item.description" class="hil-item-desc">{{ item.description }}</div>
+        </div>
+        <SeverityTag :severity="(item.severity as Severity)" />
+      </div>
+      <div class="hil-actions">
+        <el-button
+          type="primary"
+          :loading="hilSubmitting"
+          @click="submitHil"
+        >
+          提交决策并生成报告（驳回 {{ rejectedCount }} 条）
+        </el-button>
+      </div>
+    </el-card>
+
     <el-alert
       v-if="task?.status === 'failed'"
       type="error"
@@ -332,10 +361,12 @@ import { downloadEvidencePack, downloadReport, getReport } from '@/api/reports'
 import { bulkConfirmResults, listResults, revertResults } from '@/api/results'
 import {
   fetchTaskDocumentObjectUrl,
+  getSignOff,
   getTaskDocumentContent,
   isImageDocument,
   retryTask,
   signOffTask,
+  submitHumanReview,
   type DocumentBlock,
 } from '@/api/tasks'
 import { useTaskPolling } from '@/composables/useTaskPolling'
@@ -347,6 +378,7 @@ import ReviewWorkbench from '@/components/ReviewWorkbench.vue'
 import ViolationTable from '@/components/ViolationTable.vue'
 import { useAuthStore } from '@/stores/auth'
 import type { ReportData, ViolationItem } from '@/types/report'
+import type { Severity } from '@/types/result'
 import type { ReviewResult } from '@/types/result'
 
 const route = useRoute()
@@ -356,7 +388,7 @@ const auth = useAuthStore()
 // 非法路由参数得 NaN，NaN == null 为 false 会穿过判空发出 /tasks/NaN 请求
 const parsedTaskId = Number(route.params.id)
 const taskId = ref<number | null>(Number.isFinite(parsedTaskId) ? parsedTaskId : null)
-const { task, error: pollError, start, stop } = useTaskPolling(taskId)
+const { task, error: pollError, start, stop, poll } = useTaskPolling(taskId)
 
 const isRunning = computed(() => {
   const s = task.value?.status
@@ -542,6 +574,58 @@ const canSignOff = computed(
 )
 
 const isReportFinal = computed(() => Boolean(report.value && !report.value.message))
+
+// ---- P1-3 HIL 人工复核决策卡：awaiting_review 任务的 UI 推进闭环 ----
+interface HilItem {
+  index: number
+  source?: string
+  severity?: string
+  description?: string
+  original_text?: string
+}
+const pendingReview = computed<HilItem[]>(
+  () => task.value?.stages?.human_review?.pending ?? [],
+)
+const hilRejected = ref<Record<number, boolean>>({})
+const rejectedCount = computed(
+  () => Object.values(hilRejected.value).filter(Boolean).length,
+)
+const hilSubmitting = ref(false)
+
+async function submitHil() {
+  if (taskId.value == null || hilSubmitting.value) return
+  hilSubmitting.value = true
+  try {
+    const rejected = Object.entries(hilRejected.value)
+      .filter(([, v]) => v)
+      .map(([k]) => Number(k))
+    await submitHumanReview(taskId.value, rejected)
+    ElMessage.success('决策已提交，报告生成中')
+    hilRejected.value = {}
+    await poll() // 续跑同步完成，立即刷新到 completed
+  } catch {
+    // 409（决策已被提交）等错误由请求层统一提示
+  } finally {
+    hilSubmitting.value = false
+  }
+}
+
+// ---- P1-3 签发留痕横幅：不打开报告页也能看到签发状态（GET sign-off 接通） ----
+const signOffBanner = ref<{ decision: string; username: string; created_at: string } | null>(null)
+watch(
+  () => [taskId.value, task.value?.status] as const,
+  async ([tid, st]) => {
+    signOffBanner.value = null
+    if (tid == null || st !== 'completed') return
+    try {
+      const res = await getSignOff(tid)
+      signOffBanner.value = res ?? null
+    } catch {
+      // 静默：签发查询失败不影响页面
+    }
+  },
+  { immediate: true },
+)
 
 const signOffTitle = computed(() => {
   const so = report.value?.sign_off
@@ -781,6 +865,69 @@ onActivated(() => {
   margin-top: 10px;
   font-size: 13px;
   color: var(--el-text-color-secondary);
+}
+
+/* ---- P1-3 HIL 人工复核决策卡 ---- */
+.hil-card {
+  margin-bottom: 16px;
+}
+
+.hil-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.hil-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.hil-sub {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.hil-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--el-border-color-lighter);
+}
+
+.hil-item:last-of-type {
+  border-bottom: none;
+}
+
+.hil-reject-label {
+  font-size: 12.5px;
+}
+
+.hil-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.hil-item-text {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--el-text-color-primary);
+}
+
+.hil-item-desc {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--el-text-color-secondary);
+}
+
+.hil-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .progress-card {

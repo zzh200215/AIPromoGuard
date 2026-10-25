@@ -558,11 +558,13 @@ def resume_human_review(task_id: int, rejected_indexes: list[int]) -> dict:
                 ErrorCode.TASK_INVALID_STATE, "决策已被提交处理，请刷新页面查看最新结果"
             )
         db.refresh(task)
+        _emit_status(task_id, "running")
 
         result = resume_review(
             thread_id_for_task(task_id), {"rejected_indexes": list(rejected_indexes)}
         )
         _finalize_task(db, task, result)
+        _emit_status(task_id, "completed")
         return {
             "task_id": task_id,
             "status": task.status,
