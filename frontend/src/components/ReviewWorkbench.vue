@@ -169,17 +169,42 @@
           </div>
         </div>
 
-        <!-- 法规依据 -->
-        <div v-if="current.regulation_name" class="reg-card">
-          <div class="reg-title">
-            <el-icon><Collection /></el-icon>
-            法规依据
+        <!-- P1-2 证据对照：法规条款全文（选中即自动加载，无需点击）+ 相似罚单案例 -->
+        <div v-if="current.regulation_name || articleFull || currentCases.length" class="evidence">
+          <div class="ev-seg">
+            <div class="ev-seg-head">
+              <el-icon><Collection /></el-icon>
+              <span>法规条款</span>
+              <span v-if="current.regulation_no" class="ev-seg-sub">{{ current.regulation_no }}</span>
+            </div>
+            <div v-if="current.regulation_name" class="reg-name">
+              《{{ current.regulation_name }}》{{ current.article_no || '' }}
+            </div>
+            <div v-if="articleLoading" v-loading="true" class="reg-full reg-full--loading" />
+            <div v-else-if="articleFull" class="reg-full">
+              <span v-if="articleFull.no" class="reg-full-no">{{ articleFull.no }}</span>
+              {{ articleFull.content }}
+            </div>
+            <div v-else-if="current.article_excerpt" class="reg-full reg-full--excerpt">
+              {{ current.article_excerpt }}…
+            </div>
+            <div v-else class="reg-empty">未在法规库定位到条款原文</div>
           </div>
-          <div class="reg-name">
-            《{{ current.regulation_name }}》{{ current.article_no || '' }}
-          </div>
-          <div v-if="current.article_excerpt" class="reg-excerpt">
-            {{ current.article_excerpt }}
+
+          <div v-if="currentCases.length" class="ev-seg">
+            <div class="ev-seg-head">
+              <el-icon><Document /></el-icon>
+              <span>相似处罚案例（{{ currentCases.length }}）</span>
+            </div>
+            <div v-for="(c, i) in currentCases" :key="i" class="case-card">
+              <div class="case-card-name" :title="c.case_name">{{ c.case_name }}</div>
+              <div class="case-card-meta">
+                <span v-if="c.penalty_org">{{ c.penalty_org }}</span>
+                <span v-if="c.penalty_date">{{ c.penalty_date }}</span>
+                <span class="case-card-sim">相似度 {{ (c.similarity * 100).toFixed(0) }}%</span>
+              </div>
+              <div v-if="c.penalty_result" class="case-card-result">{{ c.penalty_result }}</div>
+            </div>
           </div>
         </div>
 
@@ -290,12 +315,16 @@ import { parseFindingDescription } from '@/utils/findingText'
 import { parseTamperRoutes } from '@/utils/tamperRoutes'
 import { SEVERITY_LABELS, VIOLATION_SOURCE_LABELS } from '@/constants/enums'
 import type { ReviewResult, ResultStatus } from '@/types/result'
+import type { RelatedCase } from '@/types/report'
+import { listArticles } from '@/api/regulations'
 import ResultStatusMini from './ResultStatusMini.vue'
 import SeverityTag from './SeverityTag.vue'
 
 const props = defineProps<{
   results: ReviewResult[]
   canConfirm: boolean
+  /** 报告侧的相似处罚案例（result_id → cases）；工作台数据源不同，经父级桥接 */
+  caseByResultId?: Map<number, RelatedCase[]>
   /** 文档解析原文块；为空时退回两栏布局 */
   documentBlocks?: DocumentBlock[] | null
   documentName?: string
@@ -581,6 +610,38 @@ function onDocClick(event: Event) {
 }
 
 // 选中变化时把对应高亮滚进视野
+// ---- P1-2 证据对照：选中即自动加载条款全文（无需点击） ----
+const articleLoading = ref(false)
+const articleFull = ref<{ no: string; content: string } | null>(null)
+const currentCases = computed<RelatedCase[]>(() => {
+  const rid = current.value?.result_id
+  return (rid != null && props.caseByResultId?.get(rid)) || []
+})
+
+watch(
+  () => [current.value?.regulation_id, current.value?.article_no] as const,
+  async ([regId, artNo]) => {
+    articleFull.value = null
+    if (!regId) return
+    articleLoading.value = true
+    try {
+      const page = await listArticles(regId, { page: 1, page_size: 100 })
+      const all = page.items ?? []
+      const hit = artNo ? all.find((a) => a.article_no === artNo) : undefined
+      articleFull.value = hit
+        ? { no: hit.article_no || '', content: hit.content }
+        : all.length
+          ? { no: all[0].article_no || '', content: all[0].content }
+          : null
+    } catch {
+      articleFull.value = null // 加载失败回落 excerpt 展示
+    } finally {
+      articleLoading.value = false
+    }
+  },
+  { immediate: true },
+)
+
 watch(selectedId, async (vid) => {
   if (!vid || !hasDoc.value) return
   await nextTick()
@@ -978,6 +1039,109 @@ watch(selectedId, async (vid) => {
   background: var(--el-color-primary-light-9);
   border-radius: 10px;
   padding: 12px 16px;
+}
+
+/* ---- P1-2 证据对照段：法规条款全文 + 相似罚单案例 ---- */
+.evidence {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ev-seg {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: var(--el-fill-color-blank);
+}
+
+.ev-seg-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.ev-seg-sub {
+  font-weight: 400;
+}
+
+.reg-full {
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--el-text-color-primary);
+  background: var(--el-color-primary-light-9);
+  border-left: 3px solid var(--el-color-primary-light-5);
+  border-radius: 0 6px 6px 0;
+  padding: 8px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.reg-full--loading {
+  min-height: 48px;
+}
+
+.reg-full--excerpt {
+  color: var(--el-text-color-regular);
+  font-style: italic;
+}
+
+.reg-full-no {
+  font-weight: 600;
+  color: var(--el-color-primary);
+  margin-right: 6px;
+}
+
+.reg-empty {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.case-card {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+
+.case-card:last-child {
+  margin-bottom: 0;
+}
+
+.case-card-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.case-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 3px 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.case-card-sim {
+  color: var(--el-color-warning-dark-2);
+}
+
+.case-card-result {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--el-text-color-regular);
 }
 
 /* PR-6 两路数字对照卡：疑似篡改结论的核验面板 */

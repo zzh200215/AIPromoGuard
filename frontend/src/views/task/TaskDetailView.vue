@@ -295,6 +295,7 @@
         <el-tab-pane label="人工复核" name="review">
           <ReviewWorkbench
             :results="results"
+            :case-by-result-id="caseByResultId"
             :can-confirm="auth.hasPermission('confirm')"
             :document-blocks="docBlocks"
             :document-name="task?.document_name"
@@ -601,6 +602,15 @@ function openConfirm(row: ReviewResult, verdict: 'confirmed' | 'false_positive')
 
 // ---- 报告页批量判定：多选违规一次提交确认 / 误报，免去逐条点击 ----
 const violationTableRef = ref<InstanceType<typeof ViolationTable> | null>(null)
+
+// P1-2 证据对照：报告侧罚单案例按 result_id 桥接给工作台（同数据两处消费）
+const caseByResultId = computed(() => {
+  const map = new Map<number, ViolationItem['related_cases']>()
+  for (const v of report.value?.violations ?? []) {
+    if (v.result_id != null && v.related_cases?.length) map.set(v.result_id, v.related_cases)
+  }
+  return map
+})
 const selectedViolations = ref<ViolationItem[]>([])
 const bulkLoading = ref(false)
 

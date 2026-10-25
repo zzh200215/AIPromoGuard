@@ -28,6 +28,7 @@ export interface ReviewResult {
   regulation_id?: number | null
   article_id?: number | null
   regulation_name?: string | null
+  regulation_no?: string | null
   article_no?: string | null
   article_excerpt?: string | null
 }
