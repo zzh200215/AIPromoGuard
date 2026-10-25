@@ -202,10 +202,10 @@ frontend/                # Vue3 前端（任务/知识库/图谱/影响中心/�
 
 ## 质量保障
 
-- **单元 + 集成测试**：689 个用例（规则引擎 / LangGraph 工作流与人工复核 / 领域路由 / LLM 输出校验与工具查证 / 检索融合 / 爬虫解析 / API 层 / MCP stdio 协议级集成 / 影响中心全链路与整改复测闭环 / MySQL checkpointer 原语与跨重启恢复 / 孤儿任务自愈），`pytest tests/ --basetemp=.pytest-tmp`
+- **单元 + 集成测试**：783 个用例（后端，另前端 131 个 Vitest 用例）（规则引擎 / LangGraph 工作流与人工复核 / 领域路由 / LLM 输出校验与工具查证 / 检索融合 / 爬虫解析 / API 层 / MCP stdio 协议级集成 / 影响中心全链路与整改复测闭环 / MySQL checkpointer 原语与跨重启恢复 / 孤儿任务自愈），`pytest tests/ --basetemp=.pytest-tmp`
 - **CI（GitHub Actions）**：ruff 静态检查 + 全量测试（MySQL service + 完整种子与向量索引配方，本地已用全新库验证）+ 前端生产构建；另有独立的规则引擎指标门禁 workflow（跌破召回/误报阈值即红）
 - **评估门禁**：独立于单测的准确率评估（精确字符级 span 匹配），`--min-recall/--max-fpr` 退出码可接 CI
-- **Prompt 注册表**：8 个系统 prompt 集中于 `configs/prompts/registry.yaml`（version + changelog 纪律由 CI 结构门禁 `test_prompt_registry.py` 强制，锚点防截断、调用方接线一致性防绕过），`llm_scan` 的 stage_log 记录 `review@版本号`——LLM 行为变更可溯源到具体 prompt 版本；LLM 引擎语义回归由 `llm-eval` workflow（held-out 变体集 + 指标门禁，配置 `DASHSCOPE_API_KEY` secret 后自动可用）守住
+- **Prompt 注册表**：9 个系统 prompt 集中于 `configs/prompts/registry.yaml`（version + changelog 纪律由 CI 结构门禁 `test_prompt_registry.py` 强制，锚点防截断、调用方接线一致性防绕过），`llm_scan` 的 stage_log 记录 `review@版本号`——LLM 行为变更可溯源到具体 prompt 版本；LLM 引擎语义回归由 `llm-eval` workflow（held-out 变体集 + 指标门禁，配置 `DASHSCOPE_API_KEY` secret 后自动可用）守住
 - **提示注入防护**：被审查材料是不可信输入——规则层新增 **general 域全局规则**「疑似提示注入指令」（`engine.py` 支持 general 规则跨 banking/fund/insurance 生效；注入企图命中即 high 风险进人工复核），prompt 层 `review@v2` 注入加固（文档内指令性内容一律视为待审数据而非指令，检出即输出提示注入 finding）；对抗集 `injection_cases.json` 8 案例（注入+真实违规双标注、良性对照防误报）由 `test_injection_guard.py` 全量守卫（含历史评估语料 150+ 案例零误报断言）
 - **执行强度分级（第 4 批·收官）**：`classify` 确定性输出执行强度（零 LLM 成本）——`light`（短文本且零风险信号词 → 只走规则引擎，纯口号不烧配额；保义改写必含风险性语言、进不了轻量通道，变体集召回不受影响）/ `standard`（现状）/ `deep`（`workflow.deep_scan` 显式开启且长文多段触发 → **受限多工具 ReAct**：4 工具箱〔法规检索 · 真实罚单检索 · 判定先例检索 · `get_document_context` 跨块取证〕，回合 6/调用 8 预算升格，护栏沿用工具循环）——执行策略第一次随文档复杂度自适应，跨块取证让"发现 A 块收益承诺 → 主动调取 B 块风险提示核对"的披露完整性判断成为可能
 - **Verifier 多智能体（生成-验证对偶）**：`conflict_resolve` 后新增独立验证节点（`verifier@v1`，缺省关 `workflow.verifier`）——对 LLM 单独命中（原全量进人工复核的部分）做**单次批量**独立复核（每任务 +1 次调用，与监管打标同构，配额友好）：upheld 维持 / downgraded 置信度 ×0.8 保留人工可见 / rejected 且验证置信度 ≥0.75 才剔除（宁少杀不错杀）；验证结论逐条写入 `finding.verification`（审计可溯），剔除明细进 stage_log；多智能体从静态领域分工升级为生成-验证协作，人机协同从「人兜底一切 LLM 命中」走向「机器先自我验证、人只看分歧样本」
