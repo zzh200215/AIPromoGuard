@@ -87,6 +87,11 @@
             <el-icon :size="17"><Sunny v-if="appStore.theme === 'dark'" /><Moon v-else /></el-icon>
           </span>
 
+          <!-- P1-1 SSE 实时连接状态：演示动线的"实时性"名片 -->
+          <el-tooltip :content="streamTip" placement="top">
+            <span class="stream-dot" :class="`stream-dot--${streamStatus}`" />
+          </el-tooltip>
+
           <!-- 站内通知：铃铛 + 未读角标，30s 轮询 -->
           <el-popover placement="bottom-end" :width="360" trigger="click" @show="loadNotifications">
             <template #reference>
@@ -158,9 +163,11 @@
              重建页面；query 变化（列表筛选）不重建；refreshKey 由标签栏右键「刷新」
              自增，配合短暂移出 include 强制当前页重挂载 -->
         <router-view v-slot="{ Component }">
-          <keep-alive :include="cachedNames" :max="12">
-            <component :is="Component" :key="`${route.path}|${tagsStore.refreshKey}`" />
-          </keep-alive>
+          <transition name="page-fade" mode="out-in">
+            <keep-alive :include="cachedNames" :max="12">
+              <component :is="Component" :key="`${route.path}|${tagsStore.refreshKey}`" />
+            </keep-alive>
+          </transition>
         </router-view>
       </el-main>
     </el-container>
@@ -345,6 +352,15 @@ function onGlobalKeydown(e: KeyboardEvent) {
 }
 
 // SSE 通知事件：到达即刷新铃铛（30s 轮询降级为断线兜底）
+const streamStatus = eventStreamStatus()
+const streamTip = computed(() => {
+  const map = {
+    open: '实时连接已建立：任务进度/通知即时推送',
+    connecting: '正在建立实时连接…',
+    closed: '实时连接未建立：已自动回退轮询刷新',
+  } as const
+  return map[streamStatus.value]
+})
 const offNotificationEvent = onServerEvent('notification', () => loadNotifications())
 
 onMounted(() => {
@@ -758,5 +774,43 @@ async function onReadAll() {
   padding: 20px 28px;
   overflow-y: auto;
   background: var(--app-bg);
+}
+
+/* ---- P1-4 SSE 连接状态点 ---- */
+.stream-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin: 0 10px;
+  cursor: default;
+}
+
+.stream-dot--open {
+  background: var(--el-color-success);
+  box-shadow: 0 0 0 3px var(--el-color-success-light-8);
+}
+
+.stream-dot--connecting {
+  background: var(--el-color-warning);
+}
+
+.stream-dot--closed {
+  background: var(--el-color-info-light-3);
+}
+
+/* ---- P1-4 页面切换过渡（prefers-reduced-motion 由全局规则降级） ---- */
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.page-fade-leave-to {
+  opacity: 0;
 }
 </style>
