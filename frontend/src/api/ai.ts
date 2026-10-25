@@ -11,6 +11,8 @@ export interface CopilotRef {
 export interface AskResponse {
   answer: string
   refs: CopilotRef[]
+  /** 本次回答实际使用的工具调用次数（0 = 未触发工具） */
+  tools_used?: number
 }
 
 export interface RewriteResponse {

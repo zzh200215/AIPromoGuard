@@ -100,6 +100,178 @@ def _violations_context(db: Session, task: ReviewTask) -> str:
     return "\n".join(parts)
 
 
+# ---- P3 Copilot 工具化：真 Function Calling 受限循环 ----
+# 与深查通道（deep_tools）同护栏纪律：回合/调用双上限，异常回退普通路径。
+# 改写建议不进工具箱：它是生成型能力且已有独立端点（/results/{id}/rewrite），
+# 嵌套 LLM 调用成本翻倍；问答场景罚单检索的引用价值更高。
+_COPILOT_TOOL_ROUNDS = 4
+_COPILOT_TOOL_CALLS = 8
+
+
+def _tool_schema(name: str, description: str, props: dict, required: list[str]) -> dict:
+    return {
+        "type": "function",
+        "function": {"name": name, "description": description,
+                     "parameters": {"type": "object", "properties": props, "required": required}},
+    }
+
+
+def _copilot_tools(db: Session, task: ReviewTask) -> tuple[list, object, set]:
+    """四工具 schema + 确定性执行器；valid_ids 收集法规检索命中（引用校验池）。"""
+    valid_ids: set = set()
+
+    def execute(name: str, args: str) -> dict | str:
+        import json as _json
+
+        try:
+            kwargs = _json.loads(args or "{}")
+        except _json.JSONDecodeError:
+            return {"error": "参数不是合法 JSON"}
+        if name == "search_regulations":
+            from src.mcp_server import tools as mcp_tools
+
+            out = mcp_tools.search_regulations(
+                query=str(kwargs.get("query") or ""), top_k=int(kwargs.get("top_k") or 5)
+            )
+            for a in out.get("articles") or []:
+                if a.get("regulation_id") is not None:
+                    valid_ids.add(a.get("regulation_id"))
+            return out
+        if name == "get_task_results":
+            report = refresh_report(db, task)
+            return {
+                "document": task.document_name,
+                "status": task.status,
+                "violations": [
+                    {
+                        "result_id": v.get("result_id"),
+                        "risk": v.get("risk_level"),
+                        "type": v.get("type"),
+                        "original": (v.get("original_text") or "")[:_ORIGINAL_MAX],
+                        "human_status": v.get("human_status"),
+                    }
+                    for v in (report.get("violations") or [])[:_MAX_VIOLATIONS]
+                ],
+            }
+        if name == "get_result_trail":
+            rid = kwargs.get("result_id")
+            result = (
+                db.query(ReviewResult)
+                .filter(ReviewResult.id == rid, ReviewResult.task_id == task.id)
+                .first()
+            )
+            if result is None:
+                return {"error": f"result_id={rid} 不属于本任务或不存在"}
+            return {
+                "result_id": result.id,
+                "risk_level": result.risk_level,
+                "status": result.status,
+                "confirmed_by": result.confirmed_by,
+                "confidence": float(result.confidence_score or 0),
+                "description": (result.description or "")[:200],
+                "suggestion": (result.suggestion or "")[:200],
+            }
+        if name == "search_penalty_cases":
+            from src.core.llm.deep_tools import search_penalty_cases
+
+            return search_penalty_cases(
+                query=str(kwargs.get("query") or ""), top_k=int(kwargs.get("top_k") or 3)
+            )
+        return f"未知工具: {name}"
+
+    schemas = [
+        _tool_schema(
+            "search_regulations",
+            "检索法规条款原文（混合检索）。回答需要法规依据、核对条款原文时调用。",
+            {
+                "query": {"type": "string", "description": "监管主题或违规描述"},
+                "top_k": {"type": "integer", "description": "返回条款数，默认 5"},
+            },
+            ["query"],
+        ),
+        _tool_schema(
+            "get_task_results",
+            "获取本任务的结构化违规清单（含 result_id/风险/人工状态）。需要引用"
+            "具体第几条违规或核对人工复核状态时调用。",
+            {},
+            [],
+        ),
+        _tool_schema(
+            "get_result_trail",
+            "查询单条违规结论的判定轨迹与当前状态（须先用 get_task_results 拿 result_id）。",
+            {"result_id": {"type": "integer", "description": "违规结论 ID"}},
+            ["result_id"],
+        ),
+        _tool_schema(
+            "search_penalty_cases",
+            "检索真实监管处罚案例（官方罚单）。评估某表述在监管实践中的处罚先例时调用。",
+            {
+                "query": {"type": "string", "description": "违规情形描述"},
+                "top_k": {"type": "integer", "description": "返回案例数，默认 3"},
+            },
+            ["query"],
+        ),
+    ]
+    return schemas, execute, valid_ids
+
+
+def _copilot_agent_answer(
+    llm, db: Session, task: ReviewTask, question: str, history_rows: list[dict],
+    context: str, valid_ids: set,
+) -> tuple[str, dict, int]:
+    """工具循环直到产出最终回答；预算耗尽回退一次无工具补全（保证有答案）。
+
+    返回（回答文本, 合并 usage, 实际工具调用次数）。
+    """
+    tools, execute, _ = _copilot_tools(db, task)
+    messages = [
+        {"role": "system", "content": _ASK_SYSTEM},
+        *[{"role": h["role"], "content": h["content"]} for h in history_rows],
+        {"role": "user", "content": f"{context}\\n\\n## 用户问题\n{question}"},
+    ]
+    cur = list(messages)
+    call_count = 0
+    usages: list[dict] = []
+    final: str | None = None
+    for _ in range(_COPILOT_TOOL_ROUNDS + 1):
+        result = llm.complete(cur, temperature=0.3, tools=tools, tool_choice="auto")
+        usages.append(result.usage)
+        if not result.tool_calls:
+            final = result.content
+            break
+        call_count += len(result.tool_calls)
+        if call_count > _COPILOT_TOOL_CALLS:
+            logger.warning("copilot 工具调用超护栏 %s 次，终止循环", _COPILOT_TOOL_CALLS)
+            break
+        cur.append({
+            "role": "assistant",
+            "content": result.content or None,
+            "tool_calls": [
+                {"id": tc["id"], "type": "function",
+                 "function": {"name": tc["name"], "arguments": tc["arguments"]}}
+                for tc in result.tool_calls
+            ],
+        })
+        for tc in result.tool_calls:
+            try:
+                out = execute(tc["name"], tc["arguments"])
+            except Exception as exc:  # noqa: BLE001 —— 单工具失败不中断问答
+                out = f"调用失败: {exc}"
+            cur.append({
+                "role": "tool",
+                "tool_call_id": tc["id"],
+                "content": json.dumps(out, ensure_ascii=False),
+            })
+    if final is None:
+        # 预算耗尽/循环未收敛：无工具补全一次，保证回答
+        completion = llm.complete(messages, temperature=0.3)
+        usages.append(completion.usage)
+        final = completion.content
+    from src.core.llm.client import merge_usage
+
+    return final or "", merge_usage(*usages), call_count
+
+
 def ask_review_question(db: Session, task: ReviewTask, question: str) -> dict:
     """任务审查问答：报告上下文 + 混合检索 → 带法规引用的回答（多轮）。
 
@@ -129,29 +301,30 @@ def ask_review_question(db: Session, task: ReviewTask, question: str) -> dict:
         f"## 检索到的法规条款\n" + ("\n".join(article_lines) or "（无）")
     )
     history_rows = load_copilot_history(db, task.id, limit=_HISTORY_TURNS)
-    messages = [
-        {"role": "system", "content": _ASK_SYSTEM},
-        *[{"role": h["role"], "content": h["content"]} for h in history_rows],
-        {"role": "user", "content": f"{context}\n\n## 用户问题\n{question}"},
-    ]
+    base_ids = {a.get("regulation_id") for a in articles}
     try:
-        completion = llm.complete(messages, temperature=0.3)
+        content, usage, tools_used = _copilot_agent_answer(
+            llm, db, task, question, history_rows, context, base_ids
+        )
+    except AppError:
+        raise
     except Exception as exc:
         logger.warning("审查问答 LLM 调用失败: %s", exc)
         raise AppError(ErrorCode.LLM_CALL_FAILED, http_status=502) from exc
 
-    data = _parse_object(completion.content)
+    data = _parse_object(content)
     if not data or not isinstance(data.get("answer"), str):
         result = {
-            "answer": (completion.content or "").strip() or "（AI 未返回内容）",
+            "answer": (content or "").strip() or "（AI 未返回内容）",
             "refs": [],
-            "usage": completion.usage,
+            "usage": usage,
+            "tools_used": tools_used,
         }
         _persist_turn(db, task.id, question, result)
         return result
 
     # 引用校验：regulation_id 必须来自本次检索结果，防模型张冠李戴
-    valid_ids = {a.get("regulation_id") for a in articles}
+    valid_ids = base_ids
     refs = []
     for ref in data.get("refs") or []:
         if not isinstance(ref, dict):
@@ -171,7 +344,8 @@ def ask_review_question(db: Session, task: ReviewTask, question: str) -> dict:
     result = {
         "answer": str(data["answer"])[:4000],
         "refs": refs[:8],
-        "usage": completion.usage,
+        "usage": usage,
+        "tools_used": tools_used,
     }
     _persist_turn(db, task.id, question, result)
     return result

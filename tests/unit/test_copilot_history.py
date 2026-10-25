@@ -33,10 +33,11 @@ class _RecorderLLM:
         self.answers = list(answers)
         self.calls: list[list[dict]] = []
 
-    def complete(self, messages, temperature=None):
+    def complete(self, messages, temperature=None, tools=None, tool_choice=None):
         self.calls.append(messages)
         content = self.answers.pop(0)
-        return SimpleNamespace(content=content, usage=None)
+        # tool_calls=None = 不发起工具调用 → 工具循环首轮即出最终回答（原语义不变）
+        return SimpleNamespace(content=content, usage=None, tool_calls=None)
 
 
 def _make_task(db, tmp_path):

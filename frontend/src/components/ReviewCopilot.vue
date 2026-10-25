@@ -32,6 +32,7 @@
       >
         <div class="bubble">
           <span v-for="(line, li) in m.content.split('\n')" :key="li" class="line">{{ line }}</span>
+          <div v-if="m.toolsUsed" class="tools-badge">已查证 {{ m.toolsUsed }} 次</div>
           <div v-if="m.refs?.length" class="refs">
             <div class="refs-title">依据：</div>
             <component
@@ -78,6 +79,7 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   refs?: CopilotRef[]
+  toolsUsed?: number
 }
 
 const props = defineProps<{
@@ -130,7 +132,12 @@ async function send(text: string) {
   await scrollToBottom()
   try {
     const res: AskResponse = await askTask(props.taskId, question)
-    messages.value.push({ role: 'assistant', content: res.answer, refs: res.refs })
+    messages.value.push({
+      role: 'assistant',
+      content: res.answer,
+      refs: res.refs,
+      toolsUsed: res.tools_used,
+    })
   } catch {
     // 拦截器已 toast 具体错误（如 AI 服务未配置）；会话内保留失败痕迹
     messages.value.push({ role: 'assistant', content: '本次回答调用失败，请稍后重试或检查 AI 服务配置。' })
@@ -240,6 +247,13 @@ watch(
     display: block;
     min-height: 4px;
   }
+}
+
+.tools-badge {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--el-color-primary);
+  opacity: 0.85;
 }
 
 .refs {
