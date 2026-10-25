@@ -336,6 +336,12 @@ def execute_review(task_id: int) -> None:
         task = db.get(ReviewTask, task_id)
         if task is None:
             return
+        if task.status == "completed":
+            # 重复投递护栏（broker 重投/人工重复入队）：completed 是终态，结果已在库，
+            # 重跑会先删后插覆盖人工可见结论并双耗 LLM 配额。failed→retry 端点会
+            # 先复位状态再入队，不受此护栏影响；running 允许进入（断点续跑路径）。
+            logger.info("任务 %s 已 completed，跳过重复执行", task_id)
+            return
         task.status = "running"
         task.progress = 10
         task.started_at = datetime.now()
