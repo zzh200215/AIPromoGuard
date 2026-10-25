@@ -4,7 +4,7 @@
 不写库、不触发任务。
 
 检查项：
-1. 容器 7/7 运行中；API/前端 HTTP 可达
+1. 常驻 6 容器运行中（worker 按需另起）；API/前端 HTTP 可达
 2. 幕一：战例任务报告存在且检出数正确（8 条）
 3. 幕二/三：影响评估 #911、批次 #635（6/6）、#636（1 条）、#637（0 条）
 4. 幕四：材料 #8300 版本 3 / clean
@@ -48,7 +48,7 @@ def main() -> None:
             capture_output=True, encoding="utf-8", errors="replace", timeout=15,
         )
         names = [n for n in proc.stdout.split() if n.startswith("fcr-")]
-        check("容器 7/7 运行", len(names) >= 7, f"实际 {len(names)}: {names}")
+        check("常驻 6 容器运行", len(names) >= 6, f"实际 {len(names)}: {names}")
         for port, label in ((8000, "API"), (8080, "前端")):
             try:
                 code = httpx.get(f"http://localhost:{port}/", timeout=5).status_code
