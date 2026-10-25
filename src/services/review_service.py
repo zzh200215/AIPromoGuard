@@ -259,6 +259,35 @@ def sync_material_review_status(db, task: ReviewTask) -> None:
         logger.info("task %s 已回写 %s 条台账材料状态=%s", task.id, len(materials), review_status)
 
 
+def _emit_status(task_id: int, status: str) -> None:
+    """任务状态变更广播（SSE）；事件是增强，失败静默。"""
+    try:
+        from src.services.event_bus import publish_event
+
+        publish_event("task_status", {"status": status}, task_id=task_id)
+    except Exception:
+        logger.debug("task_status 事件发布跳过 task=%s status=%s", task_id, status)
+
+
+def _emit_batch_progress(batch) -> None:
+    """批次计数/终态广播（SSE）；失败静默。"""
+    try:
+        from src.services.event_bus import publish_event
+
+        publish_event(
+            "batch_progress",
+            {
+                "completed": batch.completed_count,
+                "failed": batch.failed_count,
+                "total": batch.total_count,
+                "status": batch.status,
+            },
+            batch_id=batch.id,
+        )
+    except Exception:
+        logger.debug("batch_progress 事件发布跳过 batch=%s", batch.id)
+
+
 def _update_batch_counts(db, task: ReviewTask) -> None:
     """任务到达终态后同步材料台账与批次计数；无批次归属时跳过计数。
 
@@ -287,10 +316,14 @@ def _update_batch_counts(db, task: ReviewTask) -> None:
     db.commit()
 
     batch = db.get(ReviewBatch, task.batch_id)
+    if batch is None:
+        return
+    _emit_batch_progress(batch)
     if batch.completed_count + batch.failed_count >= batch.total_count:
         batch.status = "completed" if batch.failed_count == 0 else "failed"
         batch.completed_at = datetime.now()
         db.commit()
+        _emit_batch_progress(batch)
         # 影响中心的复审批次：终态后回写材料台账并生成整改清单（失败不影响批次状态）
         if batch.source_type == "impact_assessment":
             try:
@@ -346,6 +379,7 @@ def execute_review(task_id: int) -> None:
         task.progress = 10
         task.started_at = datetime.now()
         db.commit()
+        _emit_status(task_id, "running")
 
         parsed = document_service.parse(task.document_path)
         blocks = [_block_to_dict(b) for b in parsed.blocks]
@@ -425,6 +459,7 @@ def execute_review(task_id: int) -> None:
                 }
                 task.stages = merged_stages
                 db.commit()
+                _emit_status(task_id, "awaiting_review")
                 logger.info(
                     "task %s 等待人工复核（%s 条待确认）", task_id, len(outcome["pending"])
                 )
@@ -434,6 +469,7 @@ def execute_review(task_id: int) -> None:
             result = run_review(initial_state)
 
         _finalize_task(db, task, result)
+        _emit_status(task_id, "completed")
     except Exception:
         db.rollback()
         task = db.get(ReviewTask, task_id)
@@ -442,6 +478,7 @@ def execute_review(task_id: int) -> None:
             task.progress = 100
             db.commit()
             _update_batch_counts(db, task)
+            _emit_status(task_id, "failed")
             try:
                 from src.services.notification_service import notify_task_failed
 

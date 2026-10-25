@@ -30,6 +30,17 @@ def notify(
             )
         )
         db.commit()
+        # SSE 实时推送（P1，user_id 定向）：失败静默同通知写入纪律
+        try:
+            from src.services.event_bus import publish_event
+
+            publish_event(
+                "notification",
+                {"ntype": type, "title": title[:80], "link": link},
+                user_id=user_id,
+            )
+        except Exception:
+            pass
     except Exception:
         db.rollback()
         logger.warning("站内通知写入失败: user=%s type=%s", user_id, type)

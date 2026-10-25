@@ -210,6 +210,7 @@ import AppWatermark from '@/components/AppWatermark.vue'
 import TagsView from '@/components/TagsView.vue'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import { onServerEvent } from '@/composables/useEventStream'
 import { useTagsStore } from '@/stores/tags'
 import { ROLE_LABELS } from '@/constants/enums'
 
@@ -343,6 +344,9 @@ function onGlobalKeydown(e: KeyboardEvent) {
   }
 }
 
+// SSE 通知事件：到达即刷新铃铛（30s 轮询降级为断线兜底）
+const offNotificationEvent = onServerEvent('notification', () => loadNotifications())
+
 onMounted(() => {
   appStore.applyTheme()
   window.addEventListener('keydown', onGlobalKeydown)
@@ -353,6 +357,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onGlobalKeydown)
   if (pollTimer) clearInterval(pollTimer)
+  offNotificationEvent()
 })
 
 // ---- 站内通知：未读数 30s 轮询；打开面板拉列表；点击跳转并标记已读 ----

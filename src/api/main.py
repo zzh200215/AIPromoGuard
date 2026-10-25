@@ -14,6 +14,7 @@ from src.api.routers import (
     auth,
     batches,
     documents,
+    events,
     graph,
     health,
     impact,
@@ -90,6 +91,7 @@ def create_app() -> FastAPI:
     app.include_router(trends.router, prefix="/api/v1")
     app.include_router(impact.router, prefix="/api/v1")
     app.include_router(insights.router, prefix="/api/v1")
+    app.include_router(events.router, prefix="/api/v1")
 
     _register_exception_handlers(app)
     return app

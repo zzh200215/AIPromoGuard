@@ -23,6 +23,16 @@ router = APIRouter(tags=["results"])
 _STATUSES = {"pending_confirm", "confirmed", "false_positive"}
 
 
+def _emit_result_changed(task_id: int) -> None:
+    """判定变更广播（SSE，采纳统计脏标记）；失败静默。"""
+    try:
+        from src.services.event_bus import publish_event
+
+        publish_event("result_changed", {}, task_id=task_id)
+    except Exception:
+        pass
+
+
 @router.get("/tasks/{task_id}/results")
 def list_results(
     task_id: int,
@@ -248,6 +258,7 @@ def confirm_result(
     db.refresh(result)
     # 判定先例记忆（第 2 批）：人工终态结论沉淀为可召回先例（失败不阻塞判定）
     sync_after_verdict(db, result)
+    _emit_result_changed(result.task_id)
     return ok(
         {
             "result_id": result.id,
@@ -322,6 +333,8 @@ def bulk_confirm_results(
     # 批量判定同样沉淀先例（sync_after_verdict 内部自带失败降级）
     for result in touched:
         sync_after_verdict(db, result)
+    for tid in {r.task_id for r in touched}:
+        _emit_result_changed(tid)
     return ok({"updated": updated, "skipped": skipped})
 
 
@@ -395,6 +408,8 @@ def revert_results(
     # 撤销复核 = 回到待定状态，先例随之删除（记忆始终等于最新人工判断）
     for result in reverted:
         sync_after_verdict(db, result)
+    for tid in {r.task_id for r in reverted}:
+        _emit_result_changed(tid)
     return ok({"updated": updated, "skipped": skipped})
 
 

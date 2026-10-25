@@ -96,7 +96,8 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'batch-detail' })
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { eventStreamStatus, onServerEvent } from '@/composables/useEventStream'
 import { useRoute, useRouter } from 'vue-router'
 import { downloadBatchSummary, downloadBatchZip, getBatch, retryBatchFailed } from '@/api/batches'
 import { retryTask } from '@/api/tasks'
@@ -223,12 +224,37 @@ function goTask(row: TaskOut) {
   router.push(`/tasks/${row.id}`)
 }
 
-onMounted(() => {
-  void load()
-  timer = setInterval(load, POLL_INTERVAL)
+// SSE 事件驱动刷新（batch_progress），轮询仅作断线兜底
+let eventDebounce: ReturnType<typeof setTimeout> | null = null
+const loadDebounced = () => {
+  if (eventDebounce) return
+  eventDebounce = setTimeout(() => {
+    eventDebounce = null
+    void load()
+  }, 500)
+}
+
+const stream = eventStreamStatus()
+const offBatchEvent = onServerEvent('batch_progress', (e) => {
+  if (e.batch_id === batchId) loadDebounced()
+})
+// 连接状态兜底：SSE 断开启用轮询，恢复即停
+const stopWatch = watch(stream, (s) => {
+  if (s === 'open') stopPolling()
+  else if (!timer) timer = setInterval(load, POLL_INTERVAL)
 })
 
-onBeforeUnmount(stopPolling)
+onMounted(() => {
+  void load()
+  if (stream.value !== 'open') timer = setInterval(load, POLL_INTERVAL)
+})
+
+onBeforeUnmount(() => {
+  stopPolling()
+  if (eventDebounce) clearTimeout(eventDebounce)
+  offBatchEvent()
+  stopWatch()
+})
 </script>
 
 <style scoped lang="scss">

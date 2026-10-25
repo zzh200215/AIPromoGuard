@@ -54,6 +54,13 @@ def persist_stage(task_id: int | None, name: str, entry: dict) -> None:
         )
         with engine.begin() as conn:
             conn.execute(stmt, {"entry": payload, "task_id": task_id})
+        # SSE 实时推送（P1）：节点轨迹落库即广播；失败静默同落库纪律
+        try:
+            from src.services.event_bus import publish_event
+
+            publish_event("task_stage", {"node": name, "detail": entry}, task_id=task_id)
+        except Exception:
+            logger.debug("stage 事件发布跳过 task=%s node=%s", task_id, name)
     except Exception:
         # 静默降级：失败不影响审查；完成时 _finalize_task 整体覆盖兜底
         logger.debug("stage 增量落库跳过 task=%s node=%s", task_id, name, exc_info=True)
