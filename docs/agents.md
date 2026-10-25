@@ -99,6 +99,19 @@ Schema、何时交接、失败与降级、是否允许自动通过、用什么�
 | 图谱召回（P2 GraphRAG，`graph_service`） | "违规模式→条款"多跳：规则引擎实扫命中的模式经条款级 VIOLATES 边展开为第三路 | Neo4j | 图谱条款列表（RRF 并入） | Neo4j 未启用/失败→跳过图谱路 |
 | 处罚案例佐证（`risk_assess` → Neo4j） | 相似历史罚单检索 | Neo4j 案例网络 | `similar_cases[{case_name, penalty_org, similarity, ...}]` | 图谱未启用→无佐证不阻塞 |
 
+### 问答 Copilot Agent（P3 工具化，`review_copilot._copilot_agent_answer`）
+
+| 合约项 | 内容 |
+|---|---|
+| 职责边界 | 负责：面向复核员的任务级问答——查证法规原文、引用本任务违规清单/判定轨迹、检索处罚先例后给出带引用回答；不负责：审查判定本身（那是工作流的事）、合规改写（独立端点，嵌套 LLM 成本翻倍不进工具箱） |
+| 输入 | 用户问题 + 任务上下文（报告违规清单 + 初始混合检索条款）+ 最近 10 轮会话历史（`copilot_messages`） |
+| 工具 | 真 Function Calling 受限循环：`search_regulations`（命中进引用校验池）/ `get_task_results`（结构化违规清单）/ `get_result_trail`（单条轨迹，任务隔离）/ `search_penalty_cases`（真实罚单） |
+| 输出 Schema | `{answer, refs[{regulation_id, name, article_no, quote}], tools_used}`——refs 的 regulation_id 必须来自初始召回 ∪ 工具命中，越池引用置空 |
+| 交接条件 | 回答落 `copilot_messages`（失败不落，成对干净）；前端气泡展示"已查证 N 次" |
+| 失败与降级 | 回合 4/调用 8 双护栏耗尽 → 回退一次无工具补全（保证有答案）；工具单次失败返回错误串不中断循环；LLM 未配置 503 显式报错 |
+| 自动通过 | 不适用（问答不产生判定） |
+| 评估指标 | 机制级单测（循环收敛/预算回退/任务隔离）；回答质量未做金标准校准（诚实口径） |
+
 ## 四、协作控制节点（编排层）
 
 | 节点 | 职责 | 交接/分流 |
